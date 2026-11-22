@@ -11,6 +11,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -418,7 +420,15 @@ func (vc *rbacVerifyClientCommand) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	rq.Client = client
-	rq.WorkloadPods = rbacgen.WorkloadPodNames(callerClient)
+	callerCfg, err := callerCluster.ToRESTConfig()
+	if err != nil {
+		return err
+	}
+	rollouts, err := argorollouts.NewForConfig(callerCfg)
+	if err != nil {
+		return err
+	}
+	rq.WorkloadPods = rbacgen.WorkloadPodNames(callerClient, rollouts)
 	if rq.Values == nil {
 		rq.ReleaseLookup = setup.NewReleaseLookup(callerCluster.Kubeconfig)
 	}

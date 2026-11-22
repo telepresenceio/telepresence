@@ -12,9 +12,14 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 
 	auth "k8s.io/api/authorization/v1"
+	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+
+	argov1 "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
+	argofake "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -295,18 +300,32 @@ func TestVerifyClient_ReleaseNotReadable(t *testing.T) {
 }
 
 func TestWorkloadPodNames_NotFound(t *testing.T) {
-	_, err := WorkloadPodNames(fake.NewClientset())(context.Background(), "dev", "nope")
+	_, err := WorkloadPodNames(fake.NewClientset(), nil)(context.Background(), "dev", "nope")
 	require.ErrorIs(t, err, ErrWorkloadNotFound)
 
 	client, _ := sweepClient(testUser, nil, isTelepresence)
 	_, err = VerifyClient(context.Background(), &VerifyClientRequest{
 		Values:           grantValues(authz.GrantTelepresence, false),
 		Workloads:        []string{"nope"},
-		WorkloadPods:     WorkloadPodNames(fake.NewClientset()),
+		WorkloadPods:     WorkloadPodNames(fake.NewClientset(), nil),
 		Client:           client,
 		ManagerNamespace: "ambassador",
 		Namespaces:       []string{"dev"},
 	})
+	assert.ErrorIs(t, err, ErrWorkloadNotFound)
+}
+
+func TestWorkloadPodNames_Rollout(t *testing.T) {
+	pod := &core.Pod{ObjectMeta: meta.ObjectMeta{Name: "web-1", Namespace: "dev", Labels: map[string]string{"app": "web"}}}
+	rollout := &argov1.Rollout{
+		ObjectMeta: meta.ObjectMeta{Name: "web", Namespace: "dev"},
+		Spec:       argov1.RolloutSpec{Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "web"}}},
+	}
+	pods, err := WorkloadPodNames(fake.NewClientset(pod), argofake.NewSimpleClientset(rollout))(context.Background(), "dev", "web")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"web-1"}, pods)
+
+	_, err = WorkloadPodNames(fake.NewClientset(pod), argofake.NewSimpleClientset())(context.Background(), "dev", "web")
 	assert.ErrorIs(t, err, ErrWorkloadNotFound)
 }
 

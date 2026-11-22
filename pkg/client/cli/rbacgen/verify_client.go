@@ -16,6 +16,8 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -133,8 +135,8 @@ type VerifyClientRequest struct {
 	WorkloadPods func(ctx context.Context, namespace, workload string) ([]string, error)
 }
 
-// ErrWorkloadNotFound is returned by WorkloadPodNames when no Deployment,
-// StatefulSet or ReplicaSet has the given name.
+// ErrWorkloadNotFound is returned by WorkloadPodNames when no workload has
+// the given name.
 var ErrWorkloadNotFound = errors.New("workload not found")
 
 // errPodsUnknown is returned through Review.PodNames when the pods of a
@@ -396,9 +398,9 @@ func (r *recordingChecker) end() []*auth.ResourceAttributes {
 }
 
 // WorkloadPodNames returns a VerifyClientRequest.WorkloadPods that finds the
-// Deployment, StatefulSet or ReplicaSet called workload with client and
-// lists its pods.
-func WorkloadPodNames(client kubernetes.Interface) func(ctx context.Context, namespace, workload string) ([]string, error) {
+// Deployment, StatefulSet, ReplicaSet or, when rollouts isn't nil, the Argo
+// Rollout called workload with client and lists its pods.
+func WorkloadPodNames(client kubernetes.Interface, rollouts argorollouts.Interface) func(ctx context.Context, namespace, workload string) ([]string, error) {
 	return func(ctx context.Context, namespace, workload string) ([]string, error) {
 		apps := client.AppsV1()
 		finders := []func() (*meta.LabelSelector, error){
@@ -424,6 +426,18 @@ func WorkloadPodNames(client kubernetes.Interface) func(ctx context.Context, nam
 				return rs.Spec.Selector, nil
 			},
 		}
+		if rollouts != nil {
+			finders = append(finders, func() (*meta.LabelSelector, error) {
+				ro, err := rollouts.ArgoprojV1alpha1().Rollouts(namespace).Get(ctx, workload, meta.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+				if ro.Spec.Selector == nil {
+					return nil, fmt.Errorf("rollout %s in namespace %s has no selector", workload, namespace)
+				}
+				return ro.Spec.Selector, nil
+			})
+		}
 		var sel *meta.LabelSelector
 		var errs []error
 		for _, find := range finders {
@@ -435,7 +449,7 @@ func WorkloadPodNames(client kubernetes.Interface) func(ctx context.Context, nam
 		}
 		if sel == nil {
 			if !slices.ContainsFunc(errs, func(err error) bool { return !k8serrors.IsNotFound(err) }) {
-				return nil, fmt.Errorf("%w: no Deployment, StatefulSet or ReplicaSet %s in namespace %s", ErrWorkloadNotFound, workload, namespace)
+				return nil, fmt.Errorf("%w: no Deployment, StatefulSet, ReplicaSet or Rollout %s in namespace %s", ErrWorkloadNotFound, workload, namespace)
 			}
 			return nil, fmt.Errorf("unable to find workload %s in namespace %s: %w", workload, namespace, errors.Join(errs...))
 		}
