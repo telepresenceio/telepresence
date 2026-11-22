@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"maps"
+
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
@@ -23,7 +27,7 @@ func rbacCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Short: "Generate RBAC manifests for an admin to review and apply",
 	}
-	generate.AddCommand(rbacGenerateInstall())
+	generate.AddCommand(rbacGenerateInstall(), rbacGenerateClient())
 	cmd.AddCommand(generate)
 	return cmd
 }
@@ -131,6 +135,114 @@ func (gc *rbacGenerateInstallCommand) run(cmd *cobra.Command, _ []string) error 
 	}
 
 	out, err := rbacgen.GenerateInstall(ctx, rq)
+	if err != nil {
+		return err
+	}
+	_, err = out.WriteTo(cmd.OutOrStdout())
+	return err
+}
+
+type rbacGenerateClientCommand struct {
+	rq         *daemon.CobraRequest
+	inputFile  string
+	subjects   []string
+	namespaces []string
+	emit       string
+}
+
+func rbacGenerateClient() *cobra.Command {
+	gc := &rbacGenerateClientCommand{}
+	cmd := &cobra.Command{
+		Use:   "client",
+		Args:  cobra.NoArgs,
+		Short: "Generate the RBAC that a Telepresence client needs",
+		Long: `Generate the RBAC that a Telepresence client needs.
+
+The command renders the chart's client roles for the configuration the
+traffic-manager is installed with, and prints them for the given subjects.
+Nothing is applied.
+
+The configuration is read from the traffic-manager release with your own
+credentials, also when --as is given, which needs read access to the Helm
+release secrets in the manager namespace. Without that access, or for an install that doesn't
+exist yet, pass the values with --input.
+
+--subject names the subject of the bindings, as User:NAME, Group:NAME or
+ServiceAccount:NAMESPACE/NAME. --namespace limits the rules to the given
+namespaces, which the traffic-manager must manage. --emit values prints a
+clientRbac values block for the release instead of manifests.`,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		ValidArgsFunction: cobra.NoFileCompletions,
+		RunE:              gc.run,
+	}
+	flags := cmd.Flags()
+	flags.StringVar(&gc.inputFile, "input", "", "Read the values the traffic-manager is installed with from a Helm values file")
+	flags.StringArrayVar(&gc.subjects, "subject", nil,
+		"Subject of the bindings, as User:NAME, Group:NAME or ServiceAccount:NAMESPACE/NAME (repeatable)")
+	flags.StringArrayVar(&gc.namespaces, "namespace", nil, "Namespace the client may use (repeatable, default every managed namespace)")
+	flags.StringVar(&gc.emit, "emit", string(rbacgen.FormatRBAC), `What to print: "rbac" for manifests, "values" for a clientRbac values block`)
+	_ = cmd.MarkFlagFilename("input")
+	_ = cmd.MarkFlagRequired("subject")
+	gc.rq = daemon.InitKubeRequest(cmd)
+	return cmd
+}
+
+func (gc *rbacGenerateClientCommand) run(cmd *cobra.Command, _ []string) error {
+	if err := gc.rq.CommitFlags(cmd); err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	format, err := rbacgen.ParseClientFormat(gc.emit)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+	subjects := make([]rbacgen.Subject, len(gc.subjects))
+	for i, s := range gc.subjects {
+		if subjects[i], err = rbacgen.ParseSubject(s); err != nil {
+			return errcat.User.New(err)
+		}
+	}
+	rq := &rbacgen.ClientRequest{
+		Subjects:     subjects,
+		Namespaces:   gc.namespaces,
+		ValuesSource: gc.inputFile,
+		Format:       format,
+	}
+	if gc.inputFile != "" {
+		if rq.Values, err = setup.LoadInputValues(gc.inputFile); err != nil {
+			return err
+		}
+	}
+
+	// Nothing here is reviewed, so the cluster is read with the caller's own
+	// credentials, also when --as is given.
+	cr := proto.Clone(gc.rq.ConnectRequest).(*connector.ConnectRequest)
+	cr.KubeFlags = maps.Clone(cr.KubeFlags)
+	for _, f := range []string{"as", "as-group", "as-uid"} {
+		delete(cr.KubeFlags, f)
+	}
+	config, err := k8s.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return err
+	}
+	cluster, err := k8s.ConnectCluster(cr, config)
+	if err != nil {
+		return err
+	}
+	restCfg, err := cluster.ToRESTConfig()
+	if err != nil {
+		return err
+	}
+	if rq.Client, err = kubernetes.NewForConfig(restCfg); err != nil {
+		return err
+	}
+	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
+	if rq.Values == nil {
+		rq.ReleaseLookup = setup.NewReleaseLookup(cluster.Kubeconfig)
+	}
+
+	out, err := rbacgen.GenerateClient(ctx, rq)
 	if err != nil {
 		return err
 	}

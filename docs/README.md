@@ -115,6 +115,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
     - [telepresence quit](reference/cli/telepresence_quit.md)
     - [telepresence rbac](reference/cli/telepresence_rbac.md)
       - [generate](reference/cli/telepresence_rbac_generate.md)
+        - [client](reference/cli/telepresence_rbac_generate_client.md)
         - [install](reference/cli/telepresence_rbac_generate_install.md)
     - [telepresence replace](reference/cli/telepresence_replace.md)
     - [telepresence revoke](reference/cli/telepresence_revoke.md)

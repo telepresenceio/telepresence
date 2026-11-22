@@ -14,6 +14,7 @@ Generate RBAC manifests for an admin to review and apply
 ### Available Commands:
 | Command | Description |
 |---------|-------------|
+| [client](telepresence_rbac_generate_client) | Generate the RBAC that a Telepresence client needs |
 | [install](telepresence_rbac_generate_install) | Generate the RBAC that telepresence helm install needs |
 
 ### Flags:
