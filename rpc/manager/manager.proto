@@ -372,6 +372,7 @@ message ReconnectClientRequest {
   SessionInfo session = 1;
   ClientInfo client = 2;
   repeated InterceptInfo intercepts = 3;
+  // Ignored by the traffic-manager. Traffic-agents register themselves.
   repeated AgentInfo agents = 4;
 }
 

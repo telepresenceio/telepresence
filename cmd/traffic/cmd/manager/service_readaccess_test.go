@@ -27,8 +27,10 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // This file covers the read authorization of the agent-pod watches,
@@ -119,6 +121,14 @@ func newReadEnv(t *testing.T, mode auth.Mode, allow func(ra *auth1.ResourceAttri
 	return &readEnv{mgr: mgr, sctx: sctx, pctx: pctx, sess: sess, rec: rec, t: t}
 }
 
+// restoreTestAgents adds agent sessions to state without the checks that
+// ArriveAsAgent performs.
+func restoreTestAgents(ctx context.Context, mgr Service, agents ...*rpc.AgentInfo) {
+	for _, agent := range agents {
+		_, _ = mgr.State().RestoreAgent(ctx, tunnel.SessionID(state.AgentSessionIDPrefix+agent.PodUid), agent, nil, time.Now())
+	}
+}
+
 // restoreAgents adds agents default/hello, default/demo and other/hello.
 func (e *readEnv) restoreAgents() {
 	testAgents := testdata.GetTestAgents(e.t)
@@ -131,7 +141,7 @@ func (e *readEnv) restoreAgents() {
 	other.PodUid = "other-ns-pod-uid"
 	other.PodName = "hello-other"
 	other.PodIp = "10.1.2.5"
-	e.mgr.State().RestoreAgents([]*rpc.AgentInfo{hello, demo, other}, time.Now())
+	restoreTestAgents(e.sctx, e.mgr, hello, demo, other)
 }
 
 // attachmentReviews counts the recorded attachment reviews; named selects
