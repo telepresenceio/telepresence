@@ -186,6 +186,22 @@ func TestGenerateInstall_X509Bind(t *testing.T) {
 	assert.True(t, hasRule(role, "rbac.authorization.k8s.io", "rolebindings", "create"))
 }
 
+func TestGenerateInstall_ClusterIssuer(t *testing.T) {
+	client, _ := sweepClient(testUser, nil, func(*auth.ResourceAttributes) bool { return false })
+	values := &helm.Values{AgentInjector: helm.AgentInjector{Certificate: helm.AgentInjectorCertificate{
+		Method:      new("certmanager"),
+		Certmanager: helm.AgentInjectorCertManager{IssuerRef: helm.IssuerRef{Kind: new("ClusterIssuer")}},
+	}}}
+	out := generate(t, &InstallRequest{Client: client, Values: values})
+	docs := documents(t, out)
+	name := InstallName("ambassador")
+
+	assert.True(t, hasRule(rulesOf(t, docs["ClusterRole /"+name]), "cert-manager.io", "clusterissuers", "create"))
+	for _, r := range rulesOf(t, docs["Role ambassador/"+name]) {
+		assert.NotContains(t, r.Resources, "clusterissuers", "a ClusterIssuer is cluster-scoped")
+	}
+}
+
 // TestGenerateInstall_RoleRulesNotHeld models an identity that may create
 // everything but doesn't hold what the chart's ClusterRole grants.
 func TestGenerateInstall_RoleRulesNotHeld(t *testing.T) {
