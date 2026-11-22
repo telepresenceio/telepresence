@@ -41,15 +41,19 @@ type InstallOutput struct {
 
 // WriteTo writes the header as YAML comments followed by the manifests.
 func (o *InstallOutput) WriteTo(w io.Writer) (int64, error) {
+	return writeCommented(w, o.Header, o.Manifests)
+}
+
+func writeCommented(w io.Writer, header []string, body []byte) (int64, error) {
 	var sb strings.Builder
-	for _, line := range o.Header {
+	for _, line := range header {
 		if line == "" {
 			sb.WriteString("#\n")
 		} else {
 			sb.WriteString("# " + line + "\n")
 		}
 	}
-	sb.Write(o.Manifests)
+	sb.Write(body)
 	n, err := io.WriteString(w, sb.String())
 	return int64(n), err
 }

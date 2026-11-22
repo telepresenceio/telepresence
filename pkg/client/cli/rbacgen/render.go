@@ -26,6 +26,8 @@ import (
 // so a first install never creates them.
 type Render struct {
 	Objects []*unstructured.Unstructured
+	// Sources holds the template file that rendered each of Objects.
+	Sources []string
 	Hooks   []*unstructured.Unstructured
 }
 
@@ -77,7 +79,7 @@ func RenderChart(ctx context.Context, namespace string, values *helm.Values) (*R
 		return nil, err
 	}
 	r := &Render{}
-	if r.Objects, err = decodeManifests(rel.Manifest); err != nil {
+	if r.Objects, r.Sources, err = decodeSourcedManifests(rel.Manifest); err != nil {
 		return nil, err
 	}
 	for _, h := range rel.Hooks {
@@ -93,15 +95,26 @@ func RenderChart(ctx context.Context, namespace string, values *helm.Values) (*R
 // decodeManifests splits a rendered manifest on YAML document separators and
 // decodes each non-empty document into an Unstructured object.
 func decodeManifests(manifest string) ([]*unstructured.Unstructured, error) {
+	objs, _, err := decodeSourcedManifests(manifest)
+	return objs, err
+}
+
+const sourcePrefix = "# Source: "
+
+// decodeSourcedManifests is decodeManifests that also returns the template
+// file of each object, taken from the "# Source:" comment that Helm puts
+// first in every document.
+func decodeSourcedManifests(manifest string) ([]*unstructured.Unstructured, []string, error) {
 	reader := yamlutil.NewYAMLReader(bufio.NewReader(strings.NewReader(manifest)))
 	var objs []*unstructured.Unstructured
+	var sources []string
 	for {
 		doc, err := reader.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, err
+			return nil, nil, err
 		}
 		doc = bytes.TrimSpace(doc)
 		if len(doc) == 0 {
@@ -109,12 +122,17 @@ func decodeManifests(manifest string) ([]*unstructured.Unstructured, error) {
 		}
 		obj := &unstructured.Unstructured{}
 		if err := yaml.Unmarshal(doc, &obj.Object); err != nil {
-			return nil, fmt.Errorf("unable to decode rendered manifest: %w", err)
+			return nil, nil, fmt.Errorf("unable to decode rendered manifest: %w", err)
 		}
 		if len(obj.Object) == 0 {
 			continue
 		}
+		var source string
+		if first, _, _ := bytes.Cut(doc, []byte("\n")); bytes.HasPrefix(first, []byte(sourcePrefix)) {
+			source = strings.TrimSpace(string(first[len(sourcePrefix):]))
+		}
 		objs = append(objs, obj)
+		sources = append(sources, source)
 	}
-	return objs, nil
+	return objs, sources, nil
 }
