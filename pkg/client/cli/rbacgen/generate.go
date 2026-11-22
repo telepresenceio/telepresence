@@ -75,15 +75,7 @@ func GenerateInstall(ctx context.Context, rq *InstallRequest) (*InstallOutput, e
 		return nil, err
 	}
 
-	render, err := RenderChart(ctx, rq.ManagerNamespace, values)
-	if err != nil {
-		return nil, err
-	}
-	effective := values
-	if dv, err := helm.DefaultValues(); err == nil {
-		effective = helm.MergeValues(values, dv)
-	}
-	set, err := HelmInstallSet(render, rq.ManagerNamespace, effective, rq.Verbs)
+	set, err := buildInstallSet(ctx, rq.ManagerNamespace, values, rq.Verbs)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +98,23 @@ func GenerateInstall(ctx context.Context, rq *InstallRequest) (*InstallOutput, e
 		return nil, err
 	}
 	return out, nil
+}
+
+// buildInstallSet renders the chart for values, which overlay the chart
+// defaults, and returns the install set for verbs.
+func buildInstallSet(ctx context.Context, managerNamespace string, values *helm.Values, verbs Verbs) (*InstallSet, error) {
+	if values == nil {
+		values = &helm.Values{}
+	}
+	render, err := RenderChart(ctx, managerNamespace, values)
+	if err != nil {
+		return nil, err
+	}
+	effective := values
+	if dv, err := helm.DefaultValues(); err == nil {
+		effective = helm.MergeValues(values, dv)
+	}
+	return HelmInstallSet(render, managerNamespace, effective, verbs)
 }
 
 // resolveSubjects returns the subjects of the bindings and the checked

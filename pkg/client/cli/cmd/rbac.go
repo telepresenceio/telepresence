@@ -1,15 +1,19 @@
 package cmd
 
 import (
+	"context"
 	"maps"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/setup"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
@@ -20,7 +24,7 @@ func rbacCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rbac",
 		Args:  cobra.NoArgs,
-		Short: "Generate the RBAC that installing or using Telepresence needs",
+		Short: "Generate or check the RBAC that installing or using Telepresence needs",
 	}
 	generate := &cobra.Command{
 		Use:   "generate",
@@ -28,8 +32,62 @@ func rbacCmd() *cobra.Command {
 		Short: "Generate RBAC manifests for an admin to review and apply",
 	}
 	generate.AddCommand(rbacGenerateInstall(), rbacGenerateClient())
-	cmd.AddCommand(generate)
+	verify := &cobra.Command{
+		Use:   "verify",
+		Args:  cobra.NoArgs,
+		Short: "Check that an identity holds the RBAC that installing or using Telepresence needs",
+	}
+	verify.AddCommand(rbacVerifyInstall(), rbacVerifyClient())
+	cmd.AddCommand(generate, verify)
 	return cmd
+}
+
+// kubeClient connects to the cluster of cr and returns a client for it.
+func kubeClient(ctx context.Context, cr *connector.ConnectRequest) (*k8s.Cluster, kubernetes.Interface, error) {
+	config, err := k8s.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return nil, nil, err
+	}
+	cluster, err := k8s.ConnectCluster(cr, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	restCfg, err := cluster.ToRESTConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	// A sweep issues many parallel SelfSubjectAccessReviews.
+	restCfg = rest.CopyConfig(restCfg)
+	restCfg.QPS = 50
+	restCfg.Burst = 100
+	client, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cluster, client, nil
+}
+
+// callerRequest returns cr without the impersonation flags, for reads that
+// use the caller's own credentials.
+func callerRequest(cr *connector.ConnectRequest) *connector.ConnectRequest {
+	cr = proto.Clone(cr).(*connector.ConnectRequest)
+	cr.KubeFlags = maps.Clone(cr.KubeFlags)
+	for _, f := range []string{"as", "as-group", "as-uid", "as-user-extra"} {
+		delete(cr.KubeFlags, f)
+	}
+	return cr
+}
+
+// parseSubjects parses the values of --subject.
+func parseSubjects(ss []string) ([]rbacgen.Subject, error) {
+	subjects := make([]rbacgen.Subject, len(ss))
+	for i, s := range ss {
+		var err error
+		if subjects[i], err = rbacgen.ParseSubject(s); err != nil {
+			return nil, errcat.User.New(err)
+		}
+	}
+	return subjects, nil
 }
 
 type rbacGenerateInstallCommand struct {
@@ -82,11 +140,9 @@ func (gc *rbacGenerateInstallCommand) run(cmd *cobra.Command, _ []string) error 
 	if err != nil {
 		return errcat.User.New(err)
 	}
-	subjects := make([]rbacgen.Subject, len(gc.subjects))
-	for i, s := range gc.subjects {
-		if subjects[i], err = rbacgen.ParseSubject(s); err != nil {
-			return errcat.User.New(err)
-		}
+	subjects, err := parseSubjects(gc.subjects)
+	if err != nil {
+		return err
 	}
 	values := &helm.Values{}
 	if gc.inputFile != "" {
@@ -113,24 +169,11 @@ func (gc *rbacGenerateInstallCommand) run(cmd *cobra.Command, _ []string) error 
 			rq.ManagerNamespace = "ambassador"
 		}
 	} else {
-		config, err := k8s.DaemonKubeconfig(ctx, cr)
+		cluster, client, err := kubeClient(ctx, cr)
 		if err != nil {
 			return err
 		}
-		cluster, err := k8s.ConnectCluster(cr, config)
-		if err != nil {
-			return err
-		}
-		restCfg, err := cluster.ToRESTConfig()
-		if err != nil {
-			return err
-		}
-		// The sweep issues many parallel SelfSubjectAccessReviews.
-		restCfg.QPS = 50
-		restCfg.Burst = 100
-		if rq.Client, err = kubernetes.NewForConfig(restCfg); err != nil {
-			return err
-		}
+		rq.Client = client
 		rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
 	}
 
@@ -197,11 +240,9 @@ func (gc *rbacGenerateClientCommand) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return errcat.User.New(err)
 	}
-	subjects := make([]rbacgen.Subject, len(gc.subjects))
-	for i, s := range gc.subjects {
-		if subjects[i], err = rbacgen.ParseSubject(s); err != nil {
-			return errcat.User.New(err)
-		}
+	subjects, err := parseSubjects(gc.subjects)
+	if err != nil {
+		return err
 	}
 	rq := &rbacgen.ClientRequest{
 		Subjects:     subjects,
@@ -217,26 +258,11 @@ func (gc *rbacGenerateClientCommand) run(cmd *cobra.Command, _ []string) error {
 
 	// Nothing here is reviewed, so the cluster is read with the caller's own
 	// credentials, also when --as is given.
-	cr := proto.Clone(gc.rq.ConnectRequest).(*connector.ConnectRequest)
-	cr.KubeFlags = maps.Clone(cr.KubeFlags)
-	for _, f := range []string{"as", "as-group", "as-uid"} {
-		delete(cr.KubeFlags, f)
-	}
-	config, err := k8s.DaemonKubeconfig(ctx, cr)
+	cluster, client, err := kubeClient(ctx, callerRequest(gc.rq.ConnectRequest))
 	if err != nil {
 		return err
 	}
-	cluster, err := k8s.ConnectCluster(cr, config)
-	if err != nil {
-		return err
-	}
-	restCfg, err := cluster.ToRESTConfig()
-	if err != nil {
-		return err
-	}
-	if rq.Client, err = kubernetes.NewForConfig(restCfg); err != nil {
-		return err
-	}
+	rq.Client = client
 	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
 	if rq.Values == nil {
 		rq.ReleaseLookup = setup.NewReleaseLookup(cluster.Kubeconfig)
@@ -248,4 +274,173 @@ func (gc *rbacGenerateClientCommand) run(cmd *cobra.Command, _ []string) error {
 	}
 	_, err = out.WriteTo(cmd.OutOrStdout())
 	return err
+}
+
+type rbacVerifyInstallCommand struct {
+	rq        *daemon.CobraRequest
+	inputFile string
+	verbs     string
+}
+
+func rbacVerifyInstall() *cobra.Command {
+	vc := &rbacVerifyInstallCommand{}
+	cmd := &cobra.Command{
+		Use:   "install",
+		Args:  cobra.NoArgs,
+		Short: "Check that an identity may run telepresence helm install",
+		Long: `Check that an identity may run telepresence helm install.
+
+The command renders the embedded chart for the given values, checks the same
+permissions as telepresence rbac generate install for the identity of the
+kubeconfig (after --as and --as-group), and prints what's missing. It exits
+with a non-zero status when anything is missing.`,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		ValidArgsFunction: cobra.NoFileCompletions,
+		RunE:              vc.run,
+	}
+	flags := cmd.Flags()
+	flags.StringVar(&vc.inputFile, "input", "", "Read a Helm values file that overlays the chart defaults")
+	flags.StringVar(&vc.verbs, "verbs", string(rbacgen.VerbsInstall),
+		`What to check: "install" for a first install, "lifecycle" to also check upgrades and uninstalls`)
+	_ = cmd.MarkFlagFilename("input")
+	vc.rq = daemon.InitKubeRequest(cmd)
+	return cmd
+}
+
+func (vc *rbacVerifyInstallCommand) run(cmd *cobra.Command, _ []string) error {
+	if err := vc.rq.CommitFlags(cmd); err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	verbs, err := rbacgen.ParseVerbs(vc.verbs)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+	rq := &rbacgen.VerifyInstallRequest{Values: &helm.Values{}, ValuesSource: vc.inputFile, Verbs: verbs}
+	if vc.inputFile != "" {
+		if rq.Values, err = setup.LoadInputValues(vc.inputFile); err != nil {
+			return err
+		}
+	}
+	cluster, client, err := kubeClient(ctx, vc.rq.ConnectRequest)
+	if err != nil {
+		return err
+	}
+	rq.Client = client
+	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
+
+	v, err := rbacgen.VerifyInstall(ctx, rq)
+	if err != nil {
+		return err
+	}
+	if output.WantsFormatted(cmd) {
+		output.Object(ctx, v, true)
+	} else {
+		v.WriteText(cmd.OutOrStdout())
+	}
+	if !v.OK() {
+		return errcat.Silent.New("permissions are missing")
+	}
+	return nil
+}
+
+type rbacVerifyClientCommand struct {
+	rq         *daemon.CobraRequest
+	inputFile  string
+	namespaces []string
+	workloads  []string
+}
+
+func rbacVerifyClient() *cobra.Command {
+	vc := &rbacVerifyClientCommand{}
+	cmd := &cobra.Command{
+		Use:   "client",
+		Args:  cobra.NoArgs,
+		Short: "Check that an identity may use Telepresence",
+		Long: `Check that an identity may use Telepresence.
+
+The command runs the traffic-manager's own authorization reviews for the
+identity of the kubeconfig (after --as and --as-group): connecting, reading a
+namespace, intercepting and ingesting, and getting logs. An operation counts
+as missing only when none of the grants the traffic-manager accepts for it
+passes. When the traffic-manager publishes no external endpoint, the
+port-forward to the traffic-manager pod is checked as well.
+
+The required grant and the external endpoint are read from the
+traffic-manager release with your own credentials, also when --as is given.
+When the release can't be read, the checks run under every required grant,
+unless --input gives the values the traffic-manager is installed with.
+
+Without --namespace, the namespace of the kubeconfig context is checked.
+Grants scoped to single workloads are only seen with --workload. The command
+exits with a non-zero status when a required check is missing.`,
+		SilenceUsage:      true,
+		SilenceErrors:     true,
+		ValidArgsFunction: cobra.NoFileCompletions,
+		RunE:              vc.run,
+	}
+	flags := cmd.Flags()
+	flags.StringVar(&vc.inputFile, "input", "", "Read the values the traffic-manager is installed with from a Helm values file")
+	flags.StringArrayVar(&vc.namespaces, "namespace", nil, "Namespace to check (repeatable, default the namespace of the kubeconfig context)")
+	flags.StringArrayVar(&vc.workloads, "workload", nil, "Workload to run the per-workload reviews for, in every checked namespace (repeatable)")
+	_ = cmd.MarkFlagFilename("input")
+	vc.rq = daemon.InitKubeRequest(cmd)
+	return cmd
+}
+
+func (vc *rbacVerifyClientCommand) run(cmd *cobra.Command, _ []string) error {
+	if err := vc.rq.CommitFlags(cmd); err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	rq := &rbacgen.VerifyClientRequest{
+		Workloads:    slices.Compact(slices.Sorted(slices.Values(vc.workloads))),
+		Namespaces:   slices.Compact(slices.Sorted(slices.Values(vc.namespaces))),
+		ValuesSource: vc.inputFile,
+	}
+	var err error
+	if vc.inputFile != "" {
+		if rq.Values, err = setup.LoadInputValues(vc.inputFile); err != nil {
+			return err
+		}
+	}
+
+	// Only the reviews are impersonated. The release and the pods are read
+	// with the caller's own credentials.
+	cluster, client, err := kubeClient(ctx, vc.rq.ConnectRequest)
+	if err != nil {
+		return err
+	}
+	callerCluster, callerClient, err := kubeClient(ctx, callerRequest(vc.rq.ConnectRequest))
+	if err != nil {
+		return err
+	}
+	rq.Client = client
+	rq.WorkloadPods = rbacgen.WorkloadPodNames(callerClient)
+	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
+	if rq.Values == nil {
+		rq.ReleaseLookup = setup.NewReleaseLookup(callerCluster.Kubeconfig)
+	}
+	if len(rq.Namespaces) == 0 {
+		ns := cluster.Namespace
+		if ns == "" {
+			ns = "default"
+		}
+		rq.Namespaces = []string{ns}
+	}
+
+	v, err := rbacgen.VerifyClient(ctx, rq)
+	if err != nil {
+		return err
+	}
+	if output.WantsFormatted(cmd) {
+		output.Object(ctx, v, true)
+	} else {
+		v.WriteText(cmd.OutOrStdout())
+	}
+	if !v.OK() {
+		return errcat.Silent.New("permissions are missing")
+	}
+	return nil
 }
