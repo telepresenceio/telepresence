@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.33.4
-    date: (TBD)
+    date: 2026-11-22
     notes:
       - type: security
         title: Only a traffic-agent can register an agent session with the traffic-manager
