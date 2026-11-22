@@ -91,14 +91,17 @@ func (s *GenerateInstall) run(c generateInstallCase) {
 		_, _ = r.Kubectl(ctx, "kube-system", "delete", "rolebinding,role", installName, "--ignore-not-found")
 	})
 
-	// The identity has no rights of its own.
-	_, _, err = asInstaller.Run(ctx, "helm", "install", "-n", ns, "-f", valuesPath)
-	s.Require().Error(err, "helm install without the generated RBAC should fail")
-
 	verbs := "install"
 	if c.lifecycle {
 		verbs = "lifecycle"
 	}
+	verifyArgs := []string{"rbac", "verify", "install", "--manager-namespace", ns, "--input", valuesPath, "--verbs", verbs}
+
+	// The identity has no rights of its own.
+	stdout, _, err := asInstaller.Run(ctx, verifyArgs...)
+	s.Require().Error(err, "rbac verify install without the generated RBAC should fail")
+	s.Require().Contains(stdout, "is missing")
+
 	generateArgs := []string{
 		"rbac", "generate", "install", "--manager-namespace", ns, "--input", valuesPath, "--verbs", verbs,
 		"--as", "system:serviceaccount:" + ns + ":" + sa,
@@ -114,9 +117,9 @@ func (s *GenerateInstall) run(c generateInstallCase) {
 	_, stderr, err = asInstaller.Run(ctx, "helm", "install", "-n", ns, "-f", valuesPath)
 	s.Require().NoError(err, "helm install with the generated RBAC should succeed: %s", stderr)
 
-	stdout, stderr, err = r.CLI().Run(ctx, generateArgs...)
-	s.Require().NoError(err, stderr)
-	s.Contains(stdout, "There is nothing to grant")
+	stdout, stderr, err = asInstaller.Run(ctx, verifyArgs...)
+	s.Require().NoError(err, "rbac verify install with the generated RBAC should pass: %s%s", stdout, stderr)
+	s.Contains(stdout, "Nothing is missing")
 
 	if c.lifecycle {
 		_, stderr, err = asInstaller.Run(ctx, "helm", "upgrade", "-n", ns, "-f", valuesPath)
