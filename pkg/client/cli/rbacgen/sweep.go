@@ -18,10 +18,23 @@ import (
 // once, so a large chart render doesn't open hundreds of simultaneous requests.
 const reviewConcurrency = 8
 
+// reviewAttributes returns the attributes to send for ra. A create is
+// reviewed without its name: the API server authorizes a create before it
+// knows the name, so a rule with resourceNames never allows one, while a
+// review that carries the name would be allowed by such a rule.
+func reviewAttributes(ra *auth.ResourceAttributes) *auth.ResourceAttributes {
+	if ra.Verb != "create" || ra.Name == "" {
+		return ra
+	}
+	sent := *ra
+	sent.Name = ""
+	return &sent
+}
+
 // Allowed reports whether the caller may perform ra, with one
 // SelfSubjectAccessReview.
 func Allowed(ctx context.Context, client kubernetes.Interface, ra *auth.ResourceAttributes) (bool, error) {
-	review := &auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
+	review := &auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: reviewAttributes(ra)}}
 	result, err := client.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, review, meta.CreateOptions{})
 	if err != nil {
 		return false, err
@@ -30,24 +43,36 @@ func Allowed(ctx context.Context, client kubernetes.Interface, ra *auth.Resource
 }
 
 // Sweep reviews every attribute set for the caller, up to reviewConcurrency
-// at a time, and returns the denied ones sorted by AttributeKey. It errors
-// only when a review call itself fails, never on a denial.
+// at a time, and returns the denied ones sorted by AttributeKey. Attribute
+// sets that send the same review share one call. It errors only when a review
+// call itself fails, never on a denial.
 func Sweep(ctx context.Context, client kubernetes.Interface, ras []*auth.ResourceAttributes) ([]*auth.ResourceAttributes, error) {
+	groups := make(map[string][]*auth.ResourceAttributes, len(ras))
+	var keys []string
+	for _, ra := range ras {
+		key := AttributeKey(reviewAttributes(ra))
+		if _, ok := groups[key]; !ok {
+			keys = append(keys, key)
+		}
+		groups[key] = append(groups[key], ra)
+	}
+
 	var mu sync.Mutex
 	var denied []*auth.ResourceAttributes
 	var callErrs []string
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(reviewConcurrency)
-	for _, ra := range ras {
+	for _, key := range keys {
+		group := groups[key]
 		g.Go(func() error {
-			allowed, err := Allowed(gctx, client, ra)
+			allowed, err := Allowed(gctx, client, group[0])
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
 				callErrs = append(callErrs, err.Error())
 			} else if !allowed {
-				denied = append(denied, ra)
+				denied = append(denied, group...)
 			}
 			return nil
 		})

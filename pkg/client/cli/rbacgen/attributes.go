@@ -64,9 +64,8 @@ func ToDeniedAttribute(ra *auth.ResourceAttributes) DeniedAttribute {
 }
 
 // CreateAttributes builds a "create" ResourceAttributes for every object.
-// Name is included even though plain RBAC ignores resourceNames on create,
-// because it lets a name-scoped admission policy distinguish same-typed
-// objects.
+// The name is kept so that a denial can name the object. Sweep and Allowed
+// never send it, see reviewAttributes.
 func CreateAttributes(objs []*unstructured.Unstructured, managerNamespace string) []*auth.ResourceAttributes {
 	ras := make([]*auth.ResourceAttributes, 0, len(objs))
 	for _, obj := range objs {

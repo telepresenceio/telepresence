@@ -35,16 +35,36 @@ func recordingClient(allow func(*auth.ResourceAttributes) bool) (*fake.Clientset
 	}
 }
 
-func TestSweep_DeniedSorted(t *testing.T) {
-	client, sent := recordingClient(func(ra *auth.ResourceAttributes) bool { return ra.Resource != "clusterroles" })
+func TestSweep_CreateSentWithoutName(t *testing.T) {
+	// Models a rule with resourceNames, which matches only a named review.
+	client, sent := recordingClient(func(ra *auth.ResourceAttributes) bool {
+		return ra.Name == "allowed"
+	})
+	ras := []*auth.ResourceAttributes{
+		{Verb: "create", Resource: "configmaps", Namespace: "ns", Name: "allowed"},
+		{Verb: "get", Resource: "configmaps", Namespace: "ns", Name: "allowed"},
+	}
+	denied, err := Sweep(context.Background(), client, ras)
+	require.NoError(t, err)
+
+	require.Len(t, denied, 1)
+	assert.Equal(t, "create", denied[0].Verb)
+	assert.Equal(t, "allowed", denied[0].Name, "the name is kept for reporting")
+	assert.ElementsMatch(t, []auth.ResourceAttributes{
+		{Verb: "create", Resource: "configmaps", Namespace: "ns"},
+		{Verb: "get", Resource: "configmaps", Namespace: "ns", Name: "allowed"},
+	}, sent())
+}
+
+func TestSweep_SharedReviewReportsEveryAttribute(t *testing.T) {
+	client, sent := recordingClient(func(*auth.ResourceAttributes) bool { return false })
 	ras := []*auth.ResourceAttributes{
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Name: "b"},
-		{Verb: "create", Resource: "secrets", Namespace: "ns"},
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Name: "a"},
 	}
 	denied, err := Sweep(context.Background(), client, ras)
 	require.NoError(t, err)
-	assert.Len(t, sent(), 3)
+	assert.Len(t, sent(), 1)
 	require.Len(t, denied, 2)
 	assert.Equal(t, "a", denied[0].Name)
 	assert.Equal(t, "b", denied[1].Name)
@@ -58,4 +78,14 @@ func TestSweep_ReviewCallError(t *testing.T) {
 	_, err := Sweep(context.Background(), client, []*auth.ResourceAttributes{{Verb: "create", Resource: "secrets"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "api server down")
+}
+
+func TestAllowed_CreateSentWithoutName(t *testing.T) {
+	client, sent := recordingClient(func(*auth.ResourceAttributes) bool { return true })
+	ra := &auth.ResourceAttributes{Verb: "create", Resource: "rolebindings", Namespace: "kube-system", Name: "x"}
+	allowed, err := Allowed(context.Background(), client, ra)
+	require.NoError(t, err)
+	assert.True(t, allowed)
+	assert.Equal(t, []auth.ResourceAttributes{{Verb: "create", Resource: "rolebindings", Namespace: "kube-system"}}, sent())
+	assert.Equal(t, "x", ra.Name, "the attributes passed in are not changed")
 }
