@@ -27,6 +27,26 @@ func TestCallerRequest(t *testing.T) {
 	assert.Equal(t, "alice", cr.KubeFlags["as"], "the request with --as is left as is")
 }
 
+func TestWithManagerNamespace(t *testing.T) {
+	tests := []struct {
+		name string
+		cr   *connector.ConnectRequest
+		want string
+	}{
+		{"default", &connector.ConnectRequest{KubeFlags: map[string]string{"as": "nobody"}}, "ambassador"},
+		{"namespace flag", &connector.ConnectRequest{KubeFlags: map[string]string{"namespace": "tp"}}, "tp"},
+		{"manager namespace", &connector.ConnectRequest{ManagerNamespace: "mgr", KubeFlags: map[string]string{"namespace": "tp"}}, "mgr"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orig := tt.cr.ManagerNamespace
+			cr := withManagerNamespace(tt.cr)
+			assert.Equal(t, tt.want, cr.ManagerNamespace)
+			assert.Equal(t, orig, tt.cr.ManagerNamespace, "the request is left as is")
+		})
+	}
+}
+
 func TestRbacVerifyFlags(t *testing.T) {
 	cmd := rbacCmd()
 	install, _, err := cmd.Find([]string{"verify", "install"})

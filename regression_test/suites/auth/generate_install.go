@@ -53,6 +53,40 @@ func (s *GenerateInstall) Test_Lifecycle() {
 	s.run(generateInstallCase{spec: managers.Default, lifecycle: true})
 }
 
+// Test_DefaultManagerNamespace runs generate and verify without
+// --manager-namespace for an identity that can't look anything up. Both must
+// use ambassador, as telepresence helm install does, instead of failing to
+// discover the namespace.
+func (s *GenerateInstall) Test_DefaultManagerNamespace() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	if !r.UsesBuiltVersions() {
+		t.Skip("rbac generate install needs the built client and chart")
+	}
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	ns := rt.PrivateUnmanagedNamespace(env, "rbac-gen-default")
+
+	const sa = "rbac-gen-nobody"
+	_, err := r.Kubectl(ctx, ns, "create", "serviceaccount", sa)
+	s.Require().NoError(err)
+	tok, err := r.Kubectl(ctx, ns, "create", "token", sa)
+	s.Require().NoError(err)
+	kubeconfig, err := buildTokenKubeconfig(env, sa, strings.TrimSpace(tok))
+	s.Require().NoError(err)
+
+	stdout, stderr, err := r.CLI().Run(ctx, "rbac", "generate", "install", "--as", "system:serviceaccount:"+ns+":"+sa)
+	s.Require().NoError(err, stderr)
+	s.Contains(stdout, "kind: ClusterRole")
+	s.Contains(stdout, "namespace: ambassador")
+
+	stdout, stderr, err = r.CLIWithEnv(map[string]string{"KUBECONFIG": kubeconfig}).Run(ctx, "rbac", "verify", "install")
+	s.Require().Error(err, "an identity without rights can't install")
+	s.NotContains(stderr, "unable to determine the traffic-manager namespace")
+	s.Contains(stdout, "is missing")
+	s.Contains(stdout, "ambassador")
+}
+
 func (s *GenerateInstall) run(c generateInstallCase) {
 	t := s.T()
 	ctx := s.Ctx()

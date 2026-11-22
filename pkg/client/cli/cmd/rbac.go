@@ -85,13 +85,7 @@ func callerRequest(cr *connector.ConnectRequest) *connector.ConnectRequest {
 // rights could not do.
 func withManagerNamespace(cr *connector.ConnectRequest) *connector.ConnectRequest {
 	cr = proto.Clone(cr).(*connector.ConnectRequest)
-	if cr.ManagerNamespace == "" {
-		if ns, ok := cr.KubeFlags["namespace"]; ok {
-			cr.ManagerNamespace = ns
-		} else {
-			cr.ManagerNamespace = "ambassador"
-		}
-	}
+	cr.ManagerNamespace = helm.ManagerNamespace(cr)
 	return cr
 }
 
@@ -408,19 +402,23 @@ func (vc *rbacVerifyClientCommand) run(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Only the reviews are impersonated. The release and the pods are read
-	// with the caller's own credentials.
-	cluster, client, err := kubeClient(ctx, vc.rq.ConnectRequest)
+	// Only the reviews are impersonated. The manager namespace, the release
+	// and the pods are found with the caller's own credentials. The namespace
+	// is found first, so that connecting as the checked identity doesn't try
+	// to discover it.
+	callerCluster, callerClient, err := kubeClient(ctx, callerRequest(vc.rq.ConnectRequest))
 	if err != nil {
 		return err
 	}
-	callerCluster, callerClient, err := kubeClient(ctx, callerRequest(vc.rq.ConnectRequest))
+	rq.ManagerNamespace = k8s.GetManagerNamespace(callerCluster)
+	cr := proto.Clone(vc.rq.ConnectRequest).(*connector.ConnectRequest)
+	cr.ManagerNamespace = rq.ManagerNamespace
+	cluster, client, err := kubeClient(ctx, cr)
 	if err != nil {
 		return err
 	}
 	rq.Client = client
 	rq.WorkloadPods = rbacgen.WorkloadPodNames(callerClient)
-	rq.ManagerNamespace = k8s.GetManagerNamespace(callerCluster)
 	if rq.Values == nil {
 		rq.ReleaseLookup = setup.NewReleaseLookup(callerCluster.Kubeconfig)
 	}
