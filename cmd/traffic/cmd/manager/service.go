@@ -328,22 +328,6 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 
 	now := time.Now()
 	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
-	agents := slices.DeleteFunc(slices.Clone(info.Agents), func(agent *rpc.AgentInfo) bool {
-		if agent.GetContainerEnvironmentOmitted() {
-			// Compact watch snapshots are intentionally incomplete. Restoring
-			// one after a manager restart would make the omitted container
-			// environment authoritative until the real traffic-agent
-			// reconnects, breaking consumers that need it.
-			clog.Debugf(ctx, "Not restoring compact agent %s.%s; waiting for the traffic-agent to reconnect", agent.Name, agent.Namespace)
-			return true
-		}
-		if st.ManagesNamespace(ctx, agent.Namespace) {
-			return false
-		}
-		clog.Debugf(ctx, "Not restoring agent %s.%s because its namespace is not managed", agent.Name, agent.Namespace)
-		return true
-	})
-	st.RestoreAgents(agents, now)
 
 	intercepts, err := s.reviewRestoredIntercepts(ctx, info, now)
 	if err == nil {

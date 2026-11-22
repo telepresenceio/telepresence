@@ -669,15 +669,6 @@ func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo
 	s.addClient(sessionID, client, principal, now)
 }
 
-func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
-	for _, newAgent := range agents {
-		id := tunnel.SessionID(AgentSessionIDPrefix + newAgent.PodUid)
-		s.agents.LoadOrCompute(id, func() *AgentSession {
-			return newAgentSessionState(s.backgroundCtx, id, newAgent, now)
-		})
-	}
-}
-
 // RestoreIntercepts stores each entry in intercepts as manager state, keyed
 // by its own Id, and wires the finalizers a running intercept needs. A
 // pod-port intercept's children are never taken from intercepts -- a spec

@@ -1366,11 +1366,12 @@ func (x *ReconnectAgentRequest) GetAgent() *AgentInfo {
 }
 
 type ReconnectClientRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       *SessionInfo           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
-	Client        *ClientInfo            `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
-	Intercepts    []*InterceptInfo       `protobuf:"bytes,3,rep,name=intercepts,proto3" json:"intercepts,omitempty"`
-	Agents        []*AgentInfo           `protobuf:"bytes,4,rep,name=agents,proto3" json:"agents,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Session    *SessionInfo           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Client     *ClientInfo            `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
+	Intercepts []*InterceptInfo       `protobuf:"bytes,3,rep,name=intercepts,proto3" json:"intercepts,omitempty"`
+	// Ignored by the traffic-manager. Traffic-agents register themselves.
+	Agents        []*AgentInfo `protobuf:"bytes,4,rep,name=agents,proto3" json:"agents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
