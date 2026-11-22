@@ -114,14 +114,16 @@ func nodeAgentAttributes(managerNamespace string, values *helm.Values) []*auth.R
 	return nil
 }
 
-// AttributeKey renders every field an access review compares into a single
-// string, used for both deduplication and deterministic ordering.
+// AttributeKey renders the fields that tell two access reviews apart into a
+// single string, used for both deduplication and deterministic ordering. The
+// version is left out, since attributes from rendered objects carry one and
+// the ones from role rules don't, and they would otherwise look the same in
+// the output while differing in the key.
 func AttributeKey(ra *auth.ResourceAttributes) string {
-	return strings.Join([]string{ra.Verb, ra.Group, ra.Version, ra.Resource, ra.Subresource, ra.Namespace, ra.Name}, "|")
+	return strings.Join([]string{ra.Verb, ra.Group, ra.Resource, ra.Subresource, ra.Namespace, ra.Name}, "|")
 }
 
-// DedupeAttributes removes ResourceAttributes that are identical in every
-// field an access review compares.
+// DedupeAttributes removes ResourceAttributes that have the same AttributeKey.
 func DedupeAttributes(ras []*auth.ResourceAttributes) []*auth.ResourceAttributes {
 	seen := make(map[string]bool, len(ras))
 	out := make([]*auth.ResourceAttributes, 0, len(ras))

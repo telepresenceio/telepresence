@@ -71,6 +71,14 @@ func TestDedupeAttributes(t *testing.T) {
 	assert.Len(t, DedupeAttributes(ras), 2)
 }
 
+func TestDedupeAttributes_IgnoresVersion(t *testing.T) {
+	ras := []*auth.ResourceAttributes{
+		{Verb: "get", Version: "v1", Resource: "configmaps", Namespace: "ambassador", Name: "traffic-manager"},
+		{Verb: "get", Resource: "configmaps", Namespace: "ambassador", Name: "traffic-manager"},
+	}
+	assert.Len(t, DedupeAttributes(ras), 1)
+}
+
 func TestToDeniedAttribute(t *testing.T) {
 	assert.Equal(t,
 		DeniedAttribute{Verb: "create", Resource: "pods", Subresource: "eviction", Namespace: "ns", Name: "p"},
