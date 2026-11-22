@@ -71,25 +71,9 @@ func provisionSecondaryManager(e Env, spec managers.Spec, ns string) (*ManagerHa
 	if err := ensureManagerRBAC(e, mgrNS); err != nil {
 		return nil, err
 	}
-
-	values := mergedManagerValues(r, spec)
-	// Expression form for the same reason as managers.Baseline: released
-	// charts up to 2.31.x crash on a matchLabels-only selector when any
-	// LATER install runs its overlap validation (findings.md #1).
-	values.NamespaceSelector = &labels.Selector{
-		MatchExpressions: []*labels.Requirement{{
-			Key:      labels.NameLabelKey,
-			Operator: labels.OperatorIn,
-			Values:   []string{ns},
-		}},
-	}
-	valuesYAML, err := marshalManagerValues(r, values)
+	valuesPath, err := SecondaryManagerValues(e, spec, ns, nil)
 	if err != nil {
-		return nil, fmt.Errorf("secondary-manager/%s: marshaling values: %w", ns, err)
-	}
-	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-secondary-"+ns+".yaml")
-	if err := os.WriteFile(valuesPath, valuesYAML, 0o644); err != nil {
-		return nil, fmt.Errorf("secondary-manager/%s: writing values: %w", ns, err)
+		return nil, err
 	}
 
 	verArgs := r.helmVersionArgs()
@@ -103,6 +87,36 @@ func provisionSecondaryManager(e Env, spec managers.Spec, ns string) (*ManagerHa
 		return nil, err
 	}
 	return &ManagerHandle{Namespace: ns, Spec: spec}, nil
+}
+
+// SecondaryManagerValues writes the values file of a SecondaryManager
+// release in ns and returns its path. A nil selector selects ns by name,
+// which is what SecondaryManager installs with.
+func SecondaryManagerValues(e Env, spec managers.Spec, ns string, selector *labels.Selector) (string, error) {
+	r := e.R
+	values := mergedManagerValues(r, spec)
+	if selector == nil {
+		// Expression form for the same reason as managers.Baseline: released
+		// charts up to 2.31.x crash on a matchLabels-only selector when any
+		// LATER install runs its overlap validation (findings.md #1).
+		selector = &labels.Selector{
+			MatchExpressions: []*labels.Requirement{{
+				Key:      labels.NameLabelKey,
+				Operator: labels.OperatorIn,
+				Values:   []string{ns},
+			}},
+		}
+	}
+	values.NamespaceSelector = selector
+	valuesYAML, err := marshalManagerValues(r, values)
+	if err != nil {
+		return "", fmt.Errorf("secondary-manager/%s: marshaling values: %w", ns, err)
+	}
+	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-secondary-"+ns+".yaml")
+	if err := os.WriteFile(valuesPath, valuesYAML, 0o644); err != nil {
+		return "", fmt.Errorf("secondary-manager/%s: writing values: %w", ns, err)
+	}
+	return valuesPath, nil
 }
 
 func destroySecondaryManager(e Env, h *ManagerHandle) error {
