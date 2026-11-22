@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 	"maps"
 	"slices"
 
@@ -334,15 +335,7 @@ func (vc *rbacVerifyInstallCommand) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if output.WantsFormatted(cmd) {
-		output.Object(ctx, v, true)
-	} else {
-		v.WriteText(cmd.OutOrStdout())
-	}
-	if !v.OK() {
-		return errcat.Silent.New("permissions are missing")
-	}
-	return nil
+	return reportVerdict(cmd, v)
 }
 
 type rbacVerifyClientCommand struct {
@@ -434,8 +427,20 @@ func (vc *rbacVerifyClientCommand) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	return reportVerdict(cmd, v)
+}
+
+type verdict interface {
+	OK() bool
+	WriteText(io.Writer)
+}
+
+// reportVerdict prints v, as an object when formatted output is requested,
+// and returns a Silent error when something is missing, so that the
+// command exits with a non-zero status.
+func reportVerdict(cmd *cobra.Command, v verdict) error {
 	if output.WantsFormatted(cmd) {
-		output.Object(ctx, v, true)
+		output.Object(cmd.Context(), v, true)
 	} else {
 		v.WriteText(cmd.OutOrStdout())
 	}

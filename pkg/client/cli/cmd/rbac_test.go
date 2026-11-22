@@ -1,11 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func TestCallerRequest(t *testing.T) {
@@ -32,4 +38,27 @@ func TestRbacVerifyFlags(t *testing.T) {
 	for _, f := range []string{"namespace", "workload", "input", "as"} {
 		assert.NotNil(t, client.Flags().Lookup(f), f)
 	}
+}
+
+func TestReportVerdict(t *testing.T) {
+	run := func(v verdict) (string, error) {
+		cmd := &cobra.Command{}
+		var out strings.Builder
+		cmd.SetOut(&out)
+		cmd.SetContext(context.Background())
+		err := reportVerdict(cmd, v)
+		return out.String(), err
+	}
+
+	out, err := run(&rbacgen.InstallVerdict{ManagerNamespace: "ambassador", Verbs: rbacgen.VerbsInstall})
+	require.NoError(t, err)
+	assert.Contains(t, out, "Nothing is missing")
+
+	out, err = run(&rbacgen.InstallVerdict{
+		ManagerNamespace: "ambassador", Verbs: rbacgen.VerbsInstall,
+		Missing: []rbacgen.DeniedAttribute{{Verb: "create", Resource: "namespaces"}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, errcat.Silent, errcat.GetCategory(err), "the verdict already says what's missing")
+	assert.Contains(t, out, "create namespaces")
 }
