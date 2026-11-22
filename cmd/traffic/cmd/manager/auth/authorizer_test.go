@@ -17,6 +17,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -135,7 +136,7 @@ func TestAuthorize_AllowedVerdictCached(t *testing.T) {
 	a := auth.NewAuthorizer(ci)
 	p := &auth.Principal{Username: "alice"}
 	for range 3 {
-		require.NoError(t, a.Authorize(context.Background(), auth.GrantTelepresence, p, auth.ConnectReview("ns1")))
+		require.NoError(t, a.Authorize(context.Background(), authz.GrantTelepresence, p, authz.ConnectReview("ns1")))
 	}
 	assert.Equal(t, int32(1), count.Load())
 }
@@ -150,7 +151,7 @@ func TestAuthorize_DeniedVerdictCached(t *testing.T) {
 	a := auth.NewAuthorizer(ci)
 	p := &auth.Principal{Username: "alice"}
 	for range 2 {
-		err := a.Authorize(context.Background(), auth.GrantTelepresence, p, auth.ConnectReview("ns1"))
+		err := a.Authorize(context.Background(), authz.GrantTelepresence, p, authz.ConnectReview("ns1"))
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	}
@@ -173,10 +174,10 @@ func TestAuthorize_ReviewErrorNotCached(t *testing.T) {
 
 	a := auth.NewAuthorizer(ci)
 	p := &auth.Principal{Username: "alice"}
-	err := a.Authorize(context.Background(), auth.GrantTelepresence, p, auth.ConnectReview("ns1"))
+	err := a.Authorize(context.Background(), authz.GrantTelepresence, p, authz.ConnectReview("ns1"))
 	require.Error(t, err)
 	assert.Equal(t, codes.Unavailable, status.Code(err))
-	require.NoError(t, a.Authorize(context.Background(), auth.GrantTelepresence, p, auth.ConnectReview("ns1")))
+	require.NoError(t, a.Authorize(context.Background(), authz.GrantTelepresence, p, authz.ConnectReview("ns1")))
 	assert.Equal(t, int32(2), count.Load())
 }
 
@@ -188,8 +189,8 @@ func TestAuthorize_VerdictCacheKeyedByPrincipal(t *testing.T) {
 	countingSAR(ci, &count, func(*authv1.ResourceAttributes) bool { return true })
 
 	a := auth.NewAuthorizer(ci)
-	require.NoError(t, a.Authorize(context.Background(), auth.GrantTelepresence, &auth.Principal{Username: "alice"}, auth.ConnectReview("ns1")))
-	require.NoError(t, a.Authorize(context.Background(), auth.GrantTelepresence, &auth.Principal{Username: "bob"}, auth.ConnectReview("ns1")))
+	require.NoError(t, a.Authorize(context.Background(), authz.GrantTelepresence, &auth.Principal{Username: "alice"}, authz.ConnectReview("ns1")))
+	require.NoError(t, a.Authorize(context.Background(), authz.GrantTelepresence, &auth.Principal{Username: "bob"}, authz.ConnectReview("ns1")))
 	assert.Equal(t, int32(2), count.Load())
 }
 
@@ -204,7 +205,7 @@ func TestAuthorize_EnsureAgentAcceptsCreateOrGet(t *testing.T) {
 
 	a := auth.NewAuthorizer(ci)
 	p := &auth.Principal{Username: "alice"}
-	require.NoError(t, a.Authorize(context.Background(), auth.GrantTelepresence, p, auth.EnsureAgentReview("ns1", "echo")))
+	require.NoError(t, a.Authorize(context.Background(), authz.GrantTelepresence, p, authz.EnsureAgentReview("ns1", "echo")))
 	assert.Equal(t, int32(2), count.Load(), "create denied, then get allowed")
 }
 
@@ -219,6 +220,6 @@ func TestAuthorize_EnsureAgentPortForwardReviewedOnce(t *testing.T) {
 
 	a := auth.NewAuthorizer(ci)
 	p := &auth.Principal{Username: "alice"}
-	require.NoError(t, a.Authorize(context.Background(), auth.GrantPortForward, p, auth.EnsureAgentReview("ns1", "echo")))
+	require.NoError(t, a.Authorize(context.Background(), authz.GrantPortForward, p, authz.EnsureAgentReview("ns1", "echo")))
 	assert.Equal(t, int32(1), count.Load())
 }

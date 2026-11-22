@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -107,7 +108,7 @@ func newReadEnv(t *testing.T, mode auth.Mode, allow func(ra *auth1.ResourceAttri
 	ctx := testutil.NewContext(t, true)
 	_, mgr, sctx := getTestClientConnAndService(ctx, t, readFixtures(), func(e *managerutil.Env) {
 		e.AuthenticationMode = mode
-		e.AuthorizationRequiredGrant = auth.GrantTelepresence
+		e.AuthorizationRequiredGrant = authz.GrantTelepresence
 		e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind}
 	})
 	cs, ok := k8sapi.GetK8sInterface(sctx).(*fake.Clientset)

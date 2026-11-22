@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -193,7 +194,7 @@ type Env struct {
 	// authorized to connect and to attach to a workload: pods/portforward
 	// ("portforward"), the telepresence.io group's own attributes
 	// ("telepresence"), or either ("any").
-	AuthorizationRequiredGrant auth.Grant `default:"any"`
+	AuthorizationRequiredGrant authz.Grant `default:"any"`
 
 	// Anonymous usage reporting. The manager produces reports whose only
 	// identifier is the UUID stored in the traffic-manager-install-id

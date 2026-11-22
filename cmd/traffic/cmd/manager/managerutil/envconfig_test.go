@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -70,7 +71,7 @@ func TestEnvconfig(t *testing.T) {
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
 		AuthenticationMode:           auth.ModePermissive,
-		AuthorizationRequiredGrant:   auth.GrantAny,
+		AuthorizationRequiredGrant:   authz.GrantAny,
 		LogStreamChunkSize:           resource.MustParse("64Ki"),
 		LogStreamPodConcurrency:      4,
 		LogStreamPodByteLimit:        resource.MustParse("10Mi"),
@@ -211,7 +212,7 @@ func TestEnvconfig(t *testing.T) {
 				"AUTHORIZATION_REQUIRED_GRANT": "portforward",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AuthorizationRequiredGrant = auth.GrantPortForward
+				e.AuthorizationRequiredGrant = authz.GrantPortForward
 			},
 		},
 		"authorization-required-grant-telepresence": {
@@ -219,7 +220,7 @@ func TestEnvconfig(t *testing.T) {
 				"AUTHORIZATION_REQUIRED_GRANT": "telepresence",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AuthorizationRequiredGrant = auth.GrantTelepresence
+				e.AuthorizationRequiredGrant = authz.GrantTelepresence
 			},
 		},
 		"external-listener": {
