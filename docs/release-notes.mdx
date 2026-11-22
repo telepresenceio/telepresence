@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.34.0
 <Note>
+	<Title type="feature" docs="reference/rbac">The telepresence rbac command generates and checks RBAC</Title>
+	<Body>
+<code>telepresence rbac generate install</code> prints the RBAC that <code>telepresence helm install</code> needs and the current identity lacks, and <code>telepresence rbac generate client</code> prints the client roles for the installed configuration, both for a cluster admin to review and apply. <code>telepresence rbac verify install</code> and <code>telepresence rbac verify client</code> check an identity, also another one with <code>--as</code>, and exit with a non-zero status when something is missing. The client check runs the same reviews as the traffic-manager.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="howtos/monitoring">Prometheus metrics for the traffic-manager's gRPC requests</Title>
 	<Body>
 The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.

@@ -1,10 +1,10 @@
 ---
 title: telepresence rbac
-description: Generate the RBAC that installing or using Telepresence needs
+description: Generate or check the RBAC that installing or using Telepresence needs
 hide_table_of_contents: true
 ---
 
-Generate the RBAC that installing or using Telepresence needs
+Generate or check the RBAC that installing or using Telepresence needs
 
 ### Usage:
 ```
@@ -15,6 +15,7 @@ Generate the RBAC that installing or using Telepresence needs
 | Command | Description |
 |---------|-------------|
 | [generate](telepresence_rbac_generate) | Generate RBAC manifests for an admin to review and apply |
+| [verify](telepresence_rbac_verify) | Check that an identity holds the RBAC that installing or using Telepresence needs |
 
 ### Flags:
 ```

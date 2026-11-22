@@ -28,6 +28,20 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: The telepresence rbac command generates and checks RBAC
+        body: >-
+          <code>telepresence rbac generate install</code> prints the RBAC
+          that <code>telepresence helm install</code> needs and the current
+          identity lacks, and <code>telepresence rbac generate client</code>
+          prints the client roles for the installed configuration, both for
+          a cluster admin to review and apply.
+          <code>telepresence rbac verify install</code> and
+          <code>telepresence rbac verify client</code> check an identity,
+          also another one with <code>--as</code>, and exit with a non-zero
+          status when something is missing. The client check runs the same
+          reviews as the traffic-manager.
+        docs: reference/rbac
+      - type: feature
         title: Prometheus metrics for the traffic-manager's gRPC requests
         body: >-
           The traffic-manager publishes two new Prometheus metrics:
