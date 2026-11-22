@@ -67,11 +67,17 @@ func ToDeniedAttribute(ra *auth.ResourceAttributes) DeniedAttribute {
 // The name is kept so that a denial can name the object. Sweep and Allowed
 // never send it, see reviewAttributes.
 func CreateAttributes(objs []*unstructured.Unstructured, managerNamespace string) []*auth.ResourceAttributes {
+	return VerbAttributes("create", objs, managerNamespace)
+}
+
+// VerbAttributes builds a ResourceAttributes for verb on every object, named
+// after the object.
+func VerbAttributes(verb string, objs []*unstructured.Unstructured, managerNamespace string) []*auth.ResourceAttributes {
 	ras := make([]*auth.ResourceAttributes, 0, len(objs))
 	for _, obj := range objs {
 		gvr, _ := apimeta.UnsafeGuessKindToResource(obj.GroupVersionKind())
 		ras = append(ras, &auth.ResourceAttributes{
-			Verb:      "create",
+			Verb:      verb,
 			Group:     gvr.Group,
 			Version:   gvr.Version,
 			Resource:  gvr.Resource,
@@ -89,13 +95,22 @@ func CreateAttributes(objs []*unstructured.Unstructured, managerNamespace string
 func InstallAttributes(objs []*unstructured.Unstructured, managerNamespace string, nsExists bool, values *helm.Values) []*auth.ResourceAttributes {
 	ras := CreateAttributes(objs, managerNamespace)
 	if !nsExists {
-		ras = append(ras, &auth.ResourceAttributes{Verb: "create", Resource: "namespaces"})
+		ras = append(ras, createNamespaceAttribute())
 	}
 	ras = append(ras, &auth.ResourceAttributes{Verb: "create", Resource: "secrets", Namespace: managerNamespace})
-	if e := values.NodeAgent.Enabled; e != nil && *e {
-		ras = append(ras, &auth.ResourceAttributes{Verb: "patch", Resource: "namespaces", Name: managerNamespace})
-	}
+	ras = append(ras, nodeAgentAttributes(managerNamespace, values)...)
 	return DedupeAttributes(ras)
+}
+
+func createNamespaceAttribute() *auth.ResourceAttributes {
+	return &auth.ResourceAttributes{Verb: "create", Resource: "namespaces"}
+}
+
+func nodeAgentAttributes(managerNamespace string, values *helm.Values) []*auth.ResourceAttributes {
+	if e := values.NodeAgent.Enabled; e != nil && *e {
+		return []*auth.ResourceAttributes{{Verb: "patch", Resource: "namespaces", Name: managerNamespace}}
+	}
+	return nil
 }
 
 // AttributeKey renders every field an access review compares into a single

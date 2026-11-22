@@ -51,6 +51,10 @@ func loadEmbeddedChart() (*chart.Chart, error) {
 	return embeddedChart, errEmbeddedChart
 }
 
+// ReleaseName is the name of the release that telepresence helm install
+// creates.
+const ReleaseName = "traffic-manager"
+
 // RenderChart renders the CLI's embedded chart for a release named
 // traffic-manager in namespace, without contacting a cluster.
 func RenderChart(ctx context.Context, namespace string, values *helm.Values) (*Render, error) {
@@ -61,7 +65,7 @@ func RenderChart(ctx context.Context, namespace string, values *helm.Values) (*R
 	install := action.NewInstall(&action.Configuration{})
 	install.DryRun = true
 	install.ClientOnly = true
-	install.ReleaseName = "traffic-manager"
+	install.ReleaseName = ReleaseName
 	install.Namespace = namespace
 
 	valuesMap, err := values.ToMap()
