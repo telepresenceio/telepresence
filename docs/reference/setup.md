@@ -181,9 +181,9 @@ When the admin would rather have the person who ran setup do the install,
 ClusterRole, Roles, and bindings that grant only the missing privileges, for
 the admin to review and apply. `telepresence rbac verify install --input
 values.yaml` then confirms that nothing is missing before the install. Both
-name the manager namespace the way `telepresence helm install` does:
-`--manager-namespace`, else `ambassador`, so give them the same
-`--manager-namespace` as the install. See
+take the manager namespace from `--manager-namespace`, else `ambassador`. They
+have no `-n`, so if you install with `telepresence helm install -n foo`, pass
+`--manager-namespace foo` here. See
 [Generating RBAC](rbac.md#generating-rbac).
 
 ## Command reference
