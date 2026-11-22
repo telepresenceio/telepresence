@@ -19,6 +19,10 @@ ServiceAccount:NAMESPACE/NAME. It defaults to the checked identity, and must
 match it. --all skips the check and prints the complete set for the given
 subjects, without contacting the cluster.
 
+The traffic-manager namespace is --manager-namespace, or ambassador when it's
+not given, the same as for telepresence helm install. It isn't looked up in
+the cluster.
+
 ### Usage:
 ```
   telepresence rbac generate install [flags]

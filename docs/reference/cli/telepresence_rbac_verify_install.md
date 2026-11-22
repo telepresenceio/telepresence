@@ -15,6 +15,10 @@ permissions as telepresence rbac generate install for the identity of the
 kubeconfig (after --as and --as-group), and prints what's missing. It exits
 with a non-zero status when anything is missing.
 
+The traffic-manager namespace is --manager-namespace, or ambassador when it's
+not given, the same as for telepresence helm install. It isn't looked up in
+the cluster.
+
 ### Usage:
 ```
   telepresence rbac verify install [flags]

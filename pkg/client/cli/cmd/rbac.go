@@ -126,7 +126,11 @@ ClusterRole, Roles and bindings that grant only that. Nothing is applied.
 --subject names the subject of the bindings, as User:NAME, Group:NAME or
 ServiceAccount:NAMESPACE/NAME. It defaults to the checked identity, and must
 match it. --all skips the check and prints the complete set for the given
-subjects, without contacting the cluster.`,
+subjects, without contacting the cluster.
+
+The traffic-manager namespace is --manager-namespace, or ambassador when it's
+not given, the same as for telepresence helm install. It isn't looked up in
+the cluster.`,
 		SilenceUsage:      true,
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -298,7 +302,11 @@ func rbacVerifyInstall() *cobra.Command {
 The command renders the embedded chart for the given values, checks the same
 permissions as telepresence rbac generate install for the identity of the
 kubeconfig (after --as and --as-group), and prints what's missing. It exits
-with a non-zero status when anything is missing.`,
+with a non-zero status when anything is missing.
+
+The traffic-manager namespace is --manager-namespace, or ambassador when it's
+not given, the same as for telepresence helm install. It isn't looked up in
+the cluster.`,
 		SilenceUsage:      true,
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -368,11 +376,13 @@ port-forward to the traffic-manager pod is checked as well.
 The required grant and the external endpoint are read from the
 traffic-manager release with your own credentials, also when --as is given.
 When the release can't be read, the checks run under every required grant,
-unless --input gives the values the traffic-manager is installed with.
+unless --input gives the values the traffic-manager is installed with, and
+the command passes when they all pass under one of them.
 
 Without --namespace, the namespace of the kubeconfig context is checked.
-Grants scoped to single workloads are only seen with --workload. The command
-exits with a non-zero status when a required check is missing.`,
+Grants scoped to single workloads are only seen with --workload, and a
+workload that doesn't exist is an error. The command exits with a non-zero
+status when a required check is missing or can't be determined.`,
 		SilenceUsage:      true,
 		SilenceErrors:     true,
 		ValidArgsFunction: cobra.NoFileCompletions,

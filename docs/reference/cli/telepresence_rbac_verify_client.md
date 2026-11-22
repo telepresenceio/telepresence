@@ -20,11 +20,13 @@ port-forward to the traffic-manager pod is checked as well.
 The required grant and the external endpoint are read from the
 traffic-manager release with your own credentials, also when --as is given.
 When the release can't be read, the checks run under every required grant,
-unless --input gives the values the traffic-manager is installed with.
+unless --input gives the values the traffic-manager is installed with, and
+the command passes when they all pass under one of them.
 
 Without --namespace, the namespace of the kubeconfig context is checked.
-Grants scoped to single workloads are only seen with --workload. The command
-exits with a non-zero status when a required check is missing.
+Grants scoped to single workloads are only seen with --workload, and a
+workload that doesn't exist is an error. The command exits with a non-zero
+status when a required check is missing or can't be determined.
 
 ### Usage:
 ```
