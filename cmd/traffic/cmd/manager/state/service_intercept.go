@@ -178,11 +178,11 @@ func (s *State) initializeParticipants(intercept *Intercept) {
 			name:      intercept.Spec.Agent,
 		}
 	}
-	// On restore, RestoreAgents runs before RestoreIntercepts, so use the
-	// recorded pod to reconnect the published review to its workload before
-	// current selection can prune it. Without a matching restored agent, only
-	// a single persisted participant (or a snapshot with none) is safe
-	// to infer; otherwise wait for fresh reviews instead of guessing.
+	// A known agent session for the recorded pod reconnects the published
+	// review to its workload before current selection can prune it. Without
+	// such a session, only a single persisted participant (or a snapshot
+	// with none) is safe to infer; otherwise wait for fresh reviews instead
+	// of guessing.
 	hasPublishedPod := intercept.PodName != "" || intercept.PodIp != ""
 	publishedKey := ""
 	if hasPublishedPod {

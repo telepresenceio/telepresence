@@ -380,12 +380,12 @@ func TestWatchSessionEvents_InactiveAgentFiltered(t *testing.T) {
 
 	// Mark the pod inactive before the agent's AgentSession ever lands in state.
 	// ArriveAsAgent (which calls state.AddAgent) itself refuses to add an agent
-	// for an already-inactive pod, so RestoreAgents -- which performs no such
+	// for an already-inactive pod, so RestoreAgent -- which performs no such
 	// check -- is used to get the (inactive) AgentSession into state directly,
-	// the way a manager restart would restore agents that raced with an
-	// eviction.
+	// the way an agent that reconnects after racing with an eviction lands
+	// there.
 	mutator.GetMap(svcCtx).Inactivate(types.UID(inactiveAgent.PodUid))
-	mgr.State().RestoreAgents([]*rpc.AgentInfo{inactiveAgent}, time.Now())
+	restoreTestAgents(svcCtx, mgr, inactiveAgent)
 
 	// A sentinel arrives normally right after; it proves the stream is alive
 	// and that the inactive agent's upsert produced no message of its own.
@@ -455,7 +455,7 @@ func TestWatchAgentPods_RevealedAgentDelivered(t *testing.T) {
 	testAgents := testdata.GetTestAgents(t)
 
 	var rm *revealingMap
-	conn, mgr, _ := getTestClientConnAndServiceWithMap(ctx, t, nil, func(inner mutator.Map) mutator.Map {
+	conn, mgr, svcCtx := getTestClientConnAndServiceWithMap(ctx, t, nil, func(inner mutator.Map) mutator.Map {
 		rm = &revealingMap{Map: inner, hidden: make(map[types.UID]struct{})}
 		return rm
 	})
@@ -474,7 +474,7 @@ func TestWatchAgentPods_RevealedAgentDelivered(t *testing.T) {
 	hiddenAgent.PodUid = "hidden-pod-uid"
 	hiddenAgent.PodIp = "10.1.2.7"
 	rm.hide(types.UID(hiddenAgent.PodUid))
-	mgr.State().RestoreAgents([]*rpc.AgentInfo{hiddenAgent}, time.Now())
+	restoreTestAgents(svcCtx, mgr, hiddenAgent)
 
 	sentinel := proto.Clone(testAgents["demo1"]).(*rpc.AgentInfo)
 	sentinel.PodIp = "10.1.2.6"
