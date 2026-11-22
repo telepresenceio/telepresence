@@ -79,6 +79,22 @@ func callerRequest(cr *connector.ConnectRequest) *connector.ConnectRequest {
 	return cr
 }
 
+// withManagerNamespace returns a copy of cr that names the manager namespace the way
+// telepresence helm install does: --manager-namespace, else --namespace, else ambassador.
+// Naming it up front keeps k8s.NewCluster from discovering it, which an identity without
+// rights could not do.
+func withManagerNamespace(cr *connector.ConnectRequest) *connector.ConnectRequest {
+	cr = proto.Clone(cr).(*connector.ConnectRequest)
+	if cr.ManagerNamespace == "" {
+		if ns, ok := cr.KubeFlags["namespace"]; ok {
+			cr.ManagerNamespace = ns
+		} else {
+			cr.ManagerNamespace = "ambassador"
+		}
+	}
+	return cr
+}
+
 // parseSubjects parses the values of --subject.
 func parseSubjects(ss []string) ([]rbacgen.Subject, error) {
 	subjects := make([]rbacgen.Subject, len(ss))
@@ -152,7 +168,7 @@ func (gc *rbacGenerateInstallCommand) run(cmd *cobra.Command, _ []string) error 
 		}
 	}
 
-	cr := gc.rq.ConnectRequest
+	cr := withManagerNamespace(gc.rq.ConnectRequest)
 	rq := &rbacgen.InstallRequest{
 		Values:       values,
 		ValuesSource: gc.inputFile,
@@ -161,21 +177,13 @@ func (gc *rbacGenerateInstallCommand) run(cmd *cobra.Command, _ []string) error 
 		All:          gc.all,
 		Impersonated: cr.KubeFlags["as"] != "",
 	}
-	if gc.all {
-		rq.ManagerNamespace = cr.ManagerNamespace
-		if rq.ManagerNamespace == "" {
-			rq.ManagerNamespace = k8s.GetManagerNamespace(ctx)
-		}
-		if rq.ManagerNamespace == "" {
-			rq.ManagerNamespace = "ambassador"
-		}
-	} else {
-		cluster, client, err := kubeClient(ctx, cr)
+	rq.ManagerNamespace = cr.ManagerNamespace
+	if !gc.all {
+		_, client, err := kubeClient(ctx, cr)
 		if err != nil {
 			return err
 		}
 		rq.Client = client
-		rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
 	}
 
 	out, err := rbacgen.GenerateInstall(ctx, rq)
@@ -324,12 +332,13 @@ func (vc *rbacVerifyInstallCommand) run(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-	cluster, client, err := kubeClient(ctx, vc.rq.ConnectRequest)
+	cr := withManagerNamespace(vc.rq.ConnectRequest)
+	_, client, err := kubeClient(ctx, cr)
 	if err != nil {
 		return err
 	}
 	rq.Client = client
-	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
+	rq.ManagerNamespace = cr.ManagerNamespace
 
 	v, err := rbacgen.VerifyInstall(ctx, rq)
 	if err != nil {
@@ -411,7 +420,7 @@ func (vc *rbacVerifyClientCommand) run(cmd *cobra.Command, _ []string) error {
 	}
 	rq.Client = client
 	rq.WorkloadPods = rbacgen.WorkloadPodNames(callerClient)
-	rq.ManagerNamespace = k8s.GetManagerNamespace(cluster)
+	rq.ManagerNamespace = k8s.GetManagerNamespace(callerCluster)
 	if rq.Values == nil {
 		rq.ReleaseLookup = setup.NewReleaseLookup(callerCluster.Kubeconfig)
 	}
@@ -440,7 +449,7 @@ type verdict interface {
 // command exits with a non-zero status.
 func reportVerdict(cmd *cobra.Command, v verdict) error {
 	if output.WantsFormatted(cmd) {
-		output.Object(cmd.Context(), v, true)
+		output.Report(cmd.Context(), v)
 	} else {
 		v.WriteText(cmd.OutOrStdout())
 	}

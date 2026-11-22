@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 	"text/tabwriter"
 
@@ -80,19 +81,37 @@ type ClientVerdict struct {
 	Diagnostics []ClientCheck `json:"diagnostics"`
 }
 
-// OK reports whether no required check is missing.
-func (v *ClientVerdict) OK() bool {
-	if v.Transport != nil && v.Transport.Result == ResultMissing {
-		return false
-	}
-	for _, m := range v.Modes {
-		for _, c := range m.Checks {
-			if c.Required && c.Result == ResultMissing {
-				return false
-			}
+// Satisfied reports whether every required check of the mode was allowed.
+// A required check that couldn't be determined doesn't count.
+func (m ClientMode) Satisfied() bool {
+	for _, c := range m.Checks {
+		if c.Required && c.Result != ResultAllowed {
+			return false
 		}
 	}
 	return true
+}
+
+// SatisfiedGrants returns the required grants whose checks all pass.
+func (v *ClientVerdict) SatisfiedGrants() []authz.Grant {
+	var gs []authz.Grant
+	for _, m := range v.Modes {
+		if m.Satisfied() {
+			gs = append(gs, m.RequiredGrant)
+		}
+	}
+	return gs
+}
+
+// OK reports whether the identity can use the traffic-manager. A required check
+// that is missing or couldn't be determined fails it. When the installed
+// configuration is unknown, the modes are alternatives, so it is enough that one
+// of them passes.
+func (v *ClientVerdict) OK() bool {
+	if v.Transport != nil && v.Transport.Required && v.Transport.Result != ResultAllowed {
+		return false
+	}
+	return len(v.SatisfiedGrants()) > 0
 }
 
 // VerifyClientRequest describes one run of `telepresence rbac verify client`.
@@ -114,6 +133,10 @@ type VerifyClientRequest struct {
 	WorkloadPods func(ctx context.Context, namespace, workload string) ([]string, error)
 }
 
+// ErrWorkloadNotFound is returned by WorkloadPodNames when no Deployment,
+// StatefulSet or ReplicaSet has the given name.
+var ErrWorkloadNotFound = errors.New("workload not found")
+
 // errPodsUnknown is returned through Review.PodNames when the pods of a
 // workload can't be listed and namespace-wide pods/portforward is denied.
 var errPodsUnknown = errors.New("unable to list the pods of the workload")
@@ -129,6 +152,15 @@ func VerifyClient(ctx context.Context, rq *VerifyClientRequest) (*ClientVerdict,
 	if id, err := ReadIdentity(ctx, rq.Client); err == nil && id != nil {
 		v.Identity = id.Username
 	}
+	if rq.WorkloadPods != nil {
+		for _, wl := range rq.Workloads {
+			for _, ns := range rq.Namespaces {
+				if _, err := rq.WorkloadPods(ctx, ns, wl); errors.Is(err, ErrWorkloadNotFound) {
+					return nil, err
+				}
+			}
+		}
+	}
 	if len(rq.Workloads) == 0 {
 		v.Notes = append(v.Notes,
 			"Only the unnamed reviews ran. Grants scoped to single workloads with resourceNames can't be seen without --workload.")
@@ -138,7 +170,9 @@ func VerifyClient(ctx context.Context, rq *VerifyClientRequest) (*ClientVerdict,
 	managerPod := ReleaseName + "-0"
 
 	if external == nil || !*external {
-		c := ClientCheck{Operation: OpTransport, Namespace: rq.ManagerNamespace, Required: true}
+		// With an unknown configuration, a missing port-forward is only reported,
+		// since an external endpoint makes it unnecessary.
+		c := ClientCheck{Operation: OpTransport, Namespace: rq.ManagerNamespace, Required: external != nil}
 		ck.begin()
 		allowed, err := authz.PortForwardAllowed(ctx, ck.check, rq.ManagerNamespace, []string{managerPod})
 		if err != nil {
@@ -146,7 +180,7 @@ func VerifyClient(ctx context.Context, rq *VerifyClientRequest) (*ClientVerdict,
 		}
 		c.finish(allowed, "", ck.end())
 		if external == nil {
-			c.Reason = "needed unless the traffic-manager publishes an external endpoint"
+			c.Reason = "needed unless the traffic-manager publishes an external endpoint, which isn't known here"
 		}
 		v.Transport = &c
 	}
@@ -367,15 +401,43 @@ func (r *recordingChecker) end() []*auth.ResourceAttributes {
 func WorkloadPodNames(client kubernetes.Interface) func(ctx context.Context, namespace, workload string) ([]string, error) {
 	return func(ctx context.Context, namespace, workload string) ([]string, error) {
 		apps := client.AppsV1()
+		finders := []func() (*meta.LabelSelector, error){
+			func() (*meta.LabelSelector, error) {
+				d, err := apps.Deployments(namespace).Get(ctx, workload, meta.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return d.Spec.Selector, nil
+			},
+			func() (*meta.LabelSelector, error) {
+				s, err := apps.StatefulSets(namespace).Get(ctx, workload, meta.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return s.Spec.Selector, nil
+			},
+			func() (*meta.LabelSelector, error) {
+				rs, err := apps.ReplicaSets(namespace).Get(ctx, workload, meta.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return rs.Spec.Selector, nil
+			},
+		}
 		var sel *meta.LabelSelector
-		if d, err := apps.Deployments(namespace).Get(ctx, workload, meta.GetOptions{}); err == nil {
-			sel = d.Spec.Selector
-		} else if s, err := apps.StatefulSets(namespace).Get(ctx, workload, meta.GetOptions{}); err == nil {
-			sel = s.Spec.Selector
-		} else if rs, err := apps.ReplicaSets(namespace).Get(ctx, workload, meta.GetOptions{}); err == nil {
-			sel = rs.Spec.Selector
-		} else {
-			return nil, fmt.Errorf("unable to find workload %s in namespace %s: %w", workload, namespace, err)
+		var errs []error
+		for _, find := range finders {
+			var err error
+			if sel, err = find(); err == nil {
+				break
+			}
+			errs = append(errs, err)
+		}
+		if sel == nil {
+			if !slices.ContainsFunc(errs, func(err error) bool { return !k8serrors.IsNotFound(err) }) {
+				return nil, fmt.Errorf("%w: no Deployment, StatefulSet or ReplicaSet %s in namespace %s", ErrWorkloadNotFound, workload, namespace)
+			}
+			return nil, fmt.Errorf("unable to find workload %s in namespace %s: %w", workload, namespace, errors.Join(errs...))
 		}
 		selector, err := meta.LabelSelectorAsSelector(sel)
 		if err != nil {
@@ -422,7 +484,15 @@ func (v *ClientVerdict) WriteText(w io.Writer) {
 	}
 	_ = tw.Flush()
 	if v.OK() {
-		ioutil.Println(w, "\nNothing required is missing.")
+		if len(v.Modes) > 1 {
+			names := make([]string, 0, len(v.Modes))
+			for _, g := range v.SatisfiedGrants() {
+				names = append(names, fmt.Sprintf("%q", g))
+			}
+			ioutil.Printf(w, "\nThe installed required grant isn't known. Nothing required is missing under %s.\n", strings.Join(names, " or "))
+		} else {
+			ioutil.Println(w, "\nNothing required is missing.")
+		}
 	} else {
 		ioutil.Println(w, "\nSome required permissions are missing. telepresence rbac generate client prints the roles that grant them.")
 	}

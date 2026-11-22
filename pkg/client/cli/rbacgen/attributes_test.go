@@ -25,11 +25,13 @@ func TestCreateAttributes(t *testing.T) {
 		object("apps/v1", "Deployment", "d", ""),
 		object("rbac.authorization.k8s.io/v1", "RoleBinding", "rb", "kube-system"),
 		object("rbac.authorization.k8s.io/v1", "ClusterRole", "cr", "ignored"),
+		object("cert-manager.io/v1", "ClusterIssuer", "ci", "ignored"),
 	}, "ambassador")
 	assert.Equal(t, []*auth.ResourceAttributes{
 		{Verb: "create", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "ambassador", Name: "d"},
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings", Namespace: "kube-system", Name: "rb"},
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles", Name: "cr"},
+		{Verb: "create", Group: "cert-manager.io", Version: "v1", Resource: "clusterissuers", Name: "ci"},
 	}, ras)
 }
 

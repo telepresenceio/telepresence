@@ -134,7 +134,8 @@ func (s *InstallSet) Sweep(ctx context.Context, client kubernetes.Interface) ([]
 			}
 		}
 	}
-	return slices.DeleteFunc(denied, func(ra *auth.ResourceAttributes) bool { return drop[ra] }), nil
+	// The rules of the roles repeat attributes of the set and of each other.
+	return DedupeAttributes(slices.DeleteFunc(denied, func(ra *auth.ResourceAttributes) bool { return drop[ra] })), nil
 }
 
 // releaseSecretName is the name of the first revision of the release in

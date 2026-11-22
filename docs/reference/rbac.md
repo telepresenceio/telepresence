@@ -333,7 +333,9 @@ your own credentials, also when `--as` is given. Reading it needs access to
 the Helm release secrets in the manager namespace. Without that access,
 `generate client` asks for `--input` with the installed values, and
 `verify client` runs its checks under every required grant and reports
-each.
+each. It passes when at least one grant is fully satisfied, and says
+which. A required check that can't be determined, for example for a
+workload whose pods can't be listed, doesn't pass.
 
 ## Creating a kubeconfig for a ServiceAccount
 

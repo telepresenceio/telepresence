@@ -14,6 +14,7 @@ import (
 	auth "k8s.io/api/authorization/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -247,7 +248,7 @@ func TestVerifyClient_PodsNotListable(t *testing.T) {
 	c := checkOf(t, m, OpIngest, "web")
 	assert.Equal(t, ResultUnknown, c.Result)
 	assert.Empty(t, c.Missing)
-	assert.True(t, v.OK(), "could not determine is not a miss")
+	assert.False(t, v.OK(), "a required check that could not be determined is not a pass")
 
 	// With the pods known, the pod-scoped grant passes.
 	rq.WorkloadPods = func(context.Context, string, string) ([]string, error) { return []string{"web-1"}, nil }
@@ -275,6 +276,38 @@ func TestVerifyClient_ReleaseNotReadable(t *testing.T) {
 	assert.Contains(t, v.Transport.Reason, "external endpoint")
 	assert.Contains(t, strings.Join(v.Notes, "\n"), "--input")
 	assert.Equal(t, "unknown", v.Source)
+
+	// The telepresence grant is enough, the port-forward isn't needed by it, and a
+	// missing port-forward is only reported since the endpoint may be external.
+	assert.False(t, v.Transport.Required)
+	assert.Equal(t, ResultMissing, v.Transport.Result)
+	assert.Equal(t, []authz.Grant{authz.GrantTelepresence, authz.GrantAny}, v.SatisfiedGrants())
+	assert.True(t, v.OK())
+
+	var sb strings.Builder
+	v.WriteText(&sb)
+	assert.Contains(t, sb.String(), `"telepresence" or "any"`)
+
+	// Nothing granted fails under every mode.
+	v = verifyClient(t, &VerifyClientRequest{ReleaseLookup: rq.ReleaseLookup}, func(*auth.ResourceAttributes) bool { return false })
+	assert.Empty(t, v.SatisfiedGrants())
+	assert.False(t, v.OK())
+}
+
+func TestWorkloadPodNames_NotFound(t *testing.T) {
+	_, err := WorkloadPodNames(fake.NewClientset())(context.Background(), "dev", "nope")
+	require.ErrorIs(t, err, ErrWorkloadNotFound)
+
+	client, _ := sweepClient(testUser, nil, isTelepresence)
+	_, err = VerifyClient(context.Background(), &VerifyClientRequest{
+		Values:           grantValues(authz.GrantTelepresence, false),
+		Workloads:        []string{"nope"},
+		WorkloadPods:     WorkloadPodNames(fake.NewClientset()),
+		Client:           client,
+		ManagerNamespace: "ambassador",
+		Namespaces:       []string{"dev"},
+	})
+	assert.ErrorIs(t, err, ErrWorkloadNotFound)
 }
 
 func TestVerifyClient_ReleaseValues(t *testing.T) {

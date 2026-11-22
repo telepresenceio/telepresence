@@ -19,6 +19,7 @@ var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant 
 	"ValidatingWebhookConfiguration": true,
 	"CustomResourceDefinition":       true,
 	"PriorityClass":                  true,
+	"ClusterIssuer":                  true,
 }
 
 // IsClusterScoped reports whether objects of kind never carry a namespace.
