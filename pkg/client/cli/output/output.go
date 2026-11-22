@@ -139,7 +139,9 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	case o.cleanEnvelope:
 		// --format: never wrap in the {cmd, stdout, stderr, err} envelope.
 		switch {
-		case err != nil:
+		case err != nil && (o.obj == nil || errcat.GetCategory(err) != errcat.Silent):
+			// A Silent error has already been conveyed by the object, so the
+			// object is printed and only the exit code tells of the error.
 			obj = errObject{Error: err.Error()}
 		case o.obj != nil:
 			obj = o.obj
