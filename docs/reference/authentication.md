@@ -75,6 +75,10 @@ identity the agent presents on arrival, so a pod cannot register as a
 traffic-agent for a workload it does not run, even though its own
 ServiceAccount token would otherwise pass authentication.
 
+Only a traffic-agent can register an agent session. The traffic-manager
+ignores traffic-agents that a client lists when it reconnects after a
+traffic-manager restart. Each traffic-agent registers itself again.
+
 ## Authorization of intercepts
 
 Creating an intercept requires the physical ability to receive the workload's

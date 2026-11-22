@@ -54,6 +54,24 @@ items:
           --docker</code>) or read the kubeconfig from stdin
           (<code>--kubeconfig -</code>). Both daemons now apply the two flags
           the same way <code>kubectl</code> does.
+  - version: 2.33.4
+    date: 2026-11-22
+    notes:
+      - type: security
+        title: Only a traffic-agent can register an agent session with the traffic-manager
+        body: >-
+          A client that reconnected to the traffic-manager could list
+          traffic-agents in the call, and the traffic-manager registered them
+          without verifying them. With
+          <code>security.authentication.mode</code> set to
+          <code>enforcing</code>, a client that was allowed to connect could
+          use this to receive the intercepts of a workload, including the
+          environment of the intercepted container, without holding a
+          Telepresence grant in the workload's namespace. The traffic-manager
+          now ignores traffic-agents that a client lists. A traffic-agent
+          registers itself with its own pod identity. Reported by
+          <code>jpabeem</code>.
+        docs: reference/authentication
   - version: 2.33.3
     date: 2026-11-19
     notes:
