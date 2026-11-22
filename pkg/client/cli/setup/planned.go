@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 )
 
 // PlannedObjects renders the embedded chart with the final values and returns
@@ -13,30 +14,18 @@ import (
 // and sorted. Namespaced objects carry their namespace, defaulted to the
 // manager namespace exactly like the P1 privilege sweep.
 func PlannedObjects(ctx context.Context, managerNamespace string, values *helm.Values) ([]string, error) {
-	chrt, err := loadEmbeddedChart()
+	render, err := rbacgen.RenderChart(ctx, managerNamespace, values)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := renderChart(ctx, chrt, managerNamespace, values)
-	if err != nil {
-		return nil, err
-	}
-	objs, err := decodeManifests(manifest)
-	if err != nil {
-		return nil, err
-	}
+	objs := render.All()
 	lines := make([]string, 0, len(objs))
 	for _, obj := range objs {
-		kind := obj.GetKind()
-		if clusterScopedKinds[kind] {
-			lines = append(lines, fmt.Sprintf("%s %s", kind, obj.GetName()))
-			continue
+		if ns := rbacgen.ObjectNamespace(obj, managerNamespace); ns != "" {
+			lines = append(lines, fmt.Sprintf("%s %s.%s", obj.GetKind(), obj.GetName(), ns))
+		} else {
+			lines = append(lines, fmt.Sprintf("%s %s", obj.GetKind(), obj.GetName()))
 		}
-		ns := obj.GetNamespace()
-		if ns == "" {
-			ns = managerNamespace
-		}
-		lines = append(lines, fmt.Sprintf("%s %s.%s", kind, obj.GetName(), ns))
 	}
 	sort.Strings(lines)
 	return lines, nil

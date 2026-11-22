@@ -10,6 +10,7 @@ import (
 	auth "k8s.io/api/authorization/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -57,11 +58,11 @@ func TestProbeRBAC_ClusterScopedDenied(t *testing.T) {
 	// (sorted) order.
 	require.Len(t, facts.MissingAttributes, len(facts.Missing))
 	for i, a := range facts.MissingAttributes {
-		assert.Equal(t, facts.Missing[i], formatAttributes(&auth.ResourceAttributes{
-			Verb: a.Verb, Group: a.Group, Resource: a.Resource, Namespace: a.Namespace, Name: a.Name,
+		assert.Equal(t, facts.Missing[i], rbacgen.FormatAttributes(&auth.ResourceAttributes{
+			Verb: a.Verb, Group: a.Group, Resource: a.Resource, Subresource: a.Subresource, Namespace: a.Namespace, Name: a.Name,
 		}))
 	}
-	assert.ElementsMatch(t, []DeniedAttribute{
+	assert.ElementsMatch(t, []rbacgen.DeniedAttribute{
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Name: deniedName},
 		{Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Name: deniedName},
 	}, facts.MissingAttributes)
@@ -150,15 +151,11 @@ func TestProbeRBAC_CertManagerCertificateDenied(t *testing.T) {
 // enables the external endpoint (its Service enters the privilege sweep)
 // without pulling in x509 auth's kube-system RoleBinding.
 func TestDefaultCandidateValues_ExternalEndpointSweep(t *testing.T) {
-	chrt, err := loadEmbeddedChart()
-	require.NoError(t, err)
-	manifest, err := renderChart(context.Background(), chrt, "ambassador", DefaultCandidateValues())
-	require.NoError(t, err)
-	objs, err := decodeManifests(manifest)
+	render, err := rbacgen.RenderChart(context.Background(), "ambassador", DefaultCandidateValues())
 	require.NoError(t, err)
 
 	var foundExternalService bool
-	for _, o := range objs {
+	for _, o := range render.All() {
 		gvk := o.GroupVersionKind()
 		if gvk.Kind == "Service" && o.GetName() == "traffic-manager-external" {
 			foundExternalService = true
@@ -179,25 +176,4 @@ func TestProbeRBAC_ReviewCallError(t *testing.T) {
 
 	assert.Equal(t, VerdictUnknown, facts.ClusterWide.Verdict)
 	assert.NotEmpty(t, facts.ClusterWide.Evidence)
-}
-
-func TestFormatAttributes(t *testing.T) {
-	assert.Equal(t, "create deployments.apps in namespace ambassador", formatAttributes(&auth.ResourceAttributes{
-		Verb: "create", Group: "apps", Resource: "deployments", Namespace: "ambassador",
-	}))
-	assert.Equal(t, "create clusterroles.rbac.authorization.k8s.io", formatAttributes(&auth.ResourceAttributes{
-		Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterroles",
-	}))
-	assert.Equal(t, "create namespaces", formatAttributes(&auth.ResourceAttributes{
-		Verb: "create", Resource: "namespaces",
-	}))
-}
-
-func TestDedupeAttributes(t *testing.T) {
-	ras := []*auth.ResourceAttributes{
-		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
-		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
-		{Verb: "create", Resource: "secrets", Namespace: "other"},
-	}
-	assert.Len(t, dedupeAttributes(ras), 2)
 }

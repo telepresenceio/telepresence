@@ -18,6 +18,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
@@ -65,12 +66,14 @@ type ClusterFacts struct {
 }
 
 type PrivilegeFacts struct {
-	ClusterWide                 Finding           `json:"clusterWide"`       // can create every object of a cluster-wide chart render
-	Namespaced                  Finding           `json:"namespaced"`        // same for a namespace-scoped render (only evaluated when ClusterWide is not yes)
-	Missing                     []string          `json:"missing,omitempty"` // itemized denials for the cluster-wide render, e.g. `create clusterroles.rbac.authorization.k8s.io`
-	MissingNamespaced           []string          `json:"missingNamespaced,omitempty"`
-	MissingAttributes           []DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing
-	MissingNamespacedAttributes []DeniedAttribute `json:"missingNamespacedAttributes,omitempty"` // structured form of MissingNamespaced
+	ClusterWide Finding `json:"clusterWide"` // can create every object of a cluster-wide chart render
+	Namespaced  Finding `json:"namespaced"`  // same for a namespace-scoped render (only evaluated when ClusterWide is not yes)
+	// Missing itemizes the denials for the cluster-wide render, e.g.
+	// `create clusterroles.rbac.authorization.k8s.io`.
+	Missing                     []string                  `json:"missing,omitempty"`
+	MissingNamespaced           []string                  `json:"missingNamespaced,omitempty"`
+	MissingAttributes           []rbacgen.DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing
+	MissingNamespacedAttributes []rbacgen.DeniedAttribute `json:"missingNamespacedAttributes,omitempty"` // structured form of MissingNamespaced
 	// X509KubeSystem is whether the caller can create the kube-system
 	// RoleBinding x509 client auth needs; consulted only when the decision
 	// enables x509 auth.
