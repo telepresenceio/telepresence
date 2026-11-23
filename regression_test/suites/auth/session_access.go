@@ -3,6 +3,7 @@ package auth
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,8 +15,10 @@ import (
 
 	"github.com/pkg/sftp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -192,6 +195,33 @@ func readLineWithin(ctx context.Context, r *bufio.Reader) (string, error) {
 	}
 }
 
+// agentidRefused reports whether err is how the agent turns a caller away: a
+// PermissionDenied or Unauthenticated status, or the connection being closed
+// on the caller. Anything else (a timeout, a missing file, a transport
+// failure) says the attempt did not get as far as the agent's decision.
+func agentidRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	if sc, ok := status.FromError(err); ok {
+		switch sc.Code() {
+		case codes.PermissionDenied, codes.Unauthenticated:
+			return true
+		default:
+		}
+	}
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed)
+}
+
+// agentidRequireRefusedOrEnded fails the test unless err is a refusal by the
+// agent; what is being attempted is named by step.
+func agentidRequireRefusedOrEnded(t *testing.T, step string, err error) {
+	t.Helper()
+	if !agentidRefused(err) {
+		t.Fatalf("%s failed without the agent refusing it (the attempt did not get that far): %v", step, err)
+	}
+}
+
 // Test_TunnelToLoopbackFtpBannerRefused opens a Tunnel through the victim's
 // traffic-agent to its own loopback FTP port, authenticated with a session
 // credential for an identity that holds only the connect grant (no
@@ -207,7 +237,7 @@ func (s *AgentidSessionAccess) Test_TunnelToLoopbackFtpBannerRefused() {
 	s.Manager()
 
 	victim := s.Workload(workloads.EchoWithConfigVolume("agentid-a1-ftp"))
-	agentidInstallFileShareAgent(s, victim)
+	_, _ = agentidInstallFileShareAgent(s, victim)
 	info := agentidAgentInfoFor(t, ctx, r, ns, victim.Name)
 	s.Require().NotZero(info.GetFtpPort(), "%s should have a traffic-agent with an FTP port", victim.Name)
 
@@ -222,12 +252,17 @@ func (s *AgentidSessionAccess) Test_TunnelToLoopbackFtpBannerRefused() {
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetFtpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
 
-	gotBanner := false
-	if err == nil {
-		defer conn.Close()
-		line, rerr := readLineWithin(callCtx, bufio.NewReader(conn))
-		gotBanner = rerr == nil && strings.HasPrefix(line, "220")
+	if err != nil {
+		agentidRequireRefusedOrEnded(t, "opening the tunnel to the FTP port", err)
+		return
 	}
+	defer conn.Close()
+	line, rerr := readLineWithin(callCtx, bufio.NewReader(conn))
+	if rerr != nil {
+		agentidRequireRefusedOrEnded(t, "reading the FTP banner", rerr)
+		return
+	}
+	gotBanner := strings.HasPrefix(line, "220")
 	s.False(gotBanner, "a session without access to this agent must not reach its loopback FTP port through the tunnel")
 }
 
@@ -244,8 +279,11 @@ func (s *AgentidSessionAccess) Test_SftpMarkerFileReadRefused() {
 	s.Manager()
 
 	victim := s.Workload(workloads.EchoWithConfigVolume("agentid-a1-sftp"))
-	remotePath := agentidInstallFileShareAgent(s, victim)
+	container, mountedPath := agentidInstallFileShareAgent(s, victim)
 	info := agentidAgentInfoFor(t, ctx, r, ns, victim.Name)
+	ci := info.GetContainers()[container]
+	s.Require().NotNil(ci, "%s's AgentInfo has no entry for container %q", victim.Name, container)
+	remotePath := ci.GetMountPoint() + mountedPath
 	s.Require().NotZero(info.GetSftpPort(), "%s should have a traffic-agent with an SFTP port", victim.Name)
 
 	ac, closeFn, err := agentidDialAgentPod(ctx, ns, info.GetPodName(), info.GetPodUid(), info.GetApiPort())
@@ -259,18 +297,31 @@ func (s *AgentidSessionAccess) Test_SftpMarkerFileReadRefused() {
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetSftpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
 
-	gotContent := false
-	if err == nil {
-		defer conn.Close()
-		if sc, cerr := sftp.NewClientPipe(conn, conn); cerr == nil {
-			defer sc.Close()
-			if f, ferr := sc.Open(remotePath); ferr == nil {
-				defer f.Close()
-				if data, rerr := io.ReadAll(f); rerr == nil && string(data) == workloads.ConfigVolumeContent {
-					gotContent = true
-				}
-			}
-		}
+	if err != nil {
+		agentidRequireRefusedOrEnded(t, "opening the tunnel to the SFTP port", err)
+		return
+	}
+	defer conn.Close()
+	sc, cerr := sftp.NewClientPipe(conn, conn)
+	if cerr != nil {
+		agentidRequireRefusedOrEnded(t, "starting the SFTP session", cerr)
+		return
+	}
+	defer sc.Close()
+	f, ferr := sc.Open(remotePath)
+	if ferr != nil {
+		agentidRequireRefusedOrEnded(t, "opening "+remotePath, ferr)
+		return
+	}
+	defer f.Close()
+	data, rerr := io.ReadAll(f)
+	if rerr != nil {
+		agentidRequireRefusedOrEnded(t, "reading "+remotePath, rerr)
+		return
+	}
+	gotContent := string(data) == workloads.ConfigVolumeContent
+	if !gotContent {
+		t.Fatalf("read %q from %s, which is neither the marker content nor a refusal", data, remotePath)
 	}
 	s.False(gotContent, "a session without access to this agent must not read its mounted files through the SFTP port")
 }
@@ -287,7 +338,7 @@ func (s *AgentidSessionAccess) Test_FtpLoginWithSessionTokenRefused() {
 	s.Manager()
 
 	victim := s.Workload(workloads.EchoWithConfigVolume("agentid-a1-ftplogin"))
-	agentidInstallFileShareAgent(s, victim)
+	_, _ = agentidInstallFileShareAgent(s, victim)
 	info := agentidAgentInfoFor(t, ctx, r, ns, victim.Name)
 	s.Require().NotZero(info.GetFtpPort(), "%s should have a traffic-agent with an FTP port", victim.Name)
 
@@ -302,44 +353,53 @@ func (s *AgentidSessionAccess) Test_FtpLoginWithSessionTokenRefused() {
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetFtpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
 
-	loggedIn := false
-	if err == nil {
-		defer conn.Close()
-		rd := bufio.NewReader(conn)
-		if _, berr := readLineWithin(callCtx, rd); berr == nil {
-			fmt.Fprintf(conn, "USER anonymous\r\n")
-			if _, uerr := readLineWithin(callCtx, rd); uerr == nil {
-				fmt.Fprintf(conn, "PASS %s\r\n", sessionTok)
-				if resp, perr := readLineWithin(callCtx, rd); perr == nil {
-					loggedIn = strings.HasPrefix(resp, "230")
-				}
-			}
-		}
+	if err != nil {
+		agentidRequireRefusedOrEnded(t, "opening the tunnel to the FTP port", err)
+		return
 	}
+	defer conn.Close()
+	rd := bufio.NewReader(conn)
+	if _, berr := readLineWithin(callCtx, rd); berr != nil {
+		agentidRequireRefusedOrEnded(t, "reading the FTP banner", berr)
+		return
+	}
+	fmt.Fprintf(conn, "USER anonymous\r\n")
+	if _, uerr := readLineWithin(callCtx, rd); uerr != nil {
+		agentidRequireRefusedOrEnded(t, "answering USER", uerr)
+		return
+	}
+	fmt.Fprintf(conn, "PASS %s\r\n", sessionTok)
+	resp, perr := readLineWithin(callCtx, rd)
+	if perr != nil {
+		agentidRequireRefusedOrEnded(t, "answering PASS", perr)
+		return
+	}
+	loggedIn := strings.HasPrefix(resp, "230")
 	s.False(loggedIn, "a session without access to this agent must not log in to its FTP port using its own session token")
 }
 
 // agentidInstallFileShareAgent connects as the suite's granted identity,
 // intercepts wl with mounts enabled so the agent reports its mount paths,
-// and returns the remote path of EchoWithConfigVolume's marker file (the
+// and returns the intercepted container and the remote path of EchoWithConfigVolume's marker file (the
 // path the client itself is told, TELEPRESENCE_MOUNTS, rather than an
 // assumption about the agent's internal layout). The agent is left running
 // after detach.
-func agentidInstallFileShareAgent(s *AgentidSessionAccess, wl *rt.Workload) string {
+func agentidInstallFileShareAgent(s *AgentidSessionAccess, wl *rt.Workload) (container, path string) {
 	t := s.T()
 	conn := s.Connect()
 	a := conn.Intercept(t, wl, cli.MountFalse())
 	remotePaths := strings.Split(a.Intercept.Environment[agentconfig.EnvInterceptMounts], ":")
+	container = a.Intercept.Environment[agentconfig.EnvInterceptContainer]
 	a.Detach(t)
 	freeDefaultConnection(t, s.AppNamespace())
 
 	for _, p := range remotePaths {
 		if strings.HasSuffix(p, workloads.ConfigVolumeMountPath) {
-			return p + "/" + workloads.ConfigVolumeFileName
+			return container, p + "/" + workloads.ConfigVolumeFileName
 		}
 	}
 	t.Fatalf("%s: no mounted path ends in %s (TELEPRESENCE_MOUNTS=%q)", wl.Name, workloads.ConfigVolumeMountPath, remotePaths)
-	return ""
+	return "", ""
 }
 
 // sessionTokenSessionID extracts the session ID a session token names,
