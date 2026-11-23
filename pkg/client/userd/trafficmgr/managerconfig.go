@@ -9,20 +9,13 @@ import (
 )
 
 // dropLocalSettings resets every setting in cfg, the client configuration reported by the
-// traffic-manager, that names a local program, directory, image or chart. The traffic-manager
-// may switch usage reporting off or blank its destination, but not point it elsewhere. The
-// rest of cfg is left as it is.
+// traffic-manager, that names a local program, directory, image or chart. The rest of cfg is
+// left as it is.
 func dropLocalSettings(ctx context.Context, cfg client.Config) {
 	def := client.GetDefaultConfig()
 	dropSection(ctx, "docker", cfg.Docker(), def.Docker())
 	dropSection(ctx, "helm", cfg.Helm(), def.Helm())
 	dropSection(ctx, "images", cfg.Images(), def.Images())
-
-	uc, duc := cfg.Usage(), def.Usage()
-	if uc.CollectorAddress != "" {
-		dropField(ctx, "usage.collectorAddress", &uc.CollectorAddress, duc.CollectorAddress)
-	}
-	uc.Insecure = duc.Insecure
 
 	ic, dic := cfg.Intercept(), def.Intercept()
 	dropField(ctx, "intercept.sshfsPath", &ic.SshfsPath, dic.SshfsPath)

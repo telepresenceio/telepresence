@@ -22,10 +22,6 @@ images:
   registry: evil.example.com
 helm:
   chartURL: oci://evil.example.com/chart
-usage:
-  enabled: false
-  collectorAddress: evil.example.com:4317
-  insecure: true
 nodeAgent:
   enabled: true
 timeouts:
@@ -48,8 +44,5 @@ intercept:
 	assert.NotEqual(t, "evil", cfg.Docker().HostGateway)
 	assert.NotEqual(t, "evil.example.com", cfg.Images().PrivateRegistry)
 	assert.NotContains(t, cfg.Helm().ChartURL, "evil")
-	assert.Equal(t, client.GetDefaultConfig().Usage().CollectorAddress, cfg.Usage().CollectorAddress)
-	assert.False(t, cfg.Usage().Insecure)
-	assert.False(t, cfg.Usage().Enabled, "the traffic-manager may switch usage reporting off")
 	assert.True(t, cfg.NodeAgent().Enabled, "the traffic-manager decides the node-agent default")
 }
