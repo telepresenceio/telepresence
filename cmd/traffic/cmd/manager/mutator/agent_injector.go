@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -104,7 +105,10 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	}
 
 	if isDelete {
-		a.agentConfigs.Inactivate(pod.UID)
+		// Only a pod that the informer knows can be inactivated; the request itself is not trusted.
+		if podIsKnown(ctx, pod) {
+			a.agentConfigs.Inactivate(pod.UID)
+		}
 		return nil, nil
 	}
 
@@ -148,7 +152,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		if ia == "enabled" {
-			sc, err = a.agentConfigs.GetOrGenerate(ctx, wl)
+			sc, err = a.configFor(ctx, wl)
 			if err != nil {
 				return nil, fmt.Errorf("unable to get or generate agent config for workload %s.%s: %w", wl.GetNamespace(), wl.GetName(), err)
 			}
@@ -177,6 +181,33 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		podTpl.Spec = wl.GetPodTemplate().Spec
 	}
 	return createPatch(ctx, sc, pod, podTpl)
+}
+
+// podIsKnown returns true if the pod informer holds a pod with the same namespace, name, and UID.
+func podIsKnown(ctx context.Context, pod *core.Pod) bool {
+	if pod.UID == "" {
+		return false
+	}
+	known, err := informer.GetK8sFactory(ctx, pod.Namespace).Core().V1().Pods().Lister().Pods(pod.Namespace).Get(pod.Name)
+	return err == nil && known.UID == pod.UID
+}
+
+// configFor returns the agent config for a pod that claims to be injected. A config is stored only
+// when the workload's own pod template asks for the agent; otherwise it is generated for this
+// request and discarded.
+func (a *agentInjector) configFor(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	tplAnns := wl.GetPodTemplate().Annotations
+	if annotation.GetAnnotation(ctx, tplAnns, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent) == "enabled" {
+		return a.agentConfigs.GetOrGenerate(ctx, wl)
+	}
+	if sc := a.agentConfigs.Get(wl.GetName(), wl.GetNamespace()); sc != nil {
+		return sc, nil
+	}
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return gc.Generate(ctx, wl, nil)
 }
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod, wlTpl *core.PodTemplateSpec) (patches PatchOps, err error) {
