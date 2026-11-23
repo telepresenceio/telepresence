@@ -38,7 +38,7 @@ func (h *namesspacesHandle) set(namespaces []string) {
 	sort.Strings(namespaces)
 	var ips map[uuid.UUID]chan<- struct{}
 	h.Lock()
-	if !slices.Equal(namespaces, h.namespaces) {
+	if !slices.Equal(namespaces, h.namespaces) || (namespaces == nil) != (h.namespaces == nil) {
 		h.namespaces = namespaces
 		ips = h.interestedParties
 	}
@@ -251,7 +251,8 @@ func InitContext(ctx context.Context, selectorChan <-chan *labels.Selector) (nsC
 	return nsCtx, nil
 }
 
-// Get will return the currently mapped namespaces or nil if the scope is cluster global.
+// Get will return the currently mapped namespaces or nil if the scope is cluster global. An empty,
+// non-nil slice means that no namespace matches.
 func Get(ctx context.Context) []string {
 	if h, ok := ctx.Value(nsKey{}).(*namesspacesHandle); ok {
 		return h.get()

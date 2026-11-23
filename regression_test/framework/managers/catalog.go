@@ -1,6 +1,10 @@
 package managers
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/labels"
+)
 
 // Default is the manager configuration used by suites with no special
 // requirements: Baseline, with no overlay values.
@@ -61,6 +65,21 @@ func StaticNamespaces(ns ...string) Spec {
 	return Spec{
 		Key:    "static-namespaces/" + strings.Join(ns, ","),
 		Values: Values{Namespaces: ns},
+	}
+}
+
+// NoMatchingNamespaces returns a manager spec whose dynamic namespaceSelector
+// matches no namespace, so the manager manages nothing.
+func NoMatchingNamespaces() Spec {
+	return Spec{
+		Key: "no-matching-namespaces",
+		Values: Values{NamespaceSelector: &labels.Selector{
+			MatchExpressions: []*labels.Requirement{{
+				Key:      ManagedNamespaceLabel,
+				Operator: labels.OperatorIn,
+				Values:   []string{"matches-no-namespace"},
+			}},
+		}},
 	}
 }
 
