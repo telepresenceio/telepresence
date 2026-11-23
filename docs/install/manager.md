@@ -323,7 +323,7 @@ installation that never set `security.authentication.mode` becomes `enforcing`. 
 earlier values, use `--reset-then-reuse-values --set security.authentication.mode=permissive` (Helm 3.14 or later).
 
 If you want to upgrade (or downgrade) the Traffic Manager to a specific version, add a `--version` flag with the version
-number to the upgrade command, e.g.: `--version v2.20.3`.
+number to the upgrade command, e.g.: `--version v2.33.4`.
 
 ### Uninstalling
 
