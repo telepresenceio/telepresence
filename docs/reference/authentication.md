@@ -231,15 +231,15 @@ security:
 > regardless of mode, so a client can always learn a manager's version and
 > capabilities before authenticating.
 
-Session ownership — once a session has an authenticated owner, only that
-owner may drive it — is enforced in every mode, including `permissive`.
+Once a session has an authenticated owner, only that owner may drive it.
+This session ownership is enforced in every mode, including `permissive`.
 Sessions created without a token (calls from an older client or agent) have
 no owner and remain governed by the mode.
 
 If the `TokenReview` or `SubjectAccessReview` infrastructure itself is
-unreachable — for example, the API server is down — the traffic-manager
-reports `Unavailable` rather than rejecting the call as unauthenticated or
-unauthorized, so an infrastructure outage is distinguishable from an actual
+unreachable, for example because the API server is down, the traffic-manager
+reports `Unavailable` instead of rejecting the call as unauthenticated or
+unauthorized. An infrastructure outage can then be told apart from an actual
 denial.
 
 ### Moving an existing installation to `enforcing`
