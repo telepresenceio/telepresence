@@ -308,6 +308,9 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 		return &empty.Empty{}, nil
 	}
 	client := info.Client
+	if client == nil {
+		return nil, status.Error(codes.InvalidArgument, "Client is required")
+	}
 	st := s.state
 	if !st.ManagesNamespace(ctx, client.Namespace) {
 		// Sorry, we no longer manage this namespace.
@@ -419,8 +422,14 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequest) (*empty.Empty, error) {
+	if rq.GetSession() == nil {
+		return nil, status.Error(codes.InvalidArgument, "Session is required")
+	}
+	if rq.GetAgent() == nil {
+		return nil, status.Error(codes.InvalidArgument, "Agent is required")
+	}
 	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
-	sessionID := tunnel.SessionID(rq.GetSession().SessionId)
+	sessionID := tunnel.SessionID(rq.Session.SessionId)
 	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
 		return nil, err
 	}
@@ -1444,6 +1453,9 @@ func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream g
 }
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
+	if request.GetInterceptSpec() == nil {
+		return nil, status.Error(codes.InvalidArgument, "InterceptSpec is required")
+	}
 	clog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
 	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
@@ -1532,8 +1544,11 @@ func (s *service) ReleaseAgent(ctx context.Context, request *rpc.ReleaseAgentReq
 
 // CreateIntercept lets a client create an intercept.
 func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
+	spec := ciReq.GetInterceptSpec()
+	if spec == nil {
+		return nil, status.Error(codes.InvalidArgument, "InterceptSpec is required")
+	}
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
-	spec := ciReq.InterceptSpec
 	clog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
 
 	ctx, client, err := s.ownedClientSession(ctx, ciReq.GetSession())
@@ -2501,7 +2516,7 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 // provided that the caller owns it.
 func (s *service) ownedClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
 	ctx = managerutil.WithSessionInfo(ctx, sessionInfo)
-	sessionID := tunnel.SessionID(sessionInfo.SessionId)
+	sessionID := tunnel.SessionID(sessionInfo.GetSessionId())
 	session := s.state.GetClient(sessionID)
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
