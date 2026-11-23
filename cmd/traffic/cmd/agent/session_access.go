@@ -19,6 +19,9 @@ const (
 	// sessionAccessTTL is how long an answer from the traffic-manager is reused.
 	sessionAccessTTL = 5 * time.Minute
 
+	// sessionAccessNoneTTL is how long a LEVEL_NONE answer is reused.
+	sessionAccessNoneTTL = 15 * time.Second
+
 	// sessionAccessTimeout bounds one AuthorizeSessionAccess call.
 	sessionAccessTimeout = 5 * time.Second
 
@@ -85,7 +88,11 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 			}
 		}
 	}
-	a.cache[clientSession] = accessEntry{level: level, expires: now.Add(sessionAccessTTL)}
+	ttl := sessionAccessTTL
+	if level == rpc.AuthorizeSessionAccessResponse_LEVEL_NONE {
+		ttl = sessionAccessNoneTTL
+	}
+	a.cache[clientSession] = accessEntry{level: level, expires: now.Add(ttl)}
 	return level
 }
 
