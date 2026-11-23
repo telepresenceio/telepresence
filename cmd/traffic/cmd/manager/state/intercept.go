@@ -559,6 +559,10 @@ func (s *State) ensureServiceWorkloads(
 		fallbackToSingleWorkload(ctx, spec, "shared interception requires the http mechanism without --replace")
 		return nil
 	}
+	if spec.ServiceName == "" {
+		fallbackToSingleWorkload(ctx, spec, "shared interception requires the Service name")
+		return nil
+	}
 	spec.SharedService = true
 
 	workloads, err := serviceWorkloads(ctx, spec, primary)

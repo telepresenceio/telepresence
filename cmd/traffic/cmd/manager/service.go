@@ -436,6 +436,10 @@ func (s *service) reviewRestoredIntercepts(
 			clog.Infof(ctx, "Not restoring intercept %s: %v", spec.Name, err)
 			continue
 		}
+		if spec.ServiceName == "" {
+			// Shared-Service expansion needs the Service name.
+			spec.SharedService = false
+		}
 		accepted = append(accepted, &rpc.InterceptInfo{
 			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
 			Spec:          spec,
