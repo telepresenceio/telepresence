@@ -337,6 +337,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	for id, ic := range s.currentIntercepts {
 		if _, ok := intercepts[id]; !ok {
 			removed = append(removed, ic)
+			delete(s.localDestinations, ic.Spec.Name)
 		}
 	}
 	s.currentIntercepts = intercepts
@@ -715,6 +716,10 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	}
 
 	spec := ir.Spec
+	// The local side of the additional pod ports is what the request names, except for "all",
+	// where the traffic-manager supplies the pod ports.
+	requestedPodPorts := slices.Clone(spec.PodPorts)
+	allPorts := spec.PortIdentifier == "all"
 	spec.Client = s.clientID
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
@@ -770,7 +775,12 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
 	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel,
+	destPodPorts := requestedPodPorts
+	if allPorts {
+		destPodPorts = spec.PodPorts
+	}
 	s.currentInterceptsLock.Lock()
+	s.localDestinations[spec.Name] = newDestinationSet(spec.TargetHost, spec.TargetPort, spec.Protocol, destPodPorts)
 	s.interceptWaiters[spec.Name] = &awaitIntercept{
 		mountPoint:     ir.MountPoint,
 		mountPort:      ir.LocalMountPort,
@@ -779,8 +789,12 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		waitCh:         waitCh,
 	}
 	s.currentInterceptsLock.Unlock()
+	success := false
 	defer func() {
 		s.currentInterceptsLock.Lock()
+		if !success {
+			delete(s.localDestinations, spec.Name)
+		}
 		if _, ok := s.interceptWaiters[spec.Name]; ok {
 			delete(s.interceptWaiters, spec.Name)
 			close(waitCh)
@@ -797,7 +811,6 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 	clog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
-	success := false
 	defer func() {
 		if !success {
 			clog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
