@@ -2,7 +2,11 @@ package mount
 
 import (
 	"context"
+	"path"
 	"strings"
+	"unicode"
+
+	"github.com/telepresenceio/clog"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -46,6 +50,7 @@ func NewInfo(ctx context.Context, env map[string]string, ftpPort, sftpPort uint1
 			}
 		}
 	}
+	mounts = safeMounts(ctx, mounts)
 	return &Info{
 		LocalDir:  localDir,
 		RemoteDir: remoteDir,
@@ -54,4 +59,36 @@ func NewInfo(ctx context.Context, env map[string]string, ftpPort, sftpPort uint1
 		Mounts:    mounts,
 		ReadOnly:  ro,
 	}
+}
+
+// safeMounts returns mounts without the paths that are not safe to use in a docker --mount or -v
+// option or to join with a host directory.
+func safeMounts(ctx context.Context, mounts types.MountPolicies) types.MountPolicies {
+	var safe types.MountPolicies
+	for p := range mounts {
+		if !isSafeMountPath(p) {
+			if safe == nil {
+				safe = make(types.MountPolicies, len(mounts))
+				for k, v := range mounts {
+					if isSafeMountPath(k) {
+						safe[k] = v
+					}
+				}
+			}
+			clog.Warnf(ctx, "Ignoring mount path %q: it must be absolute, clean, and free of commas, quotes, colons and control characters", p)
+		}
+	}
+	if safe == nil {
+		return mounts
+	}
+	return safe
+}
+
+func isSafeMountPath(p string) bool {
+	if !strings.HasPrefix(p, "/") || path.Clean(p) != p {
+		return false
+	}
+	return strings.IndexFunc(p, func(r rune) bool {
+		return r == ',' || r == '"' || r == ':' || unicode.IsControl(r)
+	}) < 0
 }
