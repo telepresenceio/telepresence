@@ -105,11 +105,13 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "service add")
 				if svc, ok := obj.(*core.Service); ok {
 					c.updateSvc(ctx, svc, true)
 				}
 			},
 			DeleteFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "service delete")
 				if svc, ok := obj.(*core.Service); ok {
 					c.updateSvc(ctx, svc, false)
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
@@ -119,6 +121,7 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
+				defer recoverHandlerPanic(ctx, "service update")
 				if newSvc, ok := newObj.(*core.Service); ok {
 					c.updateSvc(ctx, newSvc, true)
 				}
