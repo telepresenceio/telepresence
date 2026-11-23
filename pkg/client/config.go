@@ -1389,7 +1389,7 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 	if file, pinned := c.Value(configFileKey{}).(string); pinned {
 		err = mergeConfigFile(c, cfg, file)
 	} else {
-		if err := mergeConfigFile(c, cfg, filepath.Join(sysDir, ConfigFile)); err != nil {
+		if err := mergeSystemConfigFile(c, cfg, sysDir); err != nil {
 			return nil, err
 		}
 		err = mergeConfigFile(c, cfg, GetConfigFile(c))
@@ -1405,6 +1405,21 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 		cfg.Usage().Enabled = false
 	}
 	return cfg, nil
+}
+
+// mergeSystemConfigFile merges the machine-wide config file in sysDir. The installed location is used only when
+// the file and its directories belong to the administrator. A directory set by the context is the caller's choice.
+func mergeSystemConfigFile(c context.Context, cfg Config, sysDir string) error {
+	fileName := filepath.Join(sysDir, ConfigFile)
+	if sysDir == filelocation.RootConfigDir {
+		if err := filelocation.TrustedManagedFile(c, fileName, sysDir); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return errcat.Config.New(err)
+		}
+	}
+	return mergeConfigFile(c, cfg, fileName)
 }
 
 // mergeConfigFile reads fileName, parses it as YAML, and DestructiveMerges

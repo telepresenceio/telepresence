@@ -120,7 +120,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		return nil, status.Error(codes.Unavailable, "the root daemon is shutting down")
 	}
 
-	cfg, err := sessionConfig(client.GetConfig(s), info.ClientConfig, s.managed)
+	cfg, err := sessionConfig(s, client.GetConfig(s), info.ClientConfig, s.managed)
 	if err != nil {
 		return nil, err
 	}

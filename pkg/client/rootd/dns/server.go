@@ -400,25 +400,34 @@ func (s *Server) Stop() {
 	s.readyClose.Do(func() { close(s.ready) })
 }
 
-func (s *Server) SetClusterDNS(dns *manager.DNS, vifDNS netip.AddrPort) {
+func (s *Server) SetClusterDNS(c context.Context, dns *manager.DNS, vifDNS netip.AddrPort) error {
+	if dns != nil && !ValidName(dns.ClusterDomain, false) {
+		return fmt.Errorf("invalid cluster domain %q", dns.ClusterDomain)
+	}
 	s.Lock()
+	defer s.Unlock()
 	if !s.VIFAddress.IsValid() {
 		s.VIFAddress = vifDNS
 	}
 	if dns != nil {
 		if slices.Equal(s.ExcludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
-			s.ExcludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
+			s.ExcludeSuffixes = sliceToLower(ValidNames(c, "exclude suffix", dns.ExcludeSuffixes, true))
 		}
 		if len(s.IncludeSuffixes) == 0 {
-			s.IncludeSuffixes = sliceToLower(dns.IncludeSuffixes)
+			s.IncludeSuffixes = sliceToLower(ValidNames(c, "include suffix", dns.IncludeSuffixes, true))
 		}
 		s.clusterDomain = strings.ToLower(dns.ClusterDomain)
 	}
-	s.Unlock()
+	return nil
 }
 
 // SetTopLevelDomainsAndSearchPath updates the DNS top level domains and the search path used by the resolver.
 func (s *Server) SetTopLevelDomainsAndSearchPath(ctx context.Context, domains []string, namespace string) {
+	domains = ValidNames(ctx, "top level domain", domains, false)
+	if namespace != "" && !ValidName(namespace, false) {
+		clog.Warnf(ctx, "Ignoring invalid namespace %q", namespace)
+		namespace = ""
+	}
 	das := nsAndDomains{
 		domains:   domains,
 		namespace: namespace,
@@ -523,7 +532,10 @@ func (s *Server) processSearchPaths(g log.Group, processor func(context.Context,
 				// The connected namespace must be included as a search path for the cases
 				// where it's up to the traffic-manager to resolve. It cannot resolve a single
 				// label name intended for other namespaces.
-				s.search = []string{client.Tel2SubDomain, das.namespace}
+				s.search = []string{client.Tel2SubDomain}
+				if das.namespace != "" {
+					s.search = append(s.search, das.namespace)
+				}
 				s.Unlock()
 
 				if err := processor(c, dev); err != nil {

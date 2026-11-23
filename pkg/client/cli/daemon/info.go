@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,7 +95,13 @@ func NewRootInfoLoader(ctx context.Context, managed bool) *InfoLoader[RootInfo] 
 	return &InfoLoader[RootInfo]{ctx: ctx, dirName: rootDaemonsDirName}
 }
 
+// LoadRootServiceInfo loads the info of the managed root daemon. The file is used only when it and its directories
+// belong to the administrator, so that no other user can announce a daemon of their own.
 func LoadRootServiceInfo(ctx context.Context) (*RootInfo, error) {
+	path := filepath.Join(filelocation.RootCacheDir, rootDaemonsDirName, InfoFileName)
+	if err := filelocation.TrustedManagedFile(ctx, path, filelocation.RootCacheDir); err != nil {
+		return nil, err
+	}
 	return NewRootInfoLoader(ctx, true).LoadInfo(InfoFileName)
 }
 
@@ -141,6 +149,58 @@ func LoadUserDaemonToken(ctx context.Context, file string) (string, error) {
 		return "", fmt.Errorf("daemon info %s has no token", file)
 	}
 	return info.Token, nil
+}
+
+// PublishPort writes the port that the daemon listens on into the existing info file. The file must already exist
+// and is never created or replaced, and a link at its path is not followed (on Windows, where links are not
+// refused, the file is only checked to be a regular file). The content is replaced in place, so a concurrent reader
+// never sees a partial file.
+func (il *InfoLoader[T]) PublishPort(file string, port uint16) error {
+	path := filepath.Join(filelocation.AppUserCacheDir(il.ctx), il.dirName, file)
+	f, err := dos.OpenFile(dos.WithLockedFs(il.ctx), path, os.O_RDWR|noFollow, 0)
+	if err != nil {
+		return fmt.Errorf("unable to open daemon info %s: %w", path, err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("daemon info %s is not a regular file", path)
+	}
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	var info T
+	if err = json.Unmarshal(content, &info); err != nil {
+		return fmt.Errorf("failed to parse JSON from file %s: %w", path, err)
+	}
+	switch v := any(&info).(type) {
+	case *Info:
+		v.DaemonPort = port
+	case *RootInfo:
+		v.DaemonPort = port
+	}
+	content, err = json.Marshal(&info)
+	if err != nil {
+		return err
+	}
+	if _, err = f.WriteAt(content, 0); err != nil {
+		return err
+	}
+	return f.Truncate(int64(len(content)))
+}
+
+// IsEphemeralAddress returns true if the given listen address asks for a port chosen by the operating system.
+func IsEphemeralAddress(addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	n, err := strconv.Atoi(port)
+	return err == nil && n == 0
 }
 
 func (il *InfoLoader[T]) DeleteInfo(file string) error {
@@ -203,39 +263,62 @@ func (il *InfoLoader[T]) LoadInfos() ([]*T, error) {
 	return DaemonInfos, nil
 }
 
+// ErrPortNotPublished is returned when a daemon's info file exists but the daemon has not yet written its port.
+var ErrPortNotPublished = errors.New("the daemon has not yet announced its port")
+
+// daemonPort returns the port that the daemon has published in its info.
+func daemonPort[T TCPInfo](info *T) uint16 {
+	if ii, ok := any(info).(*Info); ok {
+		return ii.DaemonPort
+	}
+	return any(info).(*RootInfo).DaemonPort
+}
+
 func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (conn *grpc.ClientConn, err error) {
 	var info *T
 	var cancel context.CancelFunc
+	loadPublished := func() (*T, error) {
+		info, err := il.LoadInfo(InfoFileName)
+		if err == nil && daemonPort(info) == 0 {
+			err = ErrPortNotPublished
+		}
+		return info, err
+	}
 	if waitForConnect {
 		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		err = backoff.Retry(func() error {
-			info, err = il.LoadInfo(InfoFileName)
+			info, err = loadPublished()
 			return err
 		}, backoff.WithContext(backoff.NewConstantBackOff(200*time.Millisecond), ctx))
 	} else {
 		ctx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
-		info, err = il.LoadInfo(InfoFileName)
+		info, err = loadPublished()
 	}
 	defer cancel()
 	if err != nil {
+		if errors.Is(err, ErrPortNotPublished) && !waitForConnect {
+			if _, ok := any(info).(*Info); ok {
+				err = ErrNoUserDaemon
+			} else {
+				err = ErrNoRootDaemon
+			}
+		}
 		return nil, err
 	}
 
 	var daemonName string
-	var daemonPort uint16
 	var opts []grpc.DialOption
+	port := daemonPort(info)
 	if ii, ok := any(info).(*Info); ok {
 		daemonName = "user"
-		daemonPort = ii.DaemonPort
 		if ii.Token != "" {
 			opts = append(opts, grpcClient.WithToken(ii.Token))
 		}
 	} else {
 		daemonName = "root"
-		daemonPort = any(info).(*RootInfo).DaemonPort
 	}
-	conn, err = dialDaemon(ctx, daemonName, daemonPort, opts...)
+	conn, err = dialDaemon(ctx, daemonName, port, opts...)
 	if errors.Is(err, context.DeadlineExceeded) && !waitForConnect {
 		// A race may occur where the daemon is shutting down. We found the info file, but the daemon has since stopped responding.
 		if daemonName == "user" {

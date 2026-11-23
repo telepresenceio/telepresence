@@ -16,7 +16,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -42,17 +41,14 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (info *daemon.RootInf
 	daemonDir := filepath.Join(cacheDir, "rootd")
 	_ = os.MkdirAll(daemonDir, 0o777)
 
-	fp, err := ioutil.FreePortsTCP(1)
-	if err != nil {
-		return nil, errcat.NoDaemonLogs.New(err)
-	}
-	info = &daemon.RootInfo{DaemonPort: fp[0].Port()}
+	// The info file is created here, as the user. The daemon picks its port, and adds it to the file once it listens.
+	info = &daemon.RootInfo{}
 	err = daemon.NewRootInfoLoader(ctx, false).SaveInfo(info, daemon.InfoFileName)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
 
-	addr := fmt.Sprintf("127.0.0.1:%d", info.DaemonPort)
+	const addr = "127.0.0.1:0"
 	args := []string{client.GetExe(ctx), client.RootDaemonName, "--cache", cacheDir, "--config", client.GetConfigFile(ctx), "--logfile", logFile, "--address", addr}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))

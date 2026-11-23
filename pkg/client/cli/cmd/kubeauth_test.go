@@ -2,14 +2,18 @@ package cmd
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
 func TestKubeauthPreservesCacheAndDaemons(t *testing.T) {
@@ -48,4 +52,32 @@ func TestKubeauthPreservesCacheAndDaemons(t *testing.T) {
 			}
 		})
 	}
+}
+
+type credsServer struct {
+	rpc.UnimplementedAuthenticatorServer
+}
+
+func (credsServer) GetContextExecCredentials(context.Context, *rpc.GetContextExecCredentialsRequest) (*rpc.GetContextExecCredentialsResponse, error) {
+	return &rpc.GetContextExecCredentialsResponse{RawCredentials: []byte("creds")}, nil
+}
+
+func TestKubeauthStubReadsTokenFromEnvironment(t *testing.T) {
+	const token = "right-token"
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	svc := server.NewWithAuth(t.Context(), server.TokenInterceptors(token))
+	rpc.RegisterAuthenticatorServer(svc, credsServer{})
+	go func() { _ = svc.Serve(lis) }()
+	t.Cleanup(svc.Stop)
+
+	cmd := kubeauthCmd()
+	cmd.SetContext(t.Context())
+	require.Nil(t, cmd.Flags().Lookup("token"))
+
+	t.Setenv(patcher.TokenEnvName, "wrong-token")
+	require.Error(t, authenticateContext(cmd, []string{"ctx", lis.Addr().String()}))
+
+	t.Setenv(patcher.TokenEnvName, token)
+	require.NoError(t, authenticateContext(cmd, []string{"ctx", lis.Addr().String()}))
 }

@@ -262,7 +262,7 @@ func UseIPv6(ctx context.Context) (bool, error) {
 	return ni.Network.EnableIPv6, nil
 }
 
-func readPortFile(ctx context.Context, portFile string, configFiles []string) (port uint16, token string, err error) {
+func readPortFile(ctx context.Context, portFile string, configFiles []string, kubeContext string) (port uint16, token string, err error) {
 	pb, err := os.ReadFile(portFile)
 	if err != nil {
 		return 0, "", err
@@ -270,10 +270,10 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (p
 	var p kubeauth.PortFile
 	err = json.Unmarshal(pb, &p)
 	if err == nil {
-		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) && p.Token != "" {
+		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) && p.Context == kubeContext && p.Token != "" {
 			return uint16(p.Port), p.Token, nil
 		}
-		clog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
+		clog.Debug(ctx, "kubeconfig or context used by kubeauth is no longer valid")
 	}
 	if err := os.Remove(portFile); err != nil {
 		return 0, "", err
@@ -281,7 +281,7 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (p
 	return 0, "", fmt.Errorf("%s: %w", portFile, os.ErrNotExist)
 }
 
-func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, string, error) {
+func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string, kubeContext string) (uint16, string, error) {
 	clog.Debugf(ctx, "Starting authenticator service using portFile %s", portFile)
 	// remove any stale port file
 	_ = os.Remove(portFile)
@@ -301,7 +301,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	defer cancel()
 	for ctx.Err() == nil {
 		time.Sleep(10 * time.Millisecond)
-		port, token, err := readPortFile(ctx, portFile, configFiles)
+		port, token, err := readPortFile(ctx, portFile, configFiles, kubeContext)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
 				return 0, "", err
@@ -314,7 +314,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	return 0, "", fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
 }
 
-func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, string, error) {
+func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string, kubeContext string) (uint16, string, error) {
 	portFile := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeAuthPortFile)
 	st, err := os.Stat(portFile)
 	if err != nil {
@@ -322,7 +322,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 			return 0, "", err
 		}
 	} else if st.ModTime().Add(kubeauth.PortFileStaleTime).After(time.Now()) {
-		port, token, err := readPortFile(ctx, portFile, configFiles)
+		port, token, err := readPortFile(ctx, portFile, configFiles, kubeContext)
 		if err == nil {
 			clog.Debug(ctx, "kubeauth service found alive and valid")
 			return port, token, nil
@@ -331,7 +331,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 			return 0, "", err
 		}
 	}
-	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
+	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles, kubeContext)
 }
 
 func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) error {
@@ -347,9 +347,17 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if err != nil {
 		return err
 	}
+	kubeContext := cr.KubeFlags["context"]
+	if kubeContext == "" {
+		rawConfig, err := loader.RawConfig()
+		if err != nil {
+			return err
+		}
+		kubeContext = rawConfig.CurrentContext
+	}
 	content, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
 		func(configFiles []string) (string, string, string, string, error) {
-			port, token, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
+			port, token, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles, kubeContext)
 			if err != nil {
 				clog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
 				return "", "", "", "", err

@@ -16,6 +16,7 @@ import (
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/validation"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"sigs.k8s.io/yaml"
 
@@ -289,12 +290,41 @@ type podLogAssembly struct {
 	errText string
 }
 
+// recordSkippedNote saves a pod-less error frame, the manager's note that some
+// logs were skipped, as a file and a result entry.
+func recordSkippedNote(ctx context.Context, exportDir string, chunk *manager.LogChunk, result map[string]string) {
+	e := chunk.GetError()
+	if e == "" {
+		return
+	}
+	const skippedFile = "skipped-agent-logs.txt"
+	if err := os.WriteFile(filepath.Join(exportDir, skippedFile), []byte(e+"\n"), 0o666); err != nil {
+		clog.Error(ctx, err)
+	}
+	result[skippedFile] = e
+}
+
+// validLogSource reports whether the pod name and namespace of chunk are valid Kubernetes names.
+// The first chunk from an invalid source is logged and noted in result.
+func validLogSource(ctx context.Context, chunk *manager.LogChunk, ignored map[string]bool, result map[string]string) bool {
+	if len(validation.IsDNS1123Subdomain(chunk.PodName)) == 0 && len(validation.IsDNS1123Label(chunk.PodNamespace)) == 0 {
+		return true
+	}
+	if ik := chunk.PodName + "/" + chunk.PodNamespace; !ignored[ik] {
+		ignored[ik] = true
+		clog.Warnf(ctx, "Ignoring log data for pod %q in namespace %q: not valid Kubernetes names", chunk.PodName, chunk.PodNamespace)
+		result[fmt.Sprintf("invalid-pod-%d", len(ignored))] = "ignored log data from a pod with an invalid name or namespace"
+	}
+	return false
+}
+
 // gatherLogChunks assembles LogChunk frames into one <pod>.<namespace>.log (and an
 // optional .yaml) per pod, plus a result map. Frames from different pods interleave
 // on the stream, but a given pod's own frames arrive in order: BEGIN, data/error, END.
 func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkReceiver) (map[string]string, error) {
 	result := make(map[string]string)
 	pods := make(map[string]*podLogAssembly)
+	ignored := make(map[string]bool)
 	defer func() {
 		// Pods still in the map saw no END frame, so the stream ended prematurely.
 		for _, pl := range pods {
@@ -313,13 +343,20 @@ func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkRecei
 			return result, err
 		}
 
+		if chunk.PodName == "" && chunk.PodNamespace == "" {
+			recordSkippedNote(ctx, exportDir, chunk, result)
+			continue
+		}
+		if !validLogSource(ctx, chunk, ignored, result) {
+			continue
+		}
 		key := chunk.PodName + "." + chunk.PodNamespace
 		logFile := key + ".log"
 
 		switch chunk.Frame {
 		case manager.LogChunk_BEGIN:
 			pl := &podLogAssembly{}
-			f, err := os.Create(filepath.Join(exportDir, logFile))
+			f, err := createInDir(exportDir, logFile)
 			if err != nil {
 				clog.Error(ctx, err)
 				pl.errText = err.Error()
@@ -358,7 +395,7 @@ func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkRecei
 				}
 			case *manager.LogChunk_PodYaml:
 				yamlFile := key + ".yaml"
-				if werr := os.WriteFile(filepath.Join(exportDir, yamlFile), p.PodYaml, 0o666); werr != nil {
+				if werr := writeInDir(exportDir, yamlFile, p.PodYaml); werr != nil {
 					clog.Error(ctx, werr)
 					result[yamlFile] = werr.Error()
 				} else {
@@ -367,4 +404,29 @@ func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkRecei
 			}
 		}
 	}
+}
+
+// inDir returns the path of name in dir, or an error if the result is not directly inside dir.
+func inDir(dir, name string) (string, error) {
+	p := filepath.Join(dir, name)
+	if filepath.Dir(p) != filepath.Clean(dir) {
+		return "", fmt.Errorf("%q is outside the export directory", name)
+	}
+	return p, nil
+}
+
+func createInDir(dir, name string) (*os.File, error) {
+	p, err := inDir(dir, name)
+	if err != nil {
+		return nil, err
+	}
+	return os.Create(p)
+}
+
+func writeInDir(dir, name string, data []byte) error {
+	p, err := inDir(dir, name)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, data, 0o666)
 }
