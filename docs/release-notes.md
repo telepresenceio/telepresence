@@ -8,6 +8,60 @@
 A malformed gRPC message could make the traffic-manager or a traffic-agent exit. Reaching a traffic-agent this way needed no credentials, only network access to the pod. The traffic-manager and the traffic-agent now reject such messages, and a failure in one call no longer ends the process. Reported by <code>jpabeem</code>.
 </div>
 
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Agent configurations are generated when the traffic-manager starts</div></div>
+<div style="margin-left: 15px">
+
+When the traffic-manager started, it read the traffic-agent configuration from pod annotations and used it as it was. Someone who was allowed to create a pod in one managed namespace could that way influence the traffic-agent that was injected into pods of another namespace. The traffic-manager now accepts an annotation only when it names the pod's own workload, and generates the configuration itself.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The uninstall endpoint of the agent injector requires the hook's token</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager's webhook port accepted an uninstall request from any caller that could reach it. The chart's pre-delete hook now runs as its own ServiceAccount and sends its token, and the traffic-manager refuses every other caller. The agent injector also keeps no state for an admission request that it cannot confirm.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-agent's SFTP server only follows its own links</div></div>
+<div style="margin-left: 15px">
+
+In node-agent mode, a client with access to the remote mounts of a workload could create a link over SFTP that led outside those mounts. The SFTP server now follows only the links that the traffic-agent created, and it enforces the <code>remote-read-only</code> mount policy itself.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A reconnecting traffic-agent keeps its own session</div></div>
+<div style="margin-left: 15px">
+
+A traffic-agent that reconnected to the traffic-manager could name a session that was not its own. On a reconnect, the variables listed in <code>intercept.environment.excluded</code> were also not removed from the agent's report, so they showed up again after a traffic-manager restart. A reconnecting traffic-agent now gets only its own session, and its report is filtered the same way as when it first arrives.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Callers without a grant are shown less</div></div>
+<div style="margin-left: 15px">
+
+With <code>security.authentication.mode</code> set to <code>enforcing</code>, <code>telepresence gather-logs</code> named the traffic-agent pods of namespaces where the caller held no logs grant, and an intercept could be read by its ID without owning the session. The traffic-manager now runs the review before it names a pod, and returns an intercept only to the session that owns it.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">More malformed or excessive input is rejected</div></div>
+<div style="margin-left: 15px">
+
+Several inputs could end or stall the traffic-manager, a traffic-agent, the QUIC forwarder or the root daemon: malformed tunnel messages, a DNS lookup of an empty name, a container-ports annotation with a port that no container declares, a flood of new QUIC flows or of unknown tokens, and a request with a very large declared body on a wiretapped port. They are now rejected or limited.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The client checks the names that it gets from the cluster</div></div>
+<div style="margin-left: 15px">
+
+On macOS, the root daemon used DNS domain names from the traffic-manager in the names of resolver files without checking them, and <code>telepresence gather-logs</code> used pod names from the traffic-manager in file names. A traffic-manager that had been tampered with could that way make the client write outside the intended directory. Both kinds of names are validated now.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The cluster decides less about the workstation</div></div>
+<div style="margin-left: 15px">
+
+The client configuration that the traffic-manager provides can no longer set the program used for mounts, the mount root, or the image and chart settings. The root daemon dials on behalf of a traffic-agent only for the targets of the session's own intercepts. The ports opened with <code>--local-mount-port</code> and <code>--reroute-local</code> listen on localhost only.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemon files and ports are protected from other local users</div></div>
+<div style="margin-left: 15px">
+
+The user daemon and the root daemon choose their ports themselves and publish them once they listen. The root daemon doesn't follow links when it writes its logs and cache files. On Linux and macOS, the info file of a managed root daemon and the machine-wide <code>config.yml</code> are trusted only when root owns the whole path. The kubeauth token is no longer passed on a command line.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Prometheus metrics for the traffic-manager's gRPC requests](howtos/monitoring)</div></div>
 <div style="margin-left: 15px">
 
