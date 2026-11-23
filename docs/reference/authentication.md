@@ -204,18 +204,18 @@ The traffic-manager's authentication posture is controlled by the Helm value
 | Mode | Behavior |
 |------|----------|
 | `disabled` | No token validation at all. |
-| `permissive` (default) | Tokens are validated and used for authorization checks and session binding, but a call with a missing or invalid token is served as unauthenticated. Decisions are logged for audit. |
-| `enforcing` | Calls without a valid bearer token are rejected (`Unauthenticated`), and an unauthorized intercept is rejected (`PermissionDenied`). |
+| `permissive` | Tokens are validated and used for authorization checks and session binding, but a call with a missing or invalid token is served as unauthenticated. Decisions are logged for audit. |
+| `enforcing` (default) | Calls without a valid bearer token are rejected (`Unauthenticated`), and an unauthorized intercept is rejected (`PermissionDenied`). |
 
 In every mode, a call whose token could not be checked because the
 traffic-manager's limit on token reviews was reached is refused with
 `ResourceExhausted`. A token the manager accepted earlier is checked under a
 separate allowance, so a flood of unknown tokens does not lock it out.
 
-Set it at install or upgrade time:
+The default is `enforcing`. Set another mode at install or upgrade time:
 
 ```console
-$ telepresence helm install --set security.authentication.mode=enforcing
+$ telepresence helm install --set security.authentication.mode=permissive
 ```
 
 or in a values file:
@@ -223,7 +223,7 @@ or in a values file:
 ```yaml
 security:
   authentication:
-    mode: enforcing
+    mode: permissive
 ```
 
 > [!NOTE]
@@ -242,17 +242,44 @@ reports `Unavailable` rather than rejecting the call as unauthenticated or
 unauthorized, so an infrastructure outage is distinguishable from an actual
 denial.
 
-### Staged rollout
+### Moving an existing installation to `enforcing`
 
-`permissive` is the default specifically so that upgrading the traffic-manager
-never breaks an existing installation: administrators can watch the audit log
-to see which callers would be rejected before opting in to `enforcing`.
+An installation that never set `security.authentication.mode` becomes
+`enforcing` on its next `telepresence helm upgrade` to 2.34.0 or later. An
+installation that set the mode explicitly, for example to `permissive`, keeps
+it. See [Upgrading](../install/manager.md#upgradingdowngrading-the-traffic-manager)
+for how the command treats values.
 
-Turn on `enforcing` only once your client and agent fleet is running this
-release or later — an agent or client older than this release never sends a
-token and is always rejected once the manager enforces authentication.
-Clients and agents at this release or later always send a token when their
-credentials can produce one, so they are unaffected by the switch.
+An `enforcing` traffic-manager refuses:
+
+- Clients older than 2.31.0. They send no token.
+- Traffic-agents older than 2.31. They send no token.
+- A user who lacks the grant a call needs. To connect, the user needs
+  `create` on `connections.telepresence.io` in the traffic-manager's
+  namespace, or `pods/portforward` there. To intercept, replace, or
+  wiretap, the user needs `create` on `attachments.telepresence.io` for the
+  workload, or `pods/portforward` in its namespace. To ingest, the user
+  needs `get` on the attachment, or the same `pods/portforward`. With the
+  default `security.authorization.requiredGrant: any`, either kind of grant
+  is accepted. See [Client RBAC](../howtos/client-rbac.md).
+- A kubeconfig that authenticates with a client certificate, when the x509
+  listener is disabled or the API server is behind an authenticating proxy
+  that uses another CA. See
+  [Client-certificate-only kubeconfigs](#client-certificate-only-kubeconfigs).
+
+To prepare, upgrade the clients to 2.31.0 or later, check that each user holds
+one of the grants above, and check that each kubeconfig can produce a bearer
+token or a verifiable client certificate. Clients and agents at 2.31 or later
+send a token whenever their credentials can produce one.
+
+To stay on `permissive` for a while, set the mode when upgrading:
+
+```console
+$ telepresence helm upgrade --set security.authentication.mode=permissive
+```
+
+In `permissive` mode, the traffic-manager logs its authentication and
+authorization decisions for audit.
 
 ## Traffic-agent ports
 
@@ -495,8 +522,8 @@ one for the clients that cannot produce a token at all. It also does not
 help every cert-only cluster: if the cluster is fronted by an authenticating
 proxy that signs user certificates with a CA other than the one published in
 `client-ca-file`, the manager cannot verify those certificates, and such
-clients still need a context with token or exec-plugin credentials, or must
-run with `security.authentication.mode` set to `permissive`.
+clients still need a context with token or exec-plugin credentials, or the
+manager must run with `security.authentication.mode` set to `permissive`.
 
 ### Environment access implied by portforward
 

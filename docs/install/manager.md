@@ -143,7 +143,27 @@ See [the kubeconfig documentation](../reference/config.md#manager) for more info
    ```shell
    telepresence helm upgrade
    ```
-   You can also use the `--reuse-values` or `--reset-values` to specify if previously installed values should be reused or reset.
+   Without value flags (`--set`, `--set-file`, `--values`/`-f`) and without `--reuse-values` or `--reset-values`, the
+   command uses the default values of the new chart, with the values you supplied earlier on top. A default that
+   changed between chart versions therefore reaches an upgraded installation unless you set that value yourself. With
+   value flags and neither of the other two, the command uses the new chart's defaults plus only the values given on
+   that command line. `--reuse-values` reuses the values of the installed release, including the defaults of its
+   chart. `--reset-values` uses the new chart's defaults and ignores the earlier values.
+
+### Upgrading to 2.34
+
+From 2.34.0, the default of `security.authentication.mode` is `enforcing`. An installation that never set the mode
+becomes `enforcing` when `telepresence helm upgrade` upgrades it. An installation that set the mode explicitly keeps
+it. An `enforcing` traffic-manager refuses:
+
+- clients older than 2.31.0 and traffic-agents older than 2.31, which send no token,
+- users without the grant a call needs (`connections.telepresence.io` or `pods/portforward` to connect,
+  `attachments.telepresence.io` or `pods/portforward` to attach),
+- kubeconfigs that authenticate with a client certificate the traffic-manager cannot verify.
+
+To keep the previous mode while you prepare, add `--set security.authentication.mode=permissive` to the upgrade
+command. See [Moving an existing installation to `enforcing`](../reference/authentication.md#moving-an-existing-installation-to-enforcing)
+for the details.
 
 
 ## Uninstall
@@ -289,6 +309,11 @@ to the latest version without changing any configuration values:
 ```bash
 helm upgrade --namespace ambassador --reuse-values traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss
 ```
+
+`helm upgrade --reuse-values` keeps the values of the installed release, including the defaults of the old chart, so a
+changed chart default does not take effect. From 2.34.0 that means the mode stays as it was. Without `--reuse-values`,
+Helm uses the new chart's defaults, so an installation that never set `security.authentication.mode` becomes
+`enforcing`; add `--set security.authentication.mode=permissive` to keep the previous mode.
 
 If you want to upgrade (or downgrade) the Traffic Manager to a specific version, add a `--version` flag with the version
 number to the upgrade command, e.g.: `--version v2.20.3`.
