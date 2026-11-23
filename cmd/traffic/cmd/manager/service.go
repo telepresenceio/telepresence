@@ -545,12 +545,16 @@ func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) (principa
 	return nil, true
 }
 
-// agentOwnershipError returns a PermissionDenied error when agent is bound to a
-// verified pod identity and the caller's principal doesn't match it. Returns nil
-// when the session is unbound (old agent) or the caller is the bound pod itself.
-// A caller whose token couldn't be verified for infrastructure reasons gets
-// Unavailable instead, since ownership could not be established either way.
-func agentOwnershipError(ctx context.Context, sessionID tunnel.SessionID, agent *state.AgentSession) error {
+// agentOwnershipError returns a PermissionDenied error when the caller's token
+// lacks the traffic-manager audience (enforcing mode), or when agent is bound to
+// a verified pod identity and the caller's principal doesn't match it. Returns
+// nil when the session is unbound (old agent) or the caller is the bound pod
+// itself. A caller whose token couldn't be verified for infrastructure reasons
+// gets Unavailable instead, since ownership could not be established either way.
+func (s *service) agentOwnershipError(ctx context.Context, sessionID tunnel.SessionID, agent *state.AgentSession) error {
+	if err := s.requireAgentAudience(ctx); err != nil {
+		return err
+	}
 	bound := agent.Principal()
 	if bound == nil {
 		return nil
@@ -587,7 +591,7 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 		if agent == nil {
 			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 		}
-		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+		if err := s.agentOwnershipError(ctx, sessionID, agent); err != nil {
 			return nil, err
 		}
 
@@ -640,7 +644,7 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 			return nil, err
 		}
 		if agent := s.state.GetAgent(sessionID); agent != nil {
-			if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+			if err := s.agentOwnershipError(ctx, sessionID, agent); err != nil {
 				return nil, err
 			}
 		}
@@ -1368,7 +1372,7 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 	}
 
 	if agent := s.state.GetAgent(sessionID); agent != nil {
-		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+		if err := s.agentOwnershipError(ctx, sessionID, agent); err != nil {
 			return nil, nil, err
 		}
 		filter = func(id string, info *state.Intercept) bool {
@@ -2702,7 +2706,7 @@ func (s *service) ensureAgentSession(ctx context.Context, sessionInfo *rpc.Sessi
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
-	if err := agentOwnershipError(ctx, sessionID, session); err != nil {
+	if err := s.agentOwnershipError(ctx, sessionID, session); err != nil {
 		return ctx, nil, err
 	}
 	return ctx, session, nil
