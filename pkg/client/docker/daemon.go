@@ -4,6 +4,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -147,9 +148,12 @@ func daemonAddr(ipv6 bool) netip.Addr {
 	return netip.AddrFrom4([4]byte{127, 0, 0, 1})
 }
 
-const (
-	kubeAuthPortFile = client.KubeAuthDaemonName + ".port"
-)
+// kubeAuthPortFile returns the name of the port file of the authenticator service that serves the given
+// kubeconfig and context, so that each combination announces itself in a file of its own.
+func kubeAuthPortFile(configFiles []string, kubeContext string) string {
+	sum := sha256.Sum256([]byte(strings.Join(configFiles, string(filepath.ListSeparator)) + "\x00" + kubeContext))
+	return fmt.Sprintf("%s-%x.port", client.KubeAuthDaemonName, sum[:8])
+}
 
 type ContainerInfo struct {
 	ID   string
@@ -315,7 +319,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 }
 
 func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string, kubeContext string) (uint16, string, error) {
-	portFile := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeAuthPortFile)
+	portFile := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeAuthPortFile(configFiles, kubeContext))
 	st, err := os.Stat(portFile)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {

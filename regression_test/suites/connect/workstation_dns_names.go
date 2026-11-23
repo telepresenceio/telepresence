@@ -112,18 +112,20 @@ func init() {
 // suffix in the same list gets its resolver file.
 func (s *WshardResolverFiles) Test_NoFileOutsideTheResolverDirectory() {
 	t := s.T()
+	_, err := os.Lstat(wshardEscapeFile)
+	if err == nil {
+		t.Skipf("%s exists", wshardEscapeFile)
+	}
+	s.Require().ErrorIs(err, fs.ErrNotExist, "cannot confirm that %s is absent", wshardEscapeFile)
 	t.Cleanup(func() {
 		_ = exec.Command("sudo", "-n", "rm", "-f", wshardEscapeFile).Run()
 	})
-	if _, err := os.Lstat(wshardEscapeFile); err == nil {
-		t.Skipf("%s exists", wshardEscapeFile)
-	}
 	wshardConnectWithSuffixes(&s.Suite, wshardHostileSuffixes)
 
 	s.Eventually(func() bool {
 		m, _ := filepath.Glob(wshardResolverGlob)
 		return len(m) > 0
 	}, wshardResolverPause, time.Second, "the valid suffix must get a resolver file")
-	_, err := os.Lstat(wshardEscapeFile)
+	_, err = os.Lstat(wshardEscapeFile)
 	s.ErrorIs(err, fs.ErrNotExist, "%s must not be created: %v", wshardEscapeFile, err)
 }

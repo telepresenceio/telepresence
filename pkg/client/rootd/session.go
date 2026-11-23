@@ -467,7 +467,10 @@ func newSession(
 	}
 	clog.Infof(s, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 
-	s.dnsServer = dns.NewServer(cfg.DNS(), s.Namespace, s.clusterLookup)
+	dnsCfg := *cfg.DNS()
+	dnsCfg.IncludeSuffixes = dns.ValidNames(s, "include suffix", dnsCfg.IncludeSuffixes, true)
+	dnsCfg.ExcludeSuffixes = dns.ValidNames(s, "exclude suffix", dnsCfg.ExcludeSuffixes, true)
+	s.dnsServer = dns.NewServer(&dnsCfg, s.Namespace, s.clusterLookup)
 	s.SetTopLevelDomains(nil)
 
 	// Set ourselves as the default dialer for the session.
