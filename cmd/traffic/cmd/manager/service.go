@@ -1725,6 +1725,14 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadN
 	})
 }
 
+// authorizeFileAccess runs the ensure-agent review ("create" or "get" on the
+// attachment) on behalf of p.
+func (s *service) authorizeFileAccess(ctx context.Context, p *auth.Principal, namespace, workloadName string) error {
+	return s.authorizedAs(ctx, p, fmt.Sprintf("file access to %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
+	})
+}
+
 // readAccess returns the caller's read access to namespace. Outside enforcing
 // mode authorized never fails, so everything is readable. The error is
 // non-nil only when a review cannot be performed (Unavailable).
@@ -1923,7 +1931,7 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 
 // AuthorizeSessionAccess tells an agent what a client session may do through
 // it. The workload comes from the agent session; the request supplies only the
-// client session ID.
+// client session ID. LEVEL_FILES requires "create" or "get" on the attachment.
 func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeSessionAccessRequest) (*rpc.AuthorizeSessionAccessResponse, error) {
 	agentSessionID := tunnel.SessionID(rq.GetSession().GetSessionId())
 	if !state.IsAgentSessionID(agentSessionID) {
@@ -1952,7 +1960,7 @@ func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeS
 		return none, nil
 	}
 	level := rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK
-	err = s.authorizeParticipant(clientCtx, client.Principal(), agent.Namespace, agent.Name)
+	err = s.authorizeFileAccess(clientCtx, client.Principal(), agent.Namespace, agent.Name)
 	switch {
 	case err == nil:
 		level = rpc.AuthorizeSessionAccessResponse_LEVEL_FILES
