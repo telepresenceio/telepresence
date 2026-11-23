@@ -46,6 +46,7 @@ type agenthardListEntry struct {
 		PodName  string `json:"pod_name"`
 		PodIP    string `json:"pod_ip"`
 		SftpPort int32  `json:"sftp_port"`
+		FtpPort  int32  `json:"ftp_port"`
 	} `json:"intercept_info"`
 }
 
@@ -71,7 +72,7 @@ func (s *AgenthardSftp) Test_ClientLinkDoesNotLeaveExport() {
 	t.Cleanup(func() { check.EventuallyRemoved(t, root, mountTimeout) })
 	check.EventuallyFile(t, tokenFilePath(root), isNonEmpty, mountTimeout)
 
-	agentNS, agentPod, sftpPort := agenthardLocateAgent(ctx, s, ns, wl.Name)
+	agentNS, agentPod, sftpPort, _ := agenthardLocateAgent(ctx, s, ns, wl.Name)
 	dial, err := rt.AgenthardPodDialer(rt.Env{Ctx: ctx, T: t, R: r})
 	s.Require().NoError(err)
 	conn, err := dial(ctx, agentNS, agentPod, sftpPort)
@@ -116,9 +117,9 @@ func (s *AgenthardSftp) Test_ClientLinkDoesNotLeaveExport() {
 	}
 }
 
-// agenthardLocateAgent returns the namespace, name and SFTP port of the traffic-agent pod that
-// serves the intercept of the workload name in ns.
-func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string) (agentNS, pod string, port uint16) {
+// agenthardLocateAgent returns the namespace, name, SFTP port and FTP port of the traffic-agent
+// pod that serves the intercept of the workload name in ns.
+func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string) (agentNS, pod string, port, ftpPort uint16) {
 	t := s.T()
 	var entries []agenthardListEntry
 	s.Require().NoError(s.R().CLI().JSON(ctx, &entries, "list", "--format", "json", "-n", ns))
@@ -129,7 +130,7 @@ func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string
 		}
 		for _, ii := range e.InterceptInfo {
 			if ii.SftpPort != 0 {
-				podName, podIP, port = ii.PodName, ii.PodIP, uint16(ii.SftpPort)
+				podName, podIP, port, ftpPort = ii.PodName, ii.PodIP, uint16(ii.SftpPort), uint16(ii.FtpPort)
 			}
 		}
 	}
@@ -150,7 +151,7 @@ func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
-	return agentNS, pod, port
+	return agentNS, pod, port, ftpPort
 }
 
 // agenthardFindPod returns the namespace and name of the pod with the given IP, preferring the
