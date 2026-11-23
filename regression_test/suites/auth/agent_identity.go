@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -199,6 +202,89 @@ func (s *AgentidAgentIdentity) Test_OwnWorkloadTokenWithoutManagerAudienceRefuse
 		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
 	}
 	s.Require().Error(err, "an agent registration without the traffic-manager audience should be refused in enforcing mode")
+	st, ok := status.FromError(err)
+	s.Require().True(ok)
+	s.Equal(codes.PermissionDenied, st.Code())
+}
+
+// agentidForgedPodManifest is a bare pod that has a container named
+// traffic-agent and a controller owner reference straight to a Deployment.
+const agentidForgedPodManifest = `apiVersion: v1
+kind: Pod
+metadata:
+  name: %[1]s
+  namespace: %[2]s
+  labels:
+    app: %[3]s
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: %[3]s
+      uid: %[4]s
+      controller: true
+      blockOwnerDeletion: false
+spec:
+  containers:
+    - name: traffic-agent
+      image: ghcr.io/telepresenceio/echo-server:0.3.1
+      ports:
+        - containerPort: 8080
+      env:
+        - name: PORT
+          value: "8080"
+`
+
+// Test_ForgedOwnerReferenceRefused has a bare pod, with a traffic-agent
+// container, a token with the traffic-manager audience, its real pod IP and a
+// controller reference that names a Deployment directly (right name and UID),
+// call ArriveAsAgent claiming to be that Deployment's agent. A Deployment
+// owns its pods through a ReplicaSet, so the call must be refused.
+func (s *AgentidAgentIdentity) Test_ForgedOwnerReferenceRefused() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	s.Manager()
+
+	victim := s.Workload(workloads.Echo("agentid-forged-owner"))
+	uid, err := r.Kubectl(ctx, ns, "get", "deployment", victim.Name, "-o", "jsonpath={.metadata.uid}")
+	s.Require().NoError(err)
+
+	podName := victim.Name + "-forged"
+	path := filepath.Join(t.TempDir(), "forged-pod.yaml")
+	s.Require().NoError(os.WriteFile(path,
+		[]byte(fmt.Sprintf(agentidForgedPodManifest, podName, ns, victim.Name, strings.TrimSpace(uid))), 0o644))
+	_, err = r.Kubectl(ctx, ns, "apply", "-f", path)
+	s.Require().NoError(err)
+	t.Cleanup(func() {
+		_, _ = r.Kubectl(ctx, ns, "delete", "pod", podName, "--ignore-not-found", "--wait=false")
+	})
+	_, err = r.Kubectl(ctx, ns, "wait", "pod/"+podName, "--for=condition=Ready", "--timeout=120s")
+	s.Require().NoError(err)
+
+	out, err := r.Kubectl(ctx, ns, "get", "pod", podName, "-o", "jsonpath={.metadata.uid}|{.status.podIP}")
+	s.Require().NoError(err)
+	parts := strings.SplitN(strings.TrimSpace(out), "|", 2)
+	s.Require().Len(parts, 2)
+	podUID, podIP := parts[0], parts[1]
+	s.Require().NotEmpty(podIP)
+
+	tok, err := r.Kubectl(ctx, ns, "create", "token", "default", "--audience=traffic-manager",
+		"--bound-object-kind=Pod", "--bound-object-name="+podName, "--bound-object-uid="+podUID)
+	s.Require().NoError(err)
+
+	mc, closeFn, err := rt.ManagerClient(rt.Env{Ctx: ctx, T: t, R: r}, managers.ManagerNamespace)
+	s.Require().NoError(err)
+	defer closeFn()
+
+	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+strings.TrimSpace(tok))
+	fake := agentidFakeAgentInfo(ns, victim.Name, "Deployment", podName, podUID)
+	fake.PodIp = podIP
+	si, err := mc.ArriveAsAgent(tokCtx, fake)
+	if err == nil {
+		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
+	}
+	s.Require().Error(err, "a pod that names a Deployment as its direct controller should not register as its agent")
 	st, ok := status.FromError(err)
 	s.Require().True(ok)
 	s.Equal(codes.PermissionDenied, st.Code())
