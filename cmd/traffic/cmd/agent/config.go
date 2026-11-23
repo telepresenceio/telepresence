@@ -32,7 +32,7 @@ type Config interface {
 	PodUID() k8sTypes.UID
 	NodeAgent() bool
 
-	// SymlinkRoots lists the directories an exported symlink may lead into.
+	// SymlinkRoots lists the directories that the exported mount directories lie within.
 	SymlinkRoots() []string
 
 	// AppPodIP returns the IP of the pod that hosts the application containers.

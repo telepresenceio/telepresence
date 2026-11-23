@@ -1,8 +1,12 @@
 package fwd
 
 import (
+	"errors"
 	"net"
 	"sync/atomic"
+	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 type ListenerSwitch interface {
@@ -68,8 +72,15 @@ func NewListenerSwitch(listener net.Listener, secondaryAcceptLoop func(net.Liste
 func (l *listenerSwitch) Serve() error {
 	primaryCh := l.primaryListener.ch
 	secondaryCh := l.secondaryListener.ch
+	var delay time.Duration
 	for {
 		conn, err := l.listener.Accept()
+		if err != nil && !errors.Is(err, net.ErrClosed) && forwarder.IsTemporaryAcceptError(err) {
+			delay = forwarder.NextAcceptDelay(delay)
+			time.Sleep(delay)
+			continue
+		}
+		delay = 0
 		ce := connOrErr{conn: conn, err: err}
 		if err != nil {
 			primaryCh <- ce

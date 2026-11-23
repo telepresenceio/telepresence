@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
+	"os"
+	"path"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -104,11 +107,46 @@ func appEnvironment(osEnv []string, ag *agentconfig.Container) map[string]string
 	return fullEnv
 }
 
+// readOnlyExports returns the paths, relative to agentconfig.ExportsMountPoint, of the mounts
+// that sc gives the remote-read-only policy.
+func readOnlyExports(sc *agentconfig.Sidecar) []string {
+	var paths []string
+	for _, cn := range sc.Containers {
+		for mount, policy := range cn.Mounts {
+			if policy == types.MountPolicyRemoteReadOnly {
+				paths = append(paths, path.Join(path.Base(cn.MountPoint), mount))
+			}
+		}
+	}
+	return paths
+}
+
+// ftpRoots returns the directories that the symlinks under agentconfig.ExportsMountPoint
+// lead to, as far as they lie within bases. A mount that is a file is represented by its
+// directory.
+func ftpRoots(bases []string) []string {
+	var roots []string
+	seen := map[string]bool{}
+	for _, target := range sftpserver.ExportedTargets(agentconfig.ExportsMountPoint, bases) {
+		dir := target
+		if fi, err := os.Stat(target); err != nil {
+			continue
+		} else if !fi.IsDir() {
+			dir = path.Dir(target)
+		}
+		if !seen[dir] {
+			seen[dir] = true
+			roots = append(roots, dir)
+		}
+	}
+	return roots
+}
+
 // sftpServer creates a listener on the next available port, writes that port on the
 // given channel, and then starts accepting connections on that port. Each connection is
 // screened by serveSftpConn's tunnel-source gate and, once past that, served by a
 // sftpserver.Server confined to agentconfig.ExportsMountPoint and roots.
-func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, podIP netip.Addr, roots []string) error {
+func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, podIP netip.Addr, roots, readOnly []string) error {
 	defer close(sftpPortCh)
 
 	// start an sftp-server for remote sshfs mounts
@@ -131,7 +169,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 	}
 	sftpPortCh <- ap.Port()
 
-	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, roots...)
+	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, roots, readOnly)
 	if err != nil {
 		return err
 	}
@@ -149,15 +187,41 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 	}
 }
 
+// withoutDebugLogging returns a context whose logger drops debug and trace records. The FTP
+// server turns on its protocol echo, which logs every received line including "PASS <token>",
+// when debug logging is enabled on the context it is started with.
+func withoutDebugLogging(ctx context.Context) context.Context {
+	return clog.WithLogger(ctx, slog.New(noDebugHandler{clog.Logger(ctx).Handler()}))
+}
+
+type noDebugHandler struct{ slog.Handler }
+
+func (h noDebugHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level > slog.LevelDebug && h.Handler.Enabled(ctx, level)
+}
+
+func (h noDebugHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return noDebugHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h noDebugHandler) WithGroup(name string) slog.Handler {
+	return noDebugHandler{h.Handler.WithGroup(name)}
+}
+
 // serveSftpConn gates conn on its source address before serving it: every legitimate
 // consumer reaches this port through the telepresence tunnel, which the agent itself
 // dials, so its connections carry the pod's own source address (or loopback); anything
 // else is a direct connection that bypassed the tunnel, refused once auth.enforcing()
-// and served as before otherwise. See fromOwnPod.
+// and served otherwise. Every connection is refused until auth holds credential
+// material. See fromOwnPod.
 func serveSftpConn(ctx context.Context, conn net.Conn, srv *sftpserver.Server, auth *fileShareAuth, podIP netip.Addr) {
 	defer conn.Close()
 	clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
 
+	if !auth.ready() {
+		clog.Warnf(ctx, "sftp: closing connection from %s; the agent has no session credential material yet", conn.RemoteAddr())
+		return
+	}
 	if auth.enforcing() && !fromOwnPod(conn.RemoteAddr(), podIP) {
 		clog.Warnf(ctx, "sftp: closing direct connection from %s; a direct connection to the SFTP port requires the tunnel",
 			conn.RemoteAddr())
@@ -333,17 +397,18 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 	ftpPortCh := make(chan uint16)
 	if config.HasRemoteMounts() {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), config.PodIP(), config.SymlinkRoots())
+			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), config.PodIP(), config.SymlinkRoots(),
+				readOnlyExports(ac))
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
 			publicHost := ""
 			if !config.PodIP().Is6() {
 				publicHost = config.PodIP().String()
 			}
-			// config.SymlinkRoots lists the trees the exports symlinks may lead
-			// into; see addAppMounts and exportProcMounts, which create them.
-			return ftp.StartWithValidator(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
-				srv.FileShareAuth().validatePassword, config.SymlinkRoots()...)
+			// The FTP server follows only the mount directories the exports symlinks
+			// lead to; see addAppMounts and exportProcMounts, which create them.
+			return ftp.StartWithValidator(withoutDebugLogging(ctx), publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
+				srv.FileShareAuth().validatePassword, ftpRoots(config.SymlinkRoots())...)
 		})
 	} else {
 		close(sftpPortCh)
