@@ -21,12 +21,14 @@ func TestSafeMounts(t *testing.T) {
 		"/a:b":               types.MountPolicyRemote,
 		"/a\"b":              types.MountPolicyRemote,
 		"/a\nb":              types.MountPolicyRemote,
-		"/a/":                types.MountPolicyRemote,
+		"/a//b":              types.MountPolicyRemote,
+		"/data/":             types.MountPolicyRemote,
 		"/tmp":               types.MountPolicyLocal,
 	}
 	out := safeMounts(context.Background(), in)
 	assert.Equal(t, types.MountPolicies{
 		"/var/run/secrets": types.MountPolicyRemote,
+		"/data/":           types.MountPolicyRemote,
 		"/tmp":             types.MountPolicyLocal,
 	}, out)
 }

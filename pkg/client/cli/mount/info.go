@@ -85,7 +85,8 @@ func safeMounts(ctx context.Context, mounts types.MountPolicies) types.MountPoli
 }
 
 func isSafeMountPath(p string) bool {
-	if !strings.HasPrefix(p, "/") || path.Clean(p) != p {
+	// A trailing slash is the only accepted deviation from the clean form.
+	if c := strings.TrimRight(p, "/"); !strings.HasPrefix(p, "/") || (c != "" && path.Clean(c) != c) {
 		return false
 	}
 	return strings.IndexFunc(p, func(r rune) bool {
