@@ -65,10 +65,10 @@ type injhardPodList struct {
 }
 
 // injhardPodsOf returns the non-terminating pods labeled app=name in ns.
-func injhardPodsOf(ctx context.Context, r *rt.Runtime, ns, name string) []injhardPod {
+func injhardPodsOf(ctx context.Context, r *rt.Runtime, ns, name string) ([]injhardPod, error) {
 	var pl injhardPodList
 	if err := r.KubectlJSON(ctx, ns, &pl, "get", "pod", "-l", "app="+name); err != nil {
-		return nil
+		return nil, err
 	}
 	var pods []injhardPod
 	for _, it := range pl.Items {
@@ -82,14 +82,18 @@ func injhardPodsOf(ctx context.Context, r *rt.Runtime, ns, name string) []injhar
 		slices.Sort(p.Containers)
 		pods = append(pods, p)
 	}
-	return pods
+	return pods, nil
 }
 
 // injhardAgentPodUIDs returns the UIDs of the non-terminating pods of name in
 // ns that carry a traffic-agent container.
-func injhardAgentPodUIDs(ctx context.Context, r *rt.Runtime, ns, name string) []string {
+func injhardAgentPodUIDs(ctx context.Context, r *rt.Runtime, ns, name string) ([]string, error) {
+	pods, err := injhardPodsOf(ctx, r, ns, name)
+	if err != nil {
+		return nil, err
+	}
 	var uids []string
-	for _, p := range injhardPodsOf(ctx, r, ns, name) {
+	for _, p := range pods {
 		for _, c := range p.Containers {
 			if strings.HasPrefix(c, agentContainerName+"=") {
 				uids = append(uids, p.UID)
@@ -98,7 +102,7 @@ func injhardAgentPodUIDs(ctx context.Context, r *rt.Runtime, ns, name string) []
 		}
 	}
 	slices.Sort(uids)
-	return uids
+	return uids, nil
 }
 
 // injhardRestoreManagerOnFailure restarts the traffic-manager at the end of

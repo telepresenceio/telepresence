@@ -1,6 +1,7 @@
 package injector
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 	"time"
@@ -62,9 +63,11 @@ func (s *injhardWebhook) Test_UninstallRefusedWithoutHookToken() {
 
 	existing := s.Workload(injhardAgentedTemplate("injhard-uninstall-existing"))
 	s.Require().Eventually(func() bool {
-		return len(injhardAgentPodUIDs(ctx, r, ns, existing.Name)) > 0
+		uids, err := injhardAgentPodUIDs(ctx, r, ns, existing.Name)
+		return err == nil && len(uids) > 0
 	}, injhardWait, injhardPoll, "%s should get an agent", existing.Name)
-	before := injhardAgentPodUIDs(ctx, r, ns, existing.Name)
+	before, err := injhardAgentPodUIDs(ctx, r, ns, existing.Name)
+	s.Require().NoError(err)
 
 	port, token := s.caller()
 	for name, header := range map[string]map[string]string{
@@ -78,12 +81,14 @@ func (s *injhardWebhook) Test_UninstallRefusedWithoutHookToken() {
 	}
 
 	s.Never(func() bool {
-		return !slices.Equal(injhardAgentPodUIDs(ctx, r, ns, existing.Name), before)
+		uids, err := injhardAgentPodUIDs(ctx, r, ns, existing.Name)
+		return err == nil && !slices.Equal(uids, before)
 	}, 20*time.Second, injhardPoll, "the agent pods of %s should stay", existing.Name)
 
 	fresh := s.Workload(injhardAgentedTemplate("injhard-uninstall-fresh"))
 	s.Require().Eventually(func() bool {
-		return len(injhardAgentPodUIDs(ctx, r, ns, fresh.Name)) > 0
+		uids, err := injhardAgentPodUIDs(ctx, r, ns, fresh.Name)
+		return err == nil && len(uids) > 0
 	}, injhardWait, injhardPoll, "%s should still get an agent", fresh.Name)
 }
 
@@ -135,10 +140,24 @@ func (s *injhardWebhook) Test_ForgedAdmissionLeavesNoConfig() {
 		map[string]string{"Content-Type": "application/json"}, injhardJSON(t, review))
 	s.Require().NoError(err)
 	s.Require().Equal(http.StatusOK, code, "%s", body)
+	var decision struct {
+		Response struct {
+			Allowed bool   `json:"allowed"`
+			Patch   []byte `json:"patch"`
+		} `json:"response"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &decision), "%s", body)
+	s.Require().True(decision.Response.Allowed, "the forged request should be admitted: %s", body)
+	s.Require().Contains(string(decision.Response.Patch), agentContainerName, "the review should be answered with an agent patch")
 
 	_, err = r.Kubectl(ctx, ns, "rollout", "restart", "deployment/"+wl.Name)
 	s.Require().NoError(err)
 	_, err = r.Kubectl(ctx, ns, "rollout", "status", "deployment/"+wl.Name, "--timeout=90s")
 	s.Require().NoError(err)
-	s.Empty(injhardAgentPodUIDs(ctx, r, ns, wl.Name), "the restarted pods of %s should have no agent", wl.Name)
+	pods, err := injhardPodsOf(ctx, r, ns, wl.Name)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(pods, "the restarted deployment should have pods")
+	uids, err := injhardAgentPodUIDs(ctx, r, ns, wl.Name)
+	s.Require().NoError(err)
+	s.Empty(uids, "the restarted pods of %s should have no agent", wl.Name)
 }

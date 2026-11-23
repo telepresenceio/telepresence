@@ -179,7 +179,13 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, includ
 // starts or a client attaches.
 func (c *configWatcher) applyRegeneratedConfig(ctx context.Context, wl k8sapi.Workload, old, regenerated *agentconfig.Sidecar, claimed bool) {
 	c.Store(regenerated)
-	if !claimed || sameAgentConfig(ctx, old, regenerated) {
+	if sameAgentConfig(ctx, old, regenerated) {
+		return
+	}
+	if !claimed {
+		// Pods aren't replaced for a Service that no intercept uses, but a replacement that is already
+		// underway must target the config that new pods are now injected with.
+		c.retargetEviction(ctx, wl, regenerated)
 		return
 	}
 	clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
@@ -199,4 +205,18 @@ func sameAgentConfig(ctx context.Context, a, b *agentconfig.Sidecar) bool {
 	return cmp.Equal(ta, tb, cmpopts.EquateEmpty(), cmpopts.EquateComparable(netip.Prefix{}), cmp.Comparer(func(x, y *durationpb.Duration) bool {
 		return x.AsDuration() == y.AsDuration()
 	}))
+}
+
+// retargetEviction changes the wanted config of an eviction that is in progress for wl.
+func (c *configWatcher) retargetEviction(ctx context.Context, wl k8sapi.Workload, wanted *agentconfig.Sidecar) {
+	state, ok := c.evictionStates.Load(workloadKeyOf(wl))
+	if !ok {
+		return
+	}
+	state.Lock()
+	requested := state.requested && state.wanted != nil
+	state.Unlock()
+	if requested {
+		c.requestEviction(ctx, wl, wanted)
+	}
 }

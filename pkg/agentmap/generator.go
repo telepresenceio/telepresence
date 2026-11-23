@@ -132,12 +132,27 @@ func (cfg *GeneratorConfig) Generate(
 	}
 
 	pns := make(map[int32]uint16)
+	preserved := preservedAgentPorts(cfg, existingConfig, pod)
+	used := make(map[uint16]struct{}, len(preserved))
+	for _, p := range preserved {
+		used[p] = struct{}{}
+	}
 	agentPortNumberFunc := func(cnPort int32) uint16 {
 		if p, ok := pns[cnPort]; ok {
 			// Port already mapped. Reuse that mapping
 			return p
 		}
-		p := cfg.AgentPort + uint16(len(pns))
+		p, ok := preserved[cnPort]
+		if !ok {
+			p = cfg.AgentPort + uint16(len(pns))
+			for {
+				if _, taken := used[p]; !taken {
+					break
+				}
+				p++
+			}
+			used[p] = struct{}{}
+		}
 		pns[cnPort] = p
 		return p
 	}
@@ -426,6 +441,57 @@ nextContainerPort:
 		ccs = append(ccs, cfg.newContainerConfig(cn, len(ccs), []*agentconfig.Intercept{ic}, containerReplacePolicy(existingConfig, cn)))
 	}
 	return ccs, nil
+}
+
+// preservedAgentPorts returns the agent port that each container port of a running pod's config is
+// mapped to, so that regenerating the config doesn't move ports a running agent is already using.
+// Ports that are ambiguous, collide with each other, or collide with a port of the pod or the agent
+// are not preserved.
+func preservedAgentPorts(cfg *GeneratorConfig, existingConfig *agentconfig.Sidecar, pod *core.PodTemplateSpec) map[int32]uint16 {
+	if existingConfig == nil {
+		return nil
+	}
+	reserved := map[uint16]struct{}{cfg.AgentPort: {}, cfg.APIPort: {}, cfg.QuicPort: {}, 0: {}}
+	for i := range pod.Spec.Containers {
+		for _, cp := range pod.Spec.Containers[i].Ports {
+			reserved[uint16(cp.ContainerPort)] = struct{}{}
+		}
+	}
+	byContainerPort := make(map[int32]uint16)
+	ambiguous := make(map[int32]struct{})
+	for _, cc := range existingConfig.Containers {
+		if cc == nil {
+			continue
+		}
+		for _, ic := range cc.Intercepts {
+			if ic == nil {
+				continue
+			}
+			cp := int32(ic.ContainerPort)
+			if prev, ok := byContainerPort[cp]; ok && prev != ic.AgentPort {
+				ambiguous[cp] = struct{}{}
+			}
+			byContainerPort[cp] = ic.AgentPort
+		}
+	}
+	owners := make(map[uint16]int32, len(byContainerPort))
+	for cp, ap := range byContainerPort {
+		if _, bad := ambiguous[cp]; bad {
+			delete(byContainerPort, cp)
+			continue
+		}
+		if _, bad := reserved[ap]; bad || ap < 1024 {
+			delete(byContainerPort, cp)
+			continue
+		}
+		if other, dup := owners[ap]; dup {
+			delete(byContainerPort, cp)
+			delete(byContainerPort, other)
+			continue
+		}
+		owners[ap] = cp
+	}
+	return byContainerPort
 }
 
 func soleApplicationContainer(cns []core.Container) *core.Container {
