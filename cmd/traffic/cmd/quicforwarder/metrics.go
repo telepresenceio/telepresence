@@ -108,7 +108,11 @@ func (m *metrics) addForwarded(n int64) {
 }
 
 func (m *metrics) addDrop(reason dropReason) {
-	m.dropped[reason].Add(1)
+	m.addDrops(reason, 1)
+}
+
+func (m *metrics) addDrops(reason dropReason, n int64) {
+	m.dropped[reason].Add(n)
 }
 
 // LogSnapshot logs the current cumulative counters at debug level. It is intended to be

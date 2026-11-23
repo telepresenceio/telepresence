@@ -108,20 +108,14 @@ func (t *flowTable) putBatchBuffers(gro bool, b *batchBuffers) {
 	t.batchPools[i].Put(b)
 }
 
-// waitReadable blocks until conn has data to read or is closed.
+// waitReadable blocks until conn has data to read or is closed. RawConn.Read discards any
+// readiness seen before the call, so the callback itself checks for queued data.
 func waitReadable(conn *net.UDPConn) error {
 	rc, err := conn.SyscallConn()
 	if err != nil {
 		return err
 	}
-	first := true
-	return rc.Read(func(uintptr) bool {
-		if first {
-			first = false
-			return false
-		}
-		return true
-	})
+	return rc.Read(readable)
 }
 
 func newFlowTable(frontPC *ipv4.PacketConn, m *metrics) *flowTable {
@@ -177,18 +171,19 @@ func (t *flowTable) writeBatchToBackend(ctx context.Context, e *flowEntry, msgs 
 	return len(msgs)
 }
 
-// CreateAndForward implements flowSink.
-func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, port uint16, datagrams [][]byte) {
+// CreateAndForward implements flowSink. It returns the number of datagrams that were not
+// dropped because the flow could not be created.
+func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, port uint16, datagrams [][]byte) int {
 	backendAddr := netip.AddrPortFrom(backendIP, port)
 	key := ipKey(src.Addr())
-	if !t.reserve(ctx, src, key) {
-		return
+	if !t.reserve(ctx, src, key, len(datagrams)) {
+		return 0
 	}
 	conn, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(backendAddr))
 	if err != nil {
 		t.release(key)
 		clog.Debugf(ctx, "quic-forwarder: dial backend %s for flow %s failed: %v", backendAddr, src, err)
-		return
+		return 0
 	}
 	raiseSocketBuffers(conn)
 	gro := enableGRO(conn)
@@ -209,7 +204,7 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 		if err := writeBatchAll(existing.pc, msgsForDatagrams(datagrams)); err != nil {
 			clog.Debugf(ctx, "quic-forwarder: write to backend for flow %s failed: %v", src, err)
 		}
-		return
+		return len(datagrams)
 	}
 	t.flows[src] = e
 	t.mu.Unlock()
@@ -220,25 +215,26 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 	if err := writeBatchAll(e.pc, msgsForDatagrams(datagrams)); err != nil {
 		clog.Debugf(ctx, "quic-forwarder: write to backend %s for flow %s failed: %v", backendAddr, src, err)
 	}
+	return len(datagrams)
 }
 
 // reserve counts a prospective flow for src against the caps. It reports false, and
-// drops the datagram, when either cap is reached. An existing flow for src is not
+// counts the n datagrams as dropped, when either cap is reached. An existing flow for src is not
 // counted again.
-func (t *flowTable) reserve(ctx context.Context, src netip.AddrPort, key netip.Addr) bool {
+func (t *flowTable) reserve(ctx context.Context, src netip.AddrPort, key netip.Addr, n int) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if _, ok := t.flows[src]; !ok {
 		switch {
 		case t.maxFlows > 0 && t.reserved >= t.maxFlows:
-			t.metrics.addDrop(dropFlowCap)
+			t.metrics.addDrops(dropFlowCap, int64(n))
 			if !t.totalCapLogged {
 				t.totalCapLogged = true
 				clog.Warnf(ctx, "quic-forwarder: flow limit %d reached; dropping datagrams that would create new flows", t.maxFlows)
 			}
 			return false
 		case t.maxFlowsPerIP > 0 && t.perIP[key] >= t.maxFlowsPerIP:
-			t.metrics.addDrop(dropFlowCap)
+			t.metrics.addDrops(dropFlowCap, int64(n))
 			if !t.ipCapLogged {
 				t.ipCapLogged = true
 				clog.Warnf(ctx, "quic-forwarder: per-address flow limit %d reached for %s; dropping datagrams that would create new flows", t.maxFlowsPerIP, key)

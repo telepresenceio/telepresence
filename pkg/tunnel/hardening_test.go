@@ -174,7 +174,15 @@ func (p *countingProvider) Tunnel(context.Context, ...grpc.CallOption) (GRPCClie
 	return nil, errors.New("no tunnel")
 }
 
-func runDialLoop(t *testing.T, ids []ConnID, allowed DialAllowed) *countingProvider {
+// countingMetrics counts the dials that reach a responder; refused requests never do.
+type countingMetrics struct {
+	incoming atomic.Int32
+}
+
+func (m *countingMetrics) IncomingDial()      { m.incoming.Add(1) }
+func (m *countingMetrics) IncomingDialError() {}
+
+func runDialLoop(t *testing.T, ids []ConnID, allowed DialAllowed) (*countingProvider, *countingMetrics) {
 	t.Helper()
 	requests := make(chan *rpc.DialRequest, len(ids))
 	for _, id := range ids {
@@ -182,10 +190,11 @@ func runDialLoop(t *testing.T, ids []ConnID, allowed DialAllowed) *countingProvi
 	}
 	close(requests)
 	p := &countingProvider{}
+	m := &countingMetrics{}
 	require.NotPanics(t, func() {
-		require.NoError(t, DialWaitLoop(context.Background(), AgentToClient, p, &dialRequestStream{requests: requests}, "session", allowed, nil))
+		require.NoError(t, DialWaitLoop(context.Background(), AgentToClient, p, &dialRequestStream{requests: requests}, "session", allowed, m))
 	})
-	return p
+	return p, m
 }
 
 func TestDialWaitLoop_MalformedIDsAreDropped(t *testing.T) {
@@ -197,10 +206,11 @@ func TestDialWaitLoop_MalformedIDsAreDropped(t *testing.T) {
 	}
 	ids = append(ids, idOfLength(13, types.ProtoICMP), idOfLength(37, 0))
 	var asked atomic.Int32
-	p := runDialLoop(t, ids, func(ConnID) bool { asked.Add(1); return true })
+	p, m := runDialLoop(t, ids, func(ConnID) bool { asked.Add(1); return true })
 	time.Sleep(50 * time.Millisecond)
 	assert.Zero(t, asked.Load())
 	assert.Zero(t, p.calls.Load())
+	assert.Zero(t, m.incoming.Load())
 }
 
 func TestDialWaitLoop_RefusesWhenNotAllowed(t *testing.T) {
@@ -210,9 +220,10 @@ func TestDialWaitLoop_RefusesWhenNotAllowed(t *testing.T) {
 		"false": func(ConnID) bool { return false },
 	} {
 		t.Run(name, func(t *testing.T) {
-			p := runDialLoop(t, ids, allowed)
-			// Each refused request is answered with a reject, which needs a tunnel; none is served.
+			p, m := runDialLoop(t, ids, allowed)
+			// Each refused request is answered with a reject, which needs a tunnel; none reaches a responder.
 			require.Eventually(t, func() bool { return p.calls.Load() == int32(len(ids)) }, 5*time.Second, 10*time.Millisecond)
+			assert.Zero(t, m.incoming.Load())
 		})
 	}
 }
@@ -220,16 +231,10 @@ func TestDialWaitLoop_RefusesWhenNotAllowed(t *testing.T) {
 func TestDialWaitLoop_ServesAllowed(t *testing.T) {
 	target := NewConnID(types.ProtoTCP, netip.MustParseAddrPort("10.0.0.1:1000"), netip.MustParseAddrPort("127.0.0.1:8080"))
 	other := NewConnID(types.ProtoTCP, netip.MustParseAddrPort("10.0.0.1:1000"), netip.MustParseAddrPort("169.254.169.254:80"))
-	var served []ConnID
-	p := runDialLoop(t, []ConnID{target, other}, func(id ConnID) bool {
-		ok := id == target
-		if ok {
-			served = append(served, id)
-		}
-		return ok
-	})
+	p, m := runDialLoop(t, []ConnID{target, other}, func(id ConnID) bool { return id == target })
 	require.Eventually(t, func() bool { return p.calls.Load() == 2 }, 5*time.Second, 10*time.Millisecond)
-	assert.Equal(t, []ConnID{target}, served)
+	// Only the allowed destination reaches a responder; the other is rejected.
+	assert.Equal(t, int32(1), m.incoming.Load())
 }
 
 func totalAlloc() uint64 {

@@ -126,7 +126,14 @@ func (s *TunnelwireQuicHardening) Test_FlowFloodFromOneHostIsCapped() {
 	p := tunnelwireArrive(t, ctx, r, s.AppNamespace())
 	t.Cleanup(func() { deleteQuicForwarderPods(t, ctx, r) })
 
+	// The forwarder must accept a connection before the cap is exercised, so that a flood
+	// that fails for any other reason cannot pass. This connection counts toward the limit.
+	first, err := p.dial(ctx)
+	s.Require().NoError(err, "the first QUIC connection through the forwarder")
+	t.Cleanup(func() { _ = first.CloseWithError(0, "") })
+
 	var established atomic.Int32
+	established.Store(1)
 	var wg sync.WaitGroup
 	conns := make(chan *quicgo.Conn, tunnelwireFlood)
 	for range tunnelwireFlood {

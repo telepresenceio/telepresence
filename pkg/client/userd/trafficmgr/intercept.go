@@ -186,6 +186,9 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 }
 
 func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*manager.InterceptInfo) {
+	// The root daemon must know the targets before any waiter is told that an intercept is
+	// active and before a removal is reported as done.
+	s.pushInterceptTargets(intercepts)
 	s.setCurrentIntercepts(intercepts)
 	pat.initSnapshot()
 	for id := range s.agentless {
@@ -273,7 +276,6 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 	}
 	pat.cancelUnwanted(s, nil)
 	s.pushInterceptShortcuts(intercepts)
-	s.pushInterceptTargets(intercepts)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does

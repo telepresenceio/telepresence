@@ -141,13 +141,14 @@ func (f *fakeSink) Forward(_ context.Context, src netip.AddrPort, datagram []byt
 	return true
 }
 
-func (f *fakeSink) CreateAndForward(_ context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte) {
+func (f *fakeSink) CreateAndForward(_ context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.flows[src] = true
 	cp := make([][]byte, len(datagrams))
 	copy(cp, datagrams)
 	f.creates = append(f.creates, createCall{src: src, backend: backend, port: port, datagrams: cp})
+	return len(datagrams)
 }
 
 func (f *fakeSink) createCount() int {
