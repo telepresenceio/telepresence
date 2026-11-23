@@ -871,9 +871,9 @@ properties:
         properties:
           mode:
             description: >-
-              disabled performs no token validation, permissive (the default) validates
-              tokens and logs authorization decisions without rejecting any call, and
-              enforcing rejects unauthenticated or unauthorized calls.
+              disabled performs no token validation, permissive validates tokens and
+              logs authorization decisions without rejecting any call, and enforcing
+              (the default) rejects unauthenticated or unauthorized calls.
             type: string
             enum: ["disabled", "permissive", "enforcing"]
           x509:

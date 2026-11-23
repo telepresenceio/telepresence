@@ -188,9 +188,9 @@ type Env struct {
 	// LogStreamDeadline bounds the total duration of one StreamLogs request.
 	LogStreamDeadline time.Duration `default:"5m"`
 
-	// AuthenticationMode controls how strictly the traffic-manager enforces
-	// caller authentication (disabled, permissive, or enforcing).
-	AuthenticationMode auth.Mode `default:"permissive"`
+	// AuthenticationMode controls how the traffic-manager treats caller
+	// authentication (disabled, permissive, or enforcing).
+	AuthenticationMode auth.Mode `default:"enforcing"`
 
 	// AuthorizationRequiredGrant is the grant a client must hold to be
 	// authorized to connect and to attach to a workload: pods/portforward
