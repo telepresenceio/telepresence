@@ -54,7 +54,8 @@ items:
           upgraded without an explicit mode authenticates every client and
           traffic-agent, and checks that a client holds a grant for what it
           does. An enforcing traffic-manager refuses clients older than
-          2.31.0; a permissive one still serves them.
+          2.31.0; a permissive one still serves them. Traffic-agents are
+          upgraded with the traffic-manager and need no action.
           <code>telepresence helm upgrade</code> without value flags uses the
           new chart's defaults together with the values that were set earlier,
           so an existing installation that never set the mode becomes

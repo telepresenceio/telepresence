@@ -253,7 +253,12 @@ for how the command treats values.
 An `enforcing` traffic-manager refuses:
 
 - Clients older than 2.31.0. They send no token.
-- Traffic-agents older than 2.31. They send no token.
+- Traffic-agents older than 2.31. They send no token. This needs no action:
+  when the traffic-manager is upgraded, it replaces the pods that carry a
+  traffic-agent, so that they get the agent of its own version. See
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing). Only an
+  agent that the traffic-manager's agent-injector did not inject stays as it
+  is.
 - A user who lacks the grant a call needs. To connect, the user needs
   `create` on `connections.telepresence.io` in the traffic-manager's
   namespace, or `pods/portforward` there. To intercept, replace, or
@@ -432,11 +437,10 @@ The [access levels](#access-levels) add two more cases:
   error, until the traffic-manager has been upgraded. Upgrade the
   traffic-manager before the agents are restarted.
 - **An agent older than 2.34 with a current traffic-manager.** The agent
-  never asks for access levels and checks the session credential only. The
-  traffic-manager does not replace a pod when only the agent image changes,
-  so such an agent keeps this behaviour until its pod is restarted (for
-  example with `kubectl rollout restart`), which injects the current agent
-  image.
+  never asks for access levels and checks the session credential only. This
+  lasts until the traffic-manager has replaced the agent's pod, which it
+  does after an upgrade. See
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing).
 
 The checks on the agent's identity depend only on the traffic-manager, so
 they apply to agents of every version that sends the `traffic-manager`

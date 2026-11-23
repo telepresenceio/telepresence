@@ -156,10 +156,14 @@ From 2.34.0, the default of `security.authentication.mode` is `enforcing`. An in
 becomes `enforcing` when `telepresence helm upgrade` upgrades it. An installation that set the mode explicitly keeps
 it. An `enforcing` traffic-manager refuses:
 
-- clients older than 2.31.0 and traffic-agents older than 2.31, which send no token,
+- clients older than 2.31.0, which send no token,
 - users without the grant a call needs (`connections.telepresence.io` or `pods/portforward` to connect,
   `attachments.telepresence.io` or `pods/portforward` to attach),
 - kubeconfigs that authenticate with a client certificate the traffic-manager cannot verify.
+
+Traffic-agents need no action. When the traffic-manager is upgraded, it replaces the pods that carry a traffic-agent,
+so that they get the agent of the new version. See
+[Agent Rollout Pacing](../reference/cluster-config.md#agent-rollout-pacing).
 
 To keep the previous mode while you prepare, add `--set security.authentication.mode=permissive` to the upgrade
 command, together with the values that you set earlier. See
