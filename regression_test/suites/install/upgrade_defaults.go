@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,11 +54,10 @@ func (s *HelmUpgradeDefaults) installReleased(ns string, extra ...string) {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
-	args := []string{
+	args := slices.Concat([]string{
 		"helm", "install", "--manager-namespace", ns, "--version", releasedChartVersion,
 		"--set", "namespaces={" + ns + "}", "--set", "image.registry=ghcr.io/telepresenceio",
-	}
-	args = append(args, extra...)
+	}, extra)
 	_, stderr, err := s.CLI().Run(ctx, args...)
 	t.Cleanup(func() {
 		_, _, _ = s.CLI().Run(ctx, "helm", "uninstall", "--manager-namespace", ns)
