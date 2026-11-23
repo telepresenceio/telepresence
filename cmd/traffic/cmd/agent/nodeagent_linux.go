@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strings"
 
 	"github.com/google/nftables"
 
@@ -247,21 +248,30 @@ func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agen
 		return err
 	}
 
+	mountPoints, err := procfs.MountPoints(pid)
+	if err != nil {
+		return err
+	}
+	canonicalPaths := make(map[string]string, len(cn.Mounts))
+	for path := range cn.Mounts {
+		canonicalPaths[path] = canonicalMountPath(ctx, pid, cn, path)
+	}
+
 	for path, policy := range cn.Mounts {
 		switch policy {
 		case types.MountPolicyRemote, types.MountPolicyRemoteReadOnly:
 		default:
 			continue
 		}
+		linkPath := canonicalPaths[path]
+		if nested, ok := unsharedNestedMount(linkPath, policy, mountPoints, cn.Mounts, canonicalPaths); ok {
+			clog.Warnf(ctx, "Container %s: not sharing %q because the mount point %q below it is not shared with remote users",
+				cn.Name, path, nested)
+			continue
+		}
 		target := filepath.Join(cnMountPoint, path)
 		if err := dos.MkdirAll(ctx, filepath.Dir(target), 0o700); err != nil {
 			return err
-		}
-		linkPath := path
-		if canonical, cerr := resolveInRoot(procfs.RootPath(pid), path); cerr != nil {
-			clog.Infof(ctx, "Unable to canonicalize mount path %q for container %s: %v", path, cn.Name, cerr)
-		} else {
-			linkPath = canonical
 		}
 		if err := dos.Symlink(ctx, procfs.RootPath(pid, linkPath), target); err != nil {
 			return err
@@ -274,6 +284,53 @@ func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agen
 
 	pruneMissingMounts(ctx, cn, cnMountPoint)
 	return nil
+}
+
+// canonicalMountPath returns the absolute path of mountPath in the filesystem of pid, with all
+// symlinks resolved. The path is returned unchanged when it cannot be resolved.
+func canonicalMountPath(ctx context.Context, pid int, cn *agentconfig.Container, mountPath string) string {
+	canonical, err := resolveInRoot(procfs.RootPath(pid), mountPath)
+	if err != nil {
+		clog.Infof(ctx, "Unable to canonicalize mount path %q for container %s: %v", mountPath, cn.Name, err)
+		return mountPath
+	}
+	return canonical
+}
+
+// unsharedNestedMount returns a mount point below dir that remote users must not reach through
+// dir: one that is not shared with them, or that is shared read-only below a read-write dir.
+// canonicalPaths maps the keys of mounts to their canonical paths.
+func unsharedNestedMount(dir string, policy types.MountPolicy, mountPoints []string, mounts map[string]types.MountPolicy, canonicalPaths map[string]string) (string, bool) {
+	dir = "/" + strings.Trim(filepath.ToSlash(dir), "/")
+	prefix := dir
+	if prefix != "/" {
+		prefix += "/"
+	}
+	for _, mp := range mountPoints {
+		mp = filepath.Clean(mp)
+		if mp == dir || !strings.HasPrefix(mp, prefix) {
+			continue
+		}
+		if !nestedMountAllowed(mp, policy, mounts, canonicalPaths) {
+			return mp, true
+		}
+	}
+	return "", false
+}
+
+func nestedMountAllowed(mp string, parent types.MountPolicy, mounts map[string]types.MountPolicy, canonicalPaths map[string]string) bool {
+	for path, canonical := range canonicalPaths {
+		if "/"+strings.Trim(filepath.ToSlash(canonical), "/") != mp {
+			continue
+		}
+		switch mounts[path] {
+		case types.MountPolicyRemote:
+			return true
+		case types.MountPolicyRemoteReadOnly:
+			return parent == types.MountPolicyRemoteReadOnly
+		}
+	}
+	return false
 }
 
 // targetPID returns a host PID that resolves into the target pod's network namespace. A

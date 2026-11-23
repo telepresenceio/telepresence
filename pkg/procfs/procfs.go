@@ -103,3 +103,42 @@ func InUserNamespace(pid int) (bool, error) {
 	}
 	return true, nil
 }
+
+// MountPoints returns the mount points in pid's mount namespace, as pid sees them, read from
+// /proc/<pid>/mountinfo.
+func MountPoints(pid int) ([]string, error) {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/mountinfo", pid))
+	if err != nil {
+		return nil, fmt.Errorf("read mountinfo of pid %d: %w", pid, err)
+	}
+	var points []string
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		// Fields: id parent major:minor root mount-point options ...
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		points = append(points, unescapeMountPath(fields[4]))
+	}
+	return points, nil
+}
+
+// unescapeMountPath decodes the octal escapes (\040 for space, etc.) that the kernel uses in
+// mountinfo paths.
+func unescapeMountPath(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+4 <= len(s) {
+			if v, err := strconv.ParseUint(s[i+1:i+4], 8, 8); err == nil {
+				sb.WriteByte(byte(v))
+				i += 3
+				continue
+			}
+		}
+		sb.WriteByte(s[i])
+	}
+	return sb.String()
+}
