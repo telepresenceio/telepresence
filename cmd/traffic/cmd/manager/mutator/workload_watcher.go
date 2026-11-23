@@ -2,6 +2,7 @@ package mutator
 
 import (
 	"context"
+	"runtime/debug"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,6 +44,13 @@ func shouldWatchWorkload(wl k8sapi.Workload, enabledKinds k8sapi.Kinds) bool {
 	return false
 }
 
+// recoverHandlerPanic must be deferred directly. It logs a panic with its stack and lets the caller carry on.
+func recoverHandlerPanic(ctx context.Context, what string) {
+	if r := recover(); r != nil {
+		clog.Errorf(ctx, "panic in %s handler: %v\n%s", what, r, debug.Stack())
+	}
+}
+
 func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer) (cache.ResourceEventHandlerRegistration, error) {
 	enabledKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	deleteWorkload := func(wl k8sapi.Workload) {
@@ -56,11 +64,13 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "workload add")
 				if wl, ok := workload.FromAny(obj); ok && shouldWatchWorkload(wl, enabledKinds) {
 					c.updateWorkload(ctx, wl, nil, workload.GetWorkloadState(wl))
 				}
 			},
 			DeleteFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "workload delete")
 				if wl, ok := workload.FromAny(obj); ok {
 					if shouldWatchWorkload(wl, enabledKinds) {
 						deleteWorkload(wl)
@@ -72,6 +82,7 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
+				defer recoverHandlerPanic(ctx, "workload update")
 				if wl, ok := workload.FromAny(newObj); ok && shouldWatchWorkload(wl, enabledKinds) {
 					if oldWl, ok := workload.FromAny(oldObj); ok {
 						c.updateWorkload(ctx, wl, oldWl, workload.GetWorkloadState(wl))

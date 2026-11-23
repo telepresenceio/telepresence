@@ -20,6 +20,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/usg"
@@ -368,6 +369,16 @@ func ensureNodeAgentTarget(
 			return errcat.User.Newf("unable to resolve a container ID for container %q in pod %s.%s", cn.Name, target.podName, cfg.Namespace)
 		}
 	}
+
+	// The image and the manager host come from the traffic-manager's own configuration.
+	agentImage := managerutil.GetAgentImage(ctx)
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(agentImage)
+	if err != nil {
+		return err
+	}
+	cfg = cfg.Clone()
+	cfg.AgentImage = agentImage
+	cfg.ManagerHost = agentmap.ManagerHost(gc.ManagerNamespace, gc.ClusterDomain)
 
 	job, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
 		namespace:    namespace,

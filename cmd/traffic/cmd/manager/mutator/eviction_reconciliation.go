@@ -3,6 +3,7 @@ package mutator
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -120,7 +121,7 @@ func (c *configWatcher) runEvictionWorker(ctx context.Context) {
 		if shutdown {
 			return
 		}
-		pending, err := c.reconcile(ctx, key)
+		pending, err := c.reconcileRecovering(ctx, key)
 		switch {
 		case err != nil && ctx.Err() == nil:
 			clog.Warnf(ctx, "Agent pod eviction for %s will be retried: %v", key, err)
@@ -132,6 +133,17 @@ func (c *configWatcher) runEvictionWorker(ctx context.Context) {
 		}
 		q.Done(key)
 	}
+}
+
+// reconcileRecovering runs reconcile and reports a panic as an error, so that the worker survives.
+func (c *configWatcher) reconcileRecovering(ctx context.Context, key WorkloadKey) (pending bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			clog.Errorf(ctx, "panic in eviction worker for %s: %v\n%s", key, r, debug.Stack())
+			pending, err = false, fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return c.reconcile(ctx, key)
 }
 
 // reconcile runs one eviction pass for the workload and reports whether more passes are needed.
@@ -320,9 +332,11 @@ func (c *configWatcher) deferEviction(ctx context.Context, state *workloadEvicti
 func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInformer) (cache.ResourceEventHandlerRegistration, error) {
 	return ix.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
+			defer recoverHandlerPanic(ctx, "pod")
 			c.podChanged(ctx, obj)
 		},
 		UpdateFunc: func(oldObj, newObj any) {
+			defer recoverHandlerPanic(ctx, "pod")
 			oldPod, oldOK := oldObj.(*core.Pod)
 			newPod, newOK := newObj.(*core.Pod)
 			if oldOK && newOK &&
@@ -334,6 +348,7 @@ func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInfor
 			c.podChanged(ctx, newObj)
 		},
 		DeleteFunc: func(obj any) {
+			defer recoverHandlerPanic(ctx, "pod")
 			c.podChanged(ctx, obj)
 		},
 	})
