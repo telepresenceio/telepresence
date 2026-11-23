@@ -35,7 +35,7 @@ A traffic-agent that reconnects to the traffic-manager can now only use the sess
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Agent identity and per-session access in enforcing mode](reference/authentication)</div></div>
 <div style="margin-left: 15px">
 
-With <code>security.authentication.mode</code> set to <code>enforcing</code>, the traffic-manager accepts a traffic-agent only with a token that was issued for the traffic-manager audience, and only when the pod is a traffic-agent pod of the workload that the traffic-agent names. A traffic-agent lets a client session open tunnels only when the session may read the workload. It lets the session reach the file servers only when the session holds <code>create</code> or <code>get</code> on the workload's attachment. A traffic-agent remembers each answer for up to five minutes, so a grant that is revoked can keep working on a traffic-agent for that long. A traffic-agent from an earlier release does not ask for this access and keeps checking only the session credential. See the authentication reference.
+With <code>security.authentication.mode</code> set to <code>enforcing</code>, the traffic-manager accepts a traffic-agent only with a token that was issued for the traffic-manager audience, and only when the pod is a traffic-agent pod of the workload that the traffic-agent names. A traffic-agent lets a client session open tunnels only when the session may read the workload. It lets the session reach the file servers only when the session holds <code>create</code> or <code>get</code> on the workload's attachment. A traffic-agent remembers each answer for up to five minutes, so a grant that is revoked can keep working on a traffic-agent for that long. A traffic-agent from an earlier release does not ask for this access and keeps checking only the session credential. A pod counts as a pod of a Deployment or an Argo Rollout only when a ReplicaSet that the workload controls owns it and its labels match the workload's selector. A pod that names a Deployment directly as its controller is not accepted as that Deployment's traffic-agent. The traffic-manager follows owner references up to eight levels, so objects that own each other no longer make it exit. See the authentication reference.
 </div>
 
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Agent-side protections need a pod restart</div></div>
@@ -53,7 +53,7 @@ In enforcing mode, <code>telepresence gather-logs</code> now leaves out, without
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Malformed and excessive input is handled safely</div></div>
 <div style="margin-left: 15px">
 
-Malformed tunnel messages and a DNS lookup of an empty name are rejected. The QUIC forwarder limits the number of new flows, and the traffic-manager limits requests that carry an unknown token. A port in the container-ports annotation that no container declares is given to the pod's only application container, or reported as an error when the pod has several. On a wiretapped port, a request with a large declared body no longer makes the traffic-agent do work in proportion to the declared size.
+Malformed tunnel messages and a DNS lookup of an empty name are rejected. The QUIC forwarder limits the number of new flows, and the traffic-manager limits requests that carry an unknown token. A port in the container-ports annotation that no container declares is given to the pod's only application container, or reported as an error when the pod has several. On a wiretapped port, a request with a large declared body no longer makes the traffic-agent do work in proportion to the declared size. The root daemon no longer exits on a dial request with an out-of-range timing value, an address record without an address, cluster information without a DNS part, or a DNS message without a question. The DNS handler, the dial handlers and the watchers recover from a panic and log it. A dial timeout that a peer asks for is capped at one minute, and that includes <code>timeouts.interceptEndpointDial</code> values above one minute. A dial that the traffic-manager makes for a client ends when the client's connection closes.
 </div>
 
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The client checks the names that it gets from the cluster</div></div>
@@ -65,7 +65,7 @@ The root daemon checks the DNS domain names that it gets from the traffic-manage
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The cluster decides less about the workstation</div></div>
 <div style="margin-left: 15px">
 
-The client configuration that the traffic-manager provides can no longer set the program used for mounts, the mount root, or the Docker, image and chart settings. A traffic-agent can make the root daemon dial only the targets of the session's own intercepts. That includes the additional pod ports of an intercept and all workloads of a shared-service intercept. When the daemon runs directly on the workstation, the ports opened with <code>--local-mount-port</code> and <code>--reroute-local</code> listen on localhost only. In a daemon container (<code>telepresence connect --docker</code>) they listen on the container's network.
+The client configuration that the traffic-manager provides can no longer set the program used for mounts, the mount root, or the Docker, image and chart settings. A traffic-agent can make the root daemon dial only the targets of the session's own intercepts. That includes the additional pod ports of an intercept and all workloads of a shared-service intercept. The user daemon acts only on intercepts that it created in the current session. The mount directory, the local ports and the dial targets come from the user's own request, never from the traffic-manager. Other intercepts in a snapshot are listed and can be removed, but nothing is mounted or opened for them. With <code>--port all</code>, or when no local port is given, the traffic-manager still picks the port, on the user's own target host. A mount path from the cluster that is not a clean absolute path, or that contains a comma, a colon, a quote, a backslash or a control character, is skipped with a warning when the intercept runs with <code>--docker-run</code>. The API port that a traffic-agent's environment names for the local REST API must be 1024 or higher. When the daemon runs directly on the workstation, the ports opened with <code>--local-mount-port</code> and <code>--reroute-local</code> listen on localhost only. In a daemon container (<code>telepresence connect --docker</code>) they listen on the container's network.
 </div>
 
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemon files and ports are protected from other local users</div></div>
@@ -2956,5 +2956,47 @@ The helm chart now correctly handles custom agentInjector.webhook.port that was 
 <div style="margin-left: 15px">
 
 Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Authorization is checked before a workload joins an intercept</div></div>
+<div style="margin-left: 15px">
+
+In an intercept of a shared Service, a workload joins as a participant only after the participant authorization has passed for it. A traffic-agent that registers no longer joins on its own. A request that names a Service UID without a Service name is treated as an intercept of a single workload.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Token reviews and the external listener are stricter](reference/authentication)</div></div>
+<div style="margin-left: 15px">
+
+Tokens that were accepted before have a review budget of their own, so a flood of unknown tokens can no longer get known clients and traffic-agents refused. A review that was throttled is not cached as a failure. In permissive mode, a call whose token review was throttled is served as unauthenticated and is not answered with <code>ResourceExhausted</code>. The external listener of the traffic-manager asks for a client certificate only when the cluster's client CA is loaded and x509 authentication is enabled, and it never checks a certificate against the public CA bundle of the image. It does not accept client certificates when x509 authentication is switched off or when the client CA cannot be read.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The injector acts only on the pods that it should</div></div>
+<div style="margin-left: 15px">
+
+An admission request for a namespace that the traffic-manager does not manage, or for a pod that names another namespace than the request, is admitted unchanged, and no traffic-agent configuration is generated for it. A node-agent creates a Job only for pods that the workload controls, also when the pods of another workload match the workload's selector.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Node-agent file sharing leaves out what must not be shared</div></div>
+<div style="margin-left: 15px">
+
+In node-agent mode, a shared directory is not offered for mounting when a volume that is not shared with remote users is mounted inside it, or when a read-only volume is mounted inside a read-write directory. The node-agent logs a warning that names both. A node-agent also does not offer volumes with the <code>RemoteReadOnly</code> mount policy over FTP. In both modes, a volume that is a single file is not offered over FTP. Such volumes remain available over SFTP. A traffic-agent that runs as a sidecar still offers read-only volumes over FTP.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Host-network workloads are refused when they need an init container</div></div>
+<div style="margin-left: 15px">
+
+An intercept of a workload that uses host networking is now refused with an error message when the Service port is numeric or the Service is headless. The init container of the traffic-agent would set up packet redirection in the node's network namespace. The traffic-manager checks this before it restarts any pod, and the injector no longer adds the init container to such a pod. It admits the pod without a traffic-agent and logs a warning. An intercept through a named port of a Service that is not headless needs no init container, and works as before.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercepts of a crashed user daemon carry no traffic</div></div>
+<div style="margin-left: 15px">
+
+After a crash of the user daemon, the intercepts of its cached session are listed but carry no traffic. Remove them and create them again. A normal quit, a reconnect and a restart of the traffic-manager are not affected.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-manager can read ReplicaSets when Deployments are enabled</div></div>
+<div style="margin-left: 15px">
+
+With <code>workloads.replicaSets.enabled=false</code>, the traffic-manager had no right to read ReplicaSets unless Argo Rollouts were enabled, so it could not tell which Deployment a pod belongs to. The Role of the traffic-manager now keeps read-only <code>get</code> access to ReplicaSets when Deployments or Argo Rollouts are enabled.
 </div>
 
