@@ -62,6 +62,15 @@ func replacementReconnectFixture(t *testing.T, noDefaultPort bool, envMods ...fu
 	}
 	cfgJSON, err := agentconfig.MarshalTight(sc)
 	req.NoError(err)
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-agent-7d9f8", Namespace: "default", UID: "test-agent-rs-uid",
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: dep.Name, UID: dep.UID, Controller: new(true),
+			}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Selector: dep.Spec.Selector},
+	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fallback-pod", Namespace: "default", UID: "fallback-pod-uid",
@@ -71,12 +80,12 @@ func replacementReconnectFixture(t *testing.T, noDefaultPort bool, envMods ...fu
 			},
 			Annotations: map[string]string{annotation.Config: cfgJSON},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: dep.Name, UID: dep.UID, Controller: new(true),
+				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: rs.Name, UID: rs.UID, Controller: new(true),
 			}},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
-	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, pod}, envMods...)
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, rs, pod}, envMods...)
 	sctx = managerutil.WithResolvedAgentImageRetriever(sctx, managerutil.ImageFromEnv(sc.AgentImage))
 	mutator.GetMap(sctx).Store(sc)
 	client := testdata.GetTestClients(t)["alice"]

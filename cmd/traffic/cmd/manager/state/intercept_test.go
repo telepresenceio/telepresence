@@ -605,7 +605,7 @@ func TestPrepareIntercept_SecondNodeAgentInterceptShared(t *testing.T) {
 	const mgrNs = "ambassador"
 
 	dep := &apps.Deployment{
-		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns, UID: nodeAgentTestDeploymentUID},
 		Spec: apps.DeploymentSpec{
 			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
 			Template: core.PodTemplateSpec{
@@ -631,7 +631,7 @@ func TestPrepareIntercept_SecondNodeAgentInterceptShared(t *testing.T) {
 	}
 	pod := nodeAgentTestPod(ns, "test-agent-abc123")
 
-	ci := fake.NewSimpleClientset(dep, svc, pod)
+	ci := fake.NewSimpleClientset(dep, svc, pod, nodeAgentTestReplicaSet(ns))
 	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
 
 	env := &managerutil.Env{
@@ -893,7 +893,7 @@ func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
 	const mgrNs = "ambassador"
 
 	dep := &apps.Deployment{
-		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns, UID: nodeAgentTestDeploymentUID},
 		Spec: apps.DeploymentSpec{
 			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
 			Template: core.PodTemplateSpec{
@@ -909,7 +909,7 @@ func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
 	}
 	pod := nodeAgentTestPod(ns, "test-agent-abc123")
 
-	ci := fake.NewSimpleClientset(dep, pod)
+	ci := fake.NewSimpleClientset(dep, pod, nodeAgentTestReplicaSet(ns))
 	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
 
 	env := &managerutil.Env{

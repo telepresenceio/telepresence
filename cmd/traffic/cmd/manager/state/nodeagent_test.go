@@ -17,8 +17,10 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+	"k8s.io/utils/ptr"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -887,6 +889,32 @@ func TestNodeAgentJobStale(t *testing.T) {
 	})
 }
 
+const (
+	nodeAgentTestDeploymentUID = types.UID("test-agent-deployment-uid")
+	nodeAgentTestRSName        = "test-agent-7d9f8"
+	nodeAgentTestRSUID         = types.UID("test-agent-rs-uid")
+)
+
+// nodeAgentTestReplicaSet returns the ReplicaSet that owns the pods
+// nodeAgentTestPod returns and is itself controlled by the Deployment
+// nodeAgentTestWorkload returns.
+func nodeAgentTestReplicaSet(ns string) *apps.ReplicaSet {
+	return &apps.ReplicaSet{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      nodeAgentTestRSName,
+			Namespace: ns,
+			UID:       nodeAgentTestRSUID,
+			Labels:    map[string]string{"app": "test-agent"},
+			OwnerReferences: []meta.OwnerReference{
+				{APIVersion: "apps/v1", Kind: "Deployment", Name: "test-agent", UID: nodeAgentTestDeploymentUID, Controller: ptr.To(true)},
+			},
+		},
+		Spec: apps.ReplicaSetSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+		},
+	}
+}
+
 // nodeAgentTestPod returns a Running & Ready pod that nodeAgentTargets will
 // select: it carries the labels nodeAgentTestWorkload's Deployment selects
 // on, a resolved container ID for its sole "app" container, and a PodIP.
@@ -896,6 +924,9 @@ func nodeAgentTestPod(ns, podName string) *core.Pod {
 			Name:      podName,
 			Namespace: ns,
 			Labels:    map[string]string{"app": "test-agent"},
+			OwnerReferences: []meta.OwnerReference{
+				{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: nodeAgentTestRSName, UID: nodeAgentTestRSUID, Controller: ptr.To(true)},
+			},
 		},
 		Spec: core.PodSpec{NodeName: "node-1"},
 		Status: core.PodStatus{
@@ -928,9 +959,12 @@ func nodeAgentTestPods(ns string, n int) []*core.Pod {
 // podRuntimeObjects converts pods to the []runtime.Object shape
 // fake.NewSimpleClientset takes as variadic seed objects.
 func podRuntimeObjects(pods []*core.Pod) []runtime.Object {
-	objs := make([]runtime.Object, len(pods))
-	for i, pod := range pods {
-		objs[i] = pod
+	objs := make([]runtime.Object, 0, len(pods)+1)
+	for _, pod := range pods {
+		objs = append(objs, pod)
+	}
+	if len(pods) > 0 {
+		objs = append(objs, nodeAgentTestReplicaSet(pods[0].Namespace))
 	}
 	return objs
 }
@@ -939,7 +973,7 @@ func podRuntimeObjects(pods []*core.Pod) []runtime.Object {
 // that nodeAgentTestPod returns.
 func nodeAgentTestWorkload(ns string) k8sapi.Workload {
 	d := &apps.Deployment{
-		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns, UID: nodeAgentTestDeploymentUID},
 		Spec: apps.DeploymentSpec{
 			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
 		},
@@ -977,7 +1011,7 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
 	wl := nodeAgentTestWorkload(cfg.Namespace)
 
-	ci := fake.NewSimpleClientset(pod)
+	ci := fake.NewSimpleClientset(pod, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
@@ -1017,7 +1051,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ci := fake.NewSimpleClientset(pod, existing)
+	ci := fake.NewSimpleClientset(pod, existing, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
@@ -1053,7 +1087,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 		{Type: batchv1.JobFailed, Status: core.ConditionTrue},
 	}
 
-	ci := fake.NewSimpleClientset(pod, existing)
+	ci := fake.NewSimpleClientset(pod, existing, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
@@ -1100,7 +1134,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 	now := meta.Now()
 	existing.DeletionTimestamp = &now
 
-	ci := fake.NewSimpleClientset(pod, existing)
+	ci := fake.NewSimpleClientset(pod, existing, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
@@ -1140,7 +1174,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ci := fake.NewSimpleClientset(pod, existing)
+	ci := fake.NewSimpleClientset(pod, existing, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
@@ -1231,7 +1265,7 @@ func TestNodeAgentTargets_NoneReady(t *testing.T) {
 	pod.Status.Phase = core.PodPending
 	pod.Status.Conditions = nil
 
-	ci := fake.NewSimpleClientset(pod)
+	ci := fake.NewSimpleClientset(pod, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 
 	_, err := nodeAgentTargets(ctx, wl)
@@ -1390,7 +1424,7 @@ func TestEnsureNodeAgent_ImageAndManagerHostFromManager(t *testing.T) {
 	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
 	wl := nodeAgentTestWorkload(cfg.Namespace)
 
-	ci := fake.NewSimpleClientset(pod)
+	ci := fake.NewSimpleClientset(pod, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))

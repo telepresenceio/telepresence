@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +37,26 @@ func seedAgentPod(e *readEnv, agent *rpc.AgentInfo) {
 		agent.PodIp = "10.1.2.9"
 	}
 	controller := true
+	ownerKind, ownerName, ownerUID := agent.Kind, agent.Name, types.UID(agent.Name+"-deployment-uid")
+	if agent.Kind == "Deployment" {
+		// A real Deployment pod is controlled by a ReplicaSet that the Deployment controls.
+		rs := &apps.ReplicaSet{
+			ObjectMeta: meta.ObjectMeta{
+				Name:      agent.Name + "-rs",
+				Namespace: agent.Namespace,
+				UID:       types.UID(agent.Name + "-rs-uid"),
+				OwnerReferences: []meta.OwnerReference{{
+					APIVersion: "apps/v1", Kind: "Deployment", Name: agent.Name, UID: ownerUID, Controller: &controller,
+				}},
+			},
+			Spec: apps.ReplicaSetSpec{Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": agent.Name}}},
+		}
+		_, err := k8sapi.GetK8sInterface(e.sctx).AppsV1().ReplicaSets(agent.Namespace).Create(e.sctx, rs, meta.CreateOptions{})
+		if !k8sErrors.IsAlreadyExists(err) {
+			require.NoError(e.t, err)
+		}
+		ownerKind, ownerName, ownerUID = "ReplicaSet", rs.Name, rs.UID
+	}
 	pod := &core.Pod{
 		ObjectMeta: meta.ObjectMeta{
 			Name:      agent.PodName,
@@ -43,12 +64,13 @@ func seedAgentPod(e *readEnv, agent *rpc.AgentInfo) {
 			UID:       types.UID(agent.PodUid),
 			OwnerReferences: []meta.OwnerReference{{
 				APIVersion: "apps/v1",
-				Kind:       agent.Kind,
-				Name:       agent.Name,
-				UID:        types.UID(agent.Name + "-deployment-uid"),
+				Kind:       ownerKind,
+				Name:       ownerName,
+				UID:        ownerUID,
 				Controller: &controller,
 			}},
 			Labels: map[string]string{
+				"app":                         agent.Name,
 				agentconfig.WorkloadNameLabel: agent.Name,
 				agentconfig.WorkloadKindLabel: agent.Kind,
 			},
