@@ -6,10 +6,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
@@ -48,9 +47,11 @@ func wshardReadState(t testing.TB, path string) wshardFileState {
 		t.Fatalf("stat %s: %v", path, err)
 	}
 	st := wshardFileState{content: string(data), mode: fi.Mode()}
-	if sys, ok := fi.Sys().(*unix.Stat_t); ok {
-		st.uid, st.gid = sys.Uid, sys.Gid
+	sys, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("cannot read the owner of %s: unexpected %T", path, fi.Sys())
 	}
+	st.uid, st.gid = sys.Uid, sys.Gid
 	return st
 }
 

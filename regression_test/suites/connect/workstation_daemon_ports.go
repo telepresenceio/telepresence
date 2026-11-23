@@ -41,8 +41,10 @@ type wshardDaemonProc struct {
 }
 
 // wshardDaemons lists the running user and root daemons of the binary exe
-// together with the value of their --address flag.
-func wshardDaemons(t testing.TB, exe string) []wshardDaemonProc {
+// that write their log in logDir, together with the value of their --address
+// flag. Daemons that belong to other connections or to the system service
+// have another --logfile and are not listed.
+func wshardDaemons(t testing.TB, exe, logDir string) []wshardDaemonProc {
 	t.Helper()
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
@@ -63,14 +65,24 @@ func wshardDaemons(t testing.TB, exe string) []wshardDaemonProc {
 			continue
 		}
 		p := wshardDaemonProc{pid: pid, kind: argv[1]}
+		ours := false
 		for i, a := range argv {
+			logFile := ""
+			if a == "--logfile" && i+1 < len(argv) {
+				logFile = argv[i+1]
+			} else if v, ok := strings.CutPrefix(a, "--logfile="); ok {
+				logFile = v
+			}
+			if logFile != "" && filepath.Dir(logFile) == filepath.Clean(logDir) {
+				ours = true
+			}
 			if a == "--address" && i+1 < len(argv) {
 				p.addr = argv[i+1]
 			} else if v, ok := strings.CutPrefix(a, "--address="); ok {
 				p.addr = v
 			}
 		}
-		if p.addr != "" {
+		if ours && p.addr != "" {
 			procs = append(procs, p)
 		}
 	}
@@ -149,7 +161,7 @@ func (s *WshardDaemonPorts) Test_PortsAreChosenByTheDaemons() {
 	r := s.R()
 	s.Connect()
 
-	procs := wshardDaemons(t, r.Exe())
+	procs := wshardDaemons(t, r.Exe(), r.LogDir())
 	var sawUser, sawRoot bool
 	for _, p := range procs {
 		s.True(strings.HasSuffix(p.addr, ":0"), "%s daemon (pid %d) has a fixed address %q on its command line", p.kind, p.pid, p.addr)
