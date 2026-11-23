@@ -123,7 +123,7 @@ func StreamInfoMessage(id ConnID, sessionID SessionID, callDelay, dialTimeout ti
 	b := bytes.Buffer{}
 	b.WriteByte(byte(streamInfo))
 
-	buf := make([]byte, 8)
+	buf := make([]byte, binary.MaxVarintLen64)
 	n := binary.PutUvarint(buf, uint64(Version))
 	b.Write(buf[:n])
 

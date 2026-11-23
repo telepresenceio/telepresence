@@ -41,6 +41,7 @@ const (
 	maxConcurrentDialRejecters  = 16
 	minDialRequestTimeout       = time.Second
 	maxDialRejectTimeout        = 5 * time.Second
+	maxDialTiming               = time.Hour
 )
 
 const (
@@ -483,6 +484,11 @@ func DialWaitLoop(
 				clog.Errorf(ctx, "!! %s dropping dial request with malformed ConnID of %d bytes", tag, len(dr.ConnId))
 				continue
 			}
+			if !validDialTiming(dr) {
+				clog.Errorf(ctx, "!! %s %s dropping dial request with invalid timing: roundtrip latency %d, dial timeout %d",
+					tag, id, dr.RoundtripLatency, dr.DialTimeout)
+				continue
+			}
 			if allowed == nil || !allowed(id) {
 				clog.Errorf(ctx, "!! %s %s, dial request refused: destination is not an intercept target", tag, id)
 				rejectAsync(ctx, tag, tunnelProvider, dr, sessionID, dialRejecters)
@@ -550,6 +556,12 @@ func rejectAsync(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.
 	default:
 		clog.Errorf(ctx, "!! %s %s, dial reject queue saturated; dropping request", tag, ConnID(dr.ConnId))
 	}
+}
+
+// validDialTiming returns true if the roundtrip latency and the dial timeout are between zero and maxDialTiming.
+func validDialTiming(dr *rpc.DialRequest) bool {
+	return dr.RoundtripLatency >= 0 && dr.RoundtripLatency <= int64(maxDialTiming) &&
+		dr.DialTimeout >= 0 && dr.DialTimeout <= int64(maxDialTiming)
 }
 
 func dialRequestTimeout(dr *rpc.DialRequest) time.Duration {
