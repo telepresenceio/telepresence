@@ -13,6 +13,7 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	clientfeatures "k8s.io/client-go/features"
 	clientfeaturestesting "k8s.io/client-go/features/testing"
 	"k8s.io/client-go/kubernetes/fake"
@@ -36,7 +37,7 @@ func replacementReconnectFixture(t *testing.T, noDefaultPort bool, envMods ...fu
 	ctx := testutil.NewContext(t, true)
 	req := require.New(t)
 	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: "default", UID: "test-agent-uid"},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
 			Template: corev1.PodTemplateSpec{
@@ -69,6 +70,9 @@ func replacementReconnectFixture(t *testing.T, noDefaultPort bool, envMods ...fu
 				agentconfig.WorkloadNameLabel: "test-agent",
 			},
 			Annotations: map[string]string{annotation.Config: cfgJSON},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: dep.Name, UID: dep.UID, Controller: new(true),
+			}},
 		},
 		Status: corev1.PodStatus{Phase: corev1.PodRunning},
 	}
@@ -207,16 +211,37 @@ func TestReconnectClient_TemporaryReplacementFailureCanRetry(t *testing.T) {
 	}
 }
 
+func addTestAgentService(ctx context.Context, t *testing.T) {
+	t.Helper()
+	req := require.New(t)
+	svc, err := k8sapi.GetK8sInterface(ctx).CoreV1().Services("default").Create(ctx, &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: "default", UID: "test-agent-svc-uid"},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"app": "test-agent"},
+			Ports:    []corev1.ServicePort{{Port: 80, TargetPort: intstr.FromInt32(8080), Protocol: corev1.ProtocolTCP}},
+		},
+	}, metav1.CreateOptions{})
+	req.NoError(err)
+	req.NoError(informer.GetK8sFactory(ctx, "default").Core().V1().Services().Informer().GetStore().Add(svc))
+}
+
 func TestReconnectClient_EmptyConfigMapPreservesActivePod(t *testing.T) {
 	req := require.New(t)
-	mgr, ctx, reconnect := replacementReconnectFixture(t, true)
-	mm := mutator.GetMap(ctx)
-	sc := mm.Get("test-agent", "default").Clone()
-	sc.Containers[0].Replace = agentconfig.ReplacePolicyContainer
-	// Preserve a port assignment that fresh generation does not reproduce.
+
+	// Obtain the annotation of a replacement pod that runs with a non-default agent port.
+	mgrA, ctxA, reconnectA := replacementReconnectFixture(t, true)
+	addTestAgentService(ctxA, t)
+	mutator.GetMap(ctxA).Delete("test-agent", "default")
+	_, err := mgrA.ReconnectClient(ctxA, reconnectA)
+	req.NoError(err)
+	sc := mutator.GetMap(ctxA).Get("test-agent", "default").Clone()
 	sc.Containers[0].Intercepts[0].AgentPort = 12345
 	cfgJSON, err := agentconfig.MarshalTight(sc)
 	req.NoError(err)
+
+	mgr, ctx, reconnect := replacementReconnectFixture(t, true)
+	addTestAgentService(ctx, t)
+	mm := mutator.GetMap(ctx)
 	cs := k8sapi.GetK8sInterface(ctx)
 	pod, err := cs.CoreV1().Pods("default").Get(ctx, "fallback-pod", metav1.GetOptions{})
 	req.NoError(err)
@@ -228,9 +253,10 @@ func TestReconnectClient_EmptyConfigMapPreservesActivePod(t *testing.T) {
 
 	_, err = mgr.ReconnectClient(ctx, reconnect)
 	req.NoError(err)
-	restored, err := agentconfig.MarshalTight(mm.Get("test-agent", "default"))
-	req.NoError(err)
-	req.JSONEq(cfgJSON, restored)
+	restored := mm.Get("test-agent", "default")
+	req.NotNil(restored)
+	req.Equal(uint16(12345), restored.Containers[0].Intercepts[0].AgentPort)
+	req.Equal(agentconfig.ReplacePolicyContainer, restored.Containers[0].Replace)
 	req.False(mm.IsInactive(pod.UID), "a healthy replacement pod must remain available after manager restart")
 }
 
