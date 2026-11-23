@@ -1854,12 +1854,18 @@ func (s *session) MapsIPv6() bool {
 }
 
 func (s *session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (*rpc.WaitForAgentIPResponse, error) {
-	if s.agentClients == nil {
-		return nil, status.Error(codes.Unavailable, "")
-	}
 	ip, ok := netip.AddrFromSlice(request.Ip)
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "")
+	}
+	if nvp, found := neverProxyCovering(ip, s.effectiveNeverProxy, s.alsoProxySubnets); found {
+		if lip, err := s.GetLocalIP(ip); err != nil || lip == ip {
+			return nil, status.Errorf(codes.FailedPrecondition,
+				"pod address %s is excluded by never-proxy subnet %s and is not reachable through Telepresence", ip, nvp)
+		}
+	}
+	if s.agentClients == nil {
+		return nil, status.Error(codes.Unavailable, "")
 	}
 	namespace := request.Namespace
 	if namespace == "" {
