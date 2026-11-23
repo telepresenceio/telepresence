@@ -14,6 +14,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -77,6 +78,9 @@ func (s *service) verifyAgentPod(ctx context.Context, p *auth.Principal, agent *
 	}
 	if wl.GetName() != agent.Name || string(wl.GetKind()) != agent.Kind {
 		return agentIdentityDenied(ctx, agent, "pod %s.%s is owned by %s, not by %s %s", p.PodName, podNamespace, wl, agent.Kind, agent.Name)
+	}
+	if !mutator.PodControlledBy(ctx, pod, wl) {
+		return agentIdentityDenied(ctx, agent, "the owner references of pod %s.%s do not lead to %s", p.PodName, podNamespace, wl)
 	}
 	return nil
 }

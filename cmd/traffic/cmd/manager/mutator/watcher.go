@@ -196,16 +196,16 @@ func ownedAgentConfig(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) *a
 			pod.Name, pod.Namespace, sc.WorkloadKind, sc.WorkloadName, sc.Namespace, wl)
 		return nil
 	}
-	if !podControlledBy(ctx, pod, wl) {
+	if !PodControlledBy(ctx, pod, wl) {
 		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: its owner references don't lead to %s", pod.Name, pod.Namespace, wl)
 		return nil
 	}
 	return sc
 }
 
-// podControlledBy reports whether the pod's controller owner references lead to wl, directly or
+// PodControlledBy reports whether the pod's controller owner references lead to wl, directly or
 // through a ReplicaSet, by kind, name, and UID. The workload labels of the pod are not consulted.
-func podControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) bool {
+func PodControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) bool {
 	ref := controllerRef(pod.OwnerReferences)
 	if ref == nil {
 		return false

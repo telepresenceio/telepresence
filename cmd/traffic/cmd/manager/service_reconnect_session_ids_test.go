@@ -35,11 +35,19 @@ func seedAgentPod(e *readEnv, agent *rpc.AgentInfo) {
 	if agent.PodIp == "" {
 		agent.PodIp = "10.1.2.9"
 	}
+	controller := true
 	pod := &core.Pod{
 		ObjectMeta: meta.ObjectMeta{
 			Name:      agent.PodName,
 			Namespace: agent.Namespace,
 			UID:       types.UID(agent.PodUid),
+			OwnerReferences: []meta.OwnerReference{{
+				APIVersion: "apps/v1",
+				Kind:       agent.Kind,
+				Name:       agent.Name,
+				UID:        types.UID(agent.Name + "-deployment-uid"),
+				Controller: &controller,
+			}},
 			Labels: map[string]string{
 				agentconfig.WorkloadNameLabel: agent.Name,
 				agentconfig.WorkloadKindLabel: agent.Kind,
