@@ -36,6 +36,7 @@ const (
 	malformedAgentContainer  = "traffic-agent"
 	malformedReadyTimeout    = 60 * time.Second
 	malformedCallTimeout     = 20 * time.Second
+	malformedDialTimeout     = 30 * time.Second
 	malformedWatchPeriod     = 6 * time.Second
 	malformedPollInterval    = time.Second
 )
@@ -102,47 +103,73 @@ func (g *malformedTarget) waitHealthy(t *testing.T, ctx context.Context) {
 	}
 }
 
-// check runs call against the pod: the pod must be Ready beforehand, the call
-// must be answered with want (codes.OK means any answer), and the container
-// must keep running with an unchanged restart count afterwards.
-func (g *malformedTarget) check(t *testing.T, ctx context.Context, want codes.Code, call func(context.Context) error) {
+// identity returns the pod UID and the container restart count.
+func (g *malformedTarget) identity(ctx context.Context) (string, int, error) {
+	uid, err := g.jsonpath(ctx, `{.items[0].metadata.uid}`)
+	if err != nil {
+		return "", 0, err
+	}
+	n, err := g.restarts(ctx)
+	return uid, n, err
+}
+
+// begin waits for the pod to be Ready and records its identity for finish.
+func (g *malformedTarget) begin(t *testing.T, ctx context.Context) (string, int) {
 	t.Helper()
 	g.waitHealthy(t, ctx)
-	before, err := g.restarts(ctx)
+	uid, n, err := g.identity(ctx)
 	if err != nil {
-		t.Fatalf("reading restart count: %v", err)
+		t.Fatalf("reading pod identity: %v", err)
 	}
+	return uid, n
+}
 
+// call runs call and asserts that it is answered with want.
+func (g *malformedTarget) call(t *testing.T, ctx context.Context, want codes.Code, call func(context.Context) error) {
+	t.Helper()
 	callCtx, cancel := context.WithTimeout(ctx, malformedCallTimeout)
 	defer cancel()
-	err = call(callCtx)
-	if want != codes.OK {
-		if err == nil {
-			t.Errorf("call succeeded, want code %s", want)
-		} else if got := status.Code(err); got != want {
-			t.Errorf("call returned code %s (%v), want %s", got, err, want)
-		}
+	err := call(callCtx)
+	if err == nil {
+		t.Errorf("call succeeded, want code %s", want)
+	} else if got := status.Code(err); got != want {
+		t.Errorf("call returned code %s (%v), want %s", got, err, want)
 	}
+}
 
+// finish observes the pod for a while and fails the test unless it is still
+// the same pod, Ready, with an unchanged restart count.
+func (g *malformedTarget) finish(t *testing.T, ctx context.Context, uid string, restarts int) {
+	t.Helper()
 	deadline := time.Now().Add(malformedWatchPeriod)
 	for {
-		after, err := g.restarts(ctx)
+		curUID, after, err := g.identity(ctx)
 		if err != nil {
-			t.Fatalf("reading restart count: %v", err)
+			t.Fatalf("reading pod identity: %v", err)
 		}
-		if after != before {
-			g.broken = true
-			t.Fatalf("%s restarted: restartCount %d -> %d", g.container, before, after)
+		if curUID != uid {
+			t.Fatalf("%s pod was replaced: uid %s -> %s", g.container, uid, curUID)
+		}
+		if after != restarts {
+			t.Fatalf("%s restarted: restartCount %d -> %d", g.container, restarts, after)
 		}
 		if !g.healthy(ctx) {
-			g.waitHealthy(t, ctx)
-			t.Fatalf("%s stopped being Ready after the call", g.container)
+			t.Fatalf("%s stopped being Ready after the calls", g.container)
 		}
 		if time.Now().After(deadline) {
 			return
 		}
 		time.Sleep(malformedPollInterval)
 	}
+}
+
+// boundedCtx returns a context that is cancelled malformedDialTimeout after
+// the call, or when cancel is called. Calling stop keeps the context alive
+// until cancel, so that it can serve a connection that has been dialed.
+func boundedCtx(ctx context.Context) (c context.Context, cancel context.CancelFunc, stop func()) {
+	c, cancel = context.WithCancel(ctx)
+	timer := time.AfterFunc(malformedDialTimeout, cancel)
+	return c, cancel, func() { timer.Stop() }
 }
 
 // malformedRestConfig builds a rest.Config from the run's RTEST_KUBECONFIG
@@ -159,25 +186,34 @@ func malformedRestConfig() (*rest.Config, error) {
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
 }
 
-// malformedDialAgent dials the gRPC port of an agent pod over a port-forward.
-func malformedDialAgent(ctx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, error) {
+// malformedDialAgent dials the gRPC port of an agent pod over a port-forward,
+// giving up after malformedDialTimeout. The returned function closes the
+// connection.
+func malformedDialAgent(ctx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, func(), error) {
 	cfg, err := malformedRestConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	k8sAPI, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ctx = client.WithConfig(ctx, client.GetDefaultConfig())
 	ctx = k8sapi.WithK8sInterface(ctx, k8sAPI)
 	ctx = portforward.WithRestConfig(ctx, cfg)
 	pa := portforward.PodAddress{Name: ai.PodName, Namespace: ns, PodID: k8sTypes.UID(ai.PodId)}
-	return grpcClient.DialGRPC(ctx, portforward.K8sPFScheme+":///"+pa.AddrFor(uint16(ai.ApiPort)),
+	ctx, cancel, stop := boundedCtx(ctx)
+	conn, err := grpcClient.DialGRPC(ctx, portforward.K8sPFScheme+":///"+pa.AddrFor(uint16(ai.ApiPort)),
 		grpc.WithResolvers(portforward.NewResolver(ctx)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	stop()
+	return conn, func() { _ = conn.Close(); cancel() }, nil
 }
 
 // Test_ManagerSurvivesMalformedMessages sends an empty tunnel message and
@@ -189,8 +225,10 @@ func (s *MalformedMessages) Test_ManagerSurvivesMalformedMessages() {
 	ctx := s.Ctx()
 	s.Manager()
 
-	env := rt.Env{Ctx: ctx, T: t, R: s.R()}
-	mc, closeMC, err := rt.ManagerClient(env, managers.ManagerNamespace)
+	dialCtx, cancelDial, dialed := boundedCtx(ctx)
+	defer cancelDial()
+	mc, closeMC, err := rt.ManagerClient(rt.Env{Ctx: dialCtx, T: t, R: s.R()}, managers.ManagerNamespace)
+	dialed()
 	s.Require().NoError(err)
 	defer closeMC()
 
@@ -204,7 +242,7 @@ func (s *MalformedMessages) Test_ManagerSurvivesMalformedMessages() {
 	sess := &manager.SessionInfo{SessionId: "rtest-malformed-no-such-session"}
 	tests := []struct {
 		name string
-		code codes.Code // codes.OK means any answer
+		code codes.Code
 		call func(context.Context) error
 	}{
 		{"Tunnel empty message", codes.FailedPrecondition, func(ctx context.Context) error {
@@ -258,28 +296,30 @@ func (s *MalformedMessages) Test_ManagerSurvivesMalformedMessages() {
 			_, err := mc.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: "x"})
 			return err
 		}},
-		{"Lookup empty", codes.OK, func(ctx context.Context) error {
+		{"Lookup empty", codes.NotFound, func(ctx context.Context) error {
 			_, err := mc.Lookup(ctx, &manager.LookupRequest{})
 			return err
 		}},
-		{"EnsureAgent empty", codes.OK, func(ctx context.Context) error {
+		{"EnsureAgent empty", codes.NotFound, func(ctx context.Context) error {
 			_, err := mc.EnsureAgent(ctx, &manager.EnsureAgentRequest{})
 			return err
 		}},
-		{"GetAgentConfig empty", codes.OK, func(ctx context.Context) error {
+		{"GetAgentConfig empty", codes.NotFound, func(ctx context.Context) error {
 			_, err := mc.GetAgentConfig(ctx, &manager.AgentConfigRequest{})
 			return err
 		}},
-		{"ResolveServicePort empty", codes.OK, func(ctx context.Context) error {
+		{"ResolveServicePort empty", codes.NotFound, func(ctx context.Context) error {
 			_, err := mc.ResolveServicePort(ctx, &manager.ResolveServicePortRequest{})
 			return err
 		}},
 	}
+	uid, restarts := target.begin(t, ctx)
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			target.check(s.T(), ctx, tt.code, tt.call)
+			target.call(s.T(), ctx, tt.code, tt.call)
 		})
 	}
+	target.finish(t, ctx, uid, restarts)
 }
 
 // Test_AgentSurvivesEmptyTunnelMessage sends an empty tunnel message to the
@@ -306,8 +346,10 @@ func (s *MalformedMessages) Test_AgentSurvivesEmptyTunnelMessage() {
 	podName, err := target.jsonpath(ctx, `{.items[0].metadata.name}`)
 	s.Require().NoError(err)
 
-	env := rt.Env{Ctx: ctx, T: t, R: r}
-	mc, closeMC, err := rt.ManagerClient(env, managers.ManagerNamespace)
+	dialCtx, cancelDial, dialed := boundedCtx(ctx)
+	defer cancelDial()
+	mc, closeMC, err := rt.ManagerClient(rt.Env{Ctx: dialCtx, T: t, R: r}, managers.ManagerNamespace)
+	dialed()
 	s.Require().NoError(err)
 	defer closeMC()
 
@@ -342,14 +384,16 @@ func (s *MalformedMessages) Test_AgentSurvivesEmptyTunnelMessage() {
 	}
 	s.Require().NotNil(info, "the manager did not report an agent for pod %s", podName)
 
-	agentConn, err := malformedDialAgent(ctx, ns, info)
+	agentConn, closeAgent, err := malformedDialAgent(ctx, ns, info)
 	s.Require().NoError(err)
-	defer agentConn.Close()
+	defer closeAgent()
 	ac := agent.NewAgentClient(agentConn)
 
-	target.check(t, ctx, codes.FailedPrecondition, func(ctx context.Context) error {
+	uid, restarts := target.begin(t, ctx)
+	target.call(t, ctx, codes.FailedPrecondition, func(ctx context.Context) error {
 		return malformedEmptyTunnelMessage(ctx, ac.Tunnel)
 	})
+	target.finish(t, ctx, uid, restarts)
 }
 
 // malformedEmptyTunnelMessage opens a tunnel stream, sends one message with an
