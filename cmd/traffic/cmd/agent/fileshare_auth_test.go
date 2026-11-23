@@ -647,3 +647,22 @@ type filesAccess struct {
 func (filesAccess) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
 	return &mgrrpc.AuthorizeSessionAccessResponse{Level: mgrrpc.AuthorizeSessionAccessResponse_FILES}, nil
 }
+
+// noAccessCall is a manager client that doesn't implement AuthorizeSessionAccess.
+type noAccessCall struct {
+	mgrrpc.ManagerClient
+}
+
+func (noAccessCall) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
+// The regression suite AgentidPreAccessCallManager covers this against a real
+// traffic-agent; this checks that the refusal is remembered for later requests.
+func TestSessionAuthorizer_UnimplementedRefuses(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	sa := newSessionAuthorizer(noAccessCall{}, &mgrrpc.SessionInfo{})
+	require.Equal(t, accessNone, sa.level(ctx, "s1", "cred"))
+	require.True(t, sa.unimplemented.Load())
+	require.Equal(t, accessNone, sa.level(ctx, "s2", "cred"))
+}
