@@ -73,13 +73,13 @@ func agentidInstallAgent(s *AgentidAgentIdentity, wl *rt.Workload) {
 }
 
 // agentidFakeAgentInfo builds an otherwise-valid AgentInfo claiming to be
-// the traffic-agent of the workload named claimedName/claimedKind in ns,
+// the traffic-agent of the Deployment named claimedName in ns,
 // running as the pod podName/podUID, with attacker-chosen pod IP and
 // container environment.
-func agentidFakeAgentInfo(ns, claimedName, claimedKind, podName, podUID string) *manager.AgentInfo {
+func agentidFakeAgentInfo(ns, claimedName, podName, podUID string) *manager.AgentInfo {
 	return &manager.AgentInfo{
 		Name:      claimedName,
-		Kind:      claimedKind,
+		Kind:      "Deployment",
 		Namespace: ns,
 		PodName:   podName,
 		PodUid:    podUID,
@@ -122,7 +122,7 @@ func (s *AgentidAgentIdentity) Test_FakeAgentRegistrationRefused() {
 	defer closeFn()
 
 	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
-	fake := agentidFakeAgentInfo(ns, victim.Name, "Deployment", podName, podUID)
+	fake := agentidFakeAgentInfo(ns, victim.Name, podName, podUID)
 	si, err := mc.ArriveAsAgent(tokCtx, fake)
 	if err == nil {
 		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
@@ -157,7 +157,7 @@ func (s *AgentidAgentIdentity) Test_RealInterceptUnaffectedByFakeRegistration() 
 	defer closeFn()
 
 	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
-	fake := agentidFakeAgentInfo(ns, victim.Name, "Deployment", podName, podUID)
+	fake := agentidFakeAgentInfo(ns, victim.Name, podName, podUID)
 	si, err := mc.ArriveAsAgent(tokCtx, fake)
 	if err == nil {
 		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
@@ -196,7 +196,7 @@ func (s *AgentidAgentIdentity) Test_OwnWorkloadTokenWithoutManagerAudienceRefuse
 	defer closeFn()
 
 	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
-	honest := agentidFakeAgentInfo(ns, lackey.Name, "Deployment", podName, podUID)
+	honest := agentidFakeAgentInfo(ns, lackey.Name, podName, podUID)
 	si, err := mc.ArriveAsAgent(tokCtx, honest)
 	if err == nil {
 		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
@@ -278,7 +278,7 @@ func (s *AgentidAgentIdentity) Test_ForgedOwnerReferenceRefused() {
 	defer closeFn()
 
 	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+strings.TrimSpace(tok))
-	fake := agentidFakeAgentInfo(ns, victim.Name, "Deployment", podName, podUID)
+	fake := agentidFakeAgentInfo(ns, victim.Name, podName, podUID)
 	fake.PodIp = podIP
 	si, err := mc.ArriveAsAgent(tokCtx, fake)
 	if err == nil {
