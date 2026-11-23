@@ -159,7 +159,8 @@ type externalTransportCreds struct {
 
 // NewExternalTransportCredentials builds the external listener's transport credentials,
 // serving the certificate found in certDir and optionally verifying client certificates
-// against caPool. Certificate-authenticated connections are registered with tracker.
+// against caPool. A nil caPool, or one that has not loaded a client CA, disables client
+// certificate authentication. Certificate-authenticated connections are registered with tracker.
 func NewExternalTransportCredentials(certDir string, caPool *ClientCAPool, tracker *externalConnTracker) credentials.TransportCredentials {
 	cc := newCertCache(certDir)
 	c := &externalTransportCreds{
@@ -184,16 +185,27 @@ func NewExternalTransportCredentials(certDir string, caPool *ClientCAPool, track
 			if hello.Conn != nil {
 				c.genByConn.Store(hello.Conn, generation)
 			}
-			return &tls.Config{
-				Certificates: []tls.Certificate{*cert},
-				ClientCAs:    pool,
-				ClientAuth:   tls.VerifyClientCertIfGiven,
-				MinVersion:   tls.VersionTLS12,
-			}, nil
+			return externalClientTLSConfig(cert, pool), nil
 		},
 	}
 	c.TransportCredentials = credentials.NewTLS(tlsCfg)
 	return c
+}
+
+// externalClientTLSConfig returns the per-handshake TLS configuration. Client
+// certificates are requested only when there is a client CA pool to verify them
+// against; with a nil pool, crypto/tls would fall back to the system roots.
+func externalClientTLSConfig(cert *tls.Certificate, pool *x509.CertPool) *tls.Config {
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+		MinVersion:   tls.VersionTLS12,
+		ClientAuth:   tls.NoClientCert,
+	}
+	if pool != nil {
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.VerifyClientCertIfGiven
+	}
+	return cfg
 }
 
 func (c *externalTransportCreds) ServerHandshake(rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
@@ -223,14 +235,15 @@ func (c *externalTransportCreds) ServerHandshake(rawConn net.Conn) (net.Conn, cr
 		return conn, authInfo, nil
 	}
 
+	// Generation 0 means the handshake had no client CA, so no certificate was verified.
+	generation, _ := genVal.(uint64)
 	var tp *TransportPrincipal
-	if chains := tlsInfo.State.VerifiedChains; len(chains) > 0 {
+	if chains := tlsInfo.State.VerifiedChains; generation != 0 && len(chains) > 0 {
 		verified := chains[0]
 		resp, userOk, uerr := x509req.CommonNameUserConversion.User(verified)
 		if uerr != nil || !userOk {
 			clog.Debugf(context.Background(), "external tls: certificate identity extraction failed: %v", uerr)
 		} else {
-			generation, _ := genVal.(uint64)
 			tp = &TransportPrincipal{
 				Principal:    principalFromUserInfo(resp.User),
 				CAGeneration: generation,
