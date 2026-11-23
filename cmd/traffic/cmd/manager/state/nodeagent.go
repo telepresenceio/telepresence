@@ -91,6 +91,15 @@ func nodeAgentWorkloadSelector(agentName, namespace string) string {
 		nodeAgentNamespaceLabel, namespace)
 }
 
+// IsNodeAgentJobFor reports whether lbs are the labels of a node-agent Job
+// that the traffic-manager created for the agent named agentName and the
+// workload in namespace.
+func IsNodeAgentJobFor(lbs map[string]string, agentName, namespace string) bool {
+	return lbs[nodeAgentAppLabel] == nodeAgentAppLabelValue &&
+		lbs[nodeAgentNameLabel] == agentName &&
+		lbs[nodeAgentNamespaceLabel] == namespace
+}
+
 // reapNodeAgentJobs deletes the node-agent Job(s) created for the agent named
 // agentName and the workload in namespace, in the traffic-manager's own
 // namespace. It is invoked as an intercept finalizer, so it runs both on

@@ -117,7 +117,9 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (*Princi
 			return nil, fmt.Errorf("token review: %w", err)
 		}
 		if ok {
-			return principalFromInfo(resp.User), nil
+			p := principalFromInfo(resp.User)
+			p.ManagerAudience = true
+			return p, nil
 		}
 	}
 	// The token may be a user/client token, valid against the API server's own
