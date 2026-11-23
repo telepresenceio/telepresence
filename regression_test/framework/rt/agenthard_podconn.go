@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -46,7 +47,7 @@ func AgenthardPodDialer(e Env) (func(ctx context.Context, ns, pod string, port u
 var agentGRPCListenerRE = regexp.MustCompile(`Listener opened on \S*:(\d+)`)
 
 // AgenthardSftpDialer returns a function that opens a connection to the SFTP server of the
-// traffic-agent in a pod the way a client does: a Tunnel call on the agent's gRPC port, with
+// traffic-agent (sidecar) or traffic-node-agent in a pod the way a client does: a Tunnel call on the agent's gRPC port, with
 // the agent's loopback SFTP port as destination. The agent must run in permissive mode, since
 // the call carries no session credential. Closing the connection ends the call.
 func AgenthardSftpDialer(e Env) (func(ctx context.Context, ns, pod string, sftpPort uint16) (net.Conn, error), error) {
@@ -55,7 +56,20 @@ func AgenthardSftpDialer(e Env) (func(ctx context.Context, ns, pod string, sftpP
 		return nil, err
 	}
 	return func(ctx context.Context, ns, pod string, sftpPort uint16) (net.Conn, error) {
-		logs, err := e.R.Kubectl(ctx, ns, "logs", pod, "-c", "traffic-agent")
+		names, err := e.R.Kubectl(ctx, ns, "get", "pod", pod, "-o", `jsonpath={range .spec.containers[*]}{.name}{"\n"}{end}`)
+		if err != nil {
+			return nil, fmt.Errorf("reading the containers of %s.%s: %w", pod, ns, err)
+		}
+		container := ""
+		for _, n := range strings.Fields(names) {
+			if n == "traffic-agent" || n == "traffic-node-agent" {
+				container = n
+			}
+		}
+		if container == "" {
+			return nil, fmt.Errorf("pod %s.%s has no traffic-agent or traffic-node-agent container (containers: %q)", pod, ns, names)
+		}
+		logs, err := e.R.Kubectl(ctx, ns, "logs", pod, "-c", container)
 		if err != nil {
 			return nil, fmt.Errorf("reading the logs of the traffic-agent in %s.%s: %w", pod, ns, err)
 		}
