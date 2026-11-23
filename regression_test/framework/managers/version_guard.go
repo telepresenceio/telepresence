@@ -33,6 +33,9 @@ var keyIntroduced = map[string]semver.Version{
 	"client.nodeAgent": semver.MustParse("2.30.0"),
 	// quicTunnel.*: 6244b16a1 "Add opt-in QUIC transport for the tunnel".
 	"quicTunnel": semver.MustParse("2.31.0"),
+	// security.*: 82d025e0f "Admit security.authentication.mode in the
+	// chart values schema".
+	"security": semver.MustParse("2.31.0"),
 	// extraEnv/extraVolumes/extraVolumeMounts: df0c58b98 "Add coverage
 	// support and a regression CI job"; first ships in 2.31.2.
 	"extraEnv":          semver.MustParse("2.31.2"),
@@ -68,4 +71,22 @@ func deletePath(m map[string]any, path []string) {
 		return
 	}
 	deletePath(sub, path[1:])
+}
+
+// minTokenClient is the first release whose client sends a bearer token with
+// every manager call. An older client is refused by a manager that enforces
+// authentication.
+//
+//nolint:gochecknoglobals // static, checked-in compat table
+var minTokenClient = semver.MustParse("2.31.0")
+
+// PinPermissiveForClient returns v with security.authentication.mode set to
+// permissive when client sends no token (a release older than 2.31.0) and v
+// leaves the mode unset. A spec that names a mode keeps it.
+func PinPermissiveForClient(v Values, client semver.Version) Values {
+	final := semver.Version{Major: client.Major, Minor: client.Minor, Patch: client.Patch}
+	if v.Security.Authentication.Mode == "" && final.LT(minTokenClient) {
+		v.Security.Authentication.Mode = "permissive"
+	}
+	return v
 }
