@@ -147,15 +147,15 @@ func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.Ser
 		}
 		unaryInterceptors := []grpc.UnaryServerInterceptor{
 			unaryContextInterceptor,
-			unaryRecoveryInterceptor,
 			logging.UnaryServerInterceptor(interceptorLogger(), opts...),
 			unaryErrorInterceptor,
+			unaryRecoveryInterceptor,
 		}
 		streamInterceptors := []grpc.StreamServerInterceptor{
 			streamContextInterceptor,
-			streamRecoveryInterceptor,
 			logging.StreamServerInterceptor(interceptorLogger(), opts...),
 			streamErrorInterceptor,
+			streamRecoveryInterceptor,
 		}
 		if auth != nil {
 			unaryInterceptors = append(unaryInterceptors, auth.Unary)
@@ -169,13 +169,13 @@ func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.Ser
 	} else {
 		unaryInterceptors := []grpc.UnaryServerInterceptor{
 			unaryContextInterceptor,
-			unaryRecoveryInterceptor,
 			unaryErrorInterceptor,
+			unaryRecoveryInterceptor,
 		}
 		streamInterceptors := []grpc.StreamServerInterceptor{
 			streamContextInterceptor,
-			streamRecoveryInterceptor,
 			streamErrorInterceptor,
+			streamRecoveryInterceptor,
 		}
 		if auth != nil {
 			unaryInterceptors = append(unaryInterceptors, auth.Unary)
