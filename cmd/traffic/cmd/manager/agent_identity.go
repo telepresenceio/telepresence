@@ -2,6 +2,8 @@ package manager
 
 import (
 	"context"
+	stderrors "errors"
+	"net"
 	"slices"
 	"strings"
 
@@ -74,6 +76,9 @@ func (s *service) verifyAgentPod(ctx context.Context, p *auth.Principal, agent *
 	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 	if err != nil {
 		clog.Debugf(ctx, "unable to resolve the owner workload of pod %s.%s: %v", pod.Name, pod.Namespace, err)
+		if lookupFailed(err) {
+			return errors.Errorf(codes.Unavailable, "unable to resolve the owner of pod %s.%s: %v", p.PodName, podNamespace, err)
+		}
 		return agentIdentityDenied(ctx, agent, "pod %s.%s has no resolvable workload owner", p.PodName, podNamespace)
 	}
 	if wl.GetName() != agent.Name || string(wl.GetKind()) != agent.Kind {
@@ -108,6 +113,18 @@ func (s *service) verifyNodeAgentPod(ctx context.Context, pod *core.Pod, agent *
 		break
 	}
 	return agentIdentityDenied(ctx, agent, "pod %s.%s does not belong to a node-agent job for this workload", pod.Name, pod.Namespace)
+}
+
+// lookupFailed reports whether err is a failed API call (timeout, server
+// error, transport error) rather than the absence of an owner workload.
+func lookupFailed(err error) bool {
+	if k8sErrors.IsNotFound(err) {
+		return false
+	}
+	var st k8sErrors.APIStatus
+	var ne net.Error
+	return stderrors.As(err, &st) || stderrors.As(err, &ne) ||
+		stderrors.Is(err, context.DeadlineExceeded) || stderrors.Is(err, context.Canceled)
 }
 
 func agentIdentityDenied(ctx context.Context, agent *rpc.AgentInfo, format string, args ...any) error {
