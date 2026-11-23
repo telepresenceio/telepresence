@@ -296,6 +296,12 @@ func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplat
 		return patches, nil
 	}
 
+	if pod.Spec.HostNetwork {
+		return nil, errcat.User.Newf(
+			"pod %s.%s uses host networking, and its agent configuration needs packet redirection in the node's network namespace, "+
+				"which Telepresence does not do", pod.Name, pod.Namespace)
+	}
+
 	pis := pod.Spec.InitContainers
 	ab := agentconfig.ContainerBuilder{
 		Pod:      wlTpl,

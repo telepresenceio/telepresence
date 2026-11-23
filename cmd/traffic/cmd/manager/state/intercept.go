@@ -1470,6 +1470,9 @@ func (s *State) getOrCreateAgentConfig(
 		if sc == nil {
 			sc, err = s.createAgentConfig(ctx, wl, agentImage)
 		}
+		if err == nil {
+			err = checkHostNetwork(ctx, wl, sc, spec, rp)
+		}
 		return sc, err
 	}
 
@@ -1494,6 +1497,9 @@ func (s *State) getOrCreateAgentConfig(
 		}
 
 		if spec != nil {
+			if err = checkHostNetwork(ctx, wl, sc, spec, rp); err != nil {
+				return nil, err
+			}
 			var cn *agentconfig.Container
 			if spec.NoDefaultPort {
 				cn, err = icept.FindContainer(sc, spec)
@@ -1507,6 +1513,39 @@ func (s *State) getOrCreateAgentConfig(
 		}
 		return sc, nil
 	})
+}
+
+// checkHostNetwork rejects an intercept that would make the injector add the init container to a
+// host-network pod, because the packet redirection it programs would apply to the node.
+func checkHostNetwork(ctx context.Context, wl k8sapi.Workload, sc *agentconfig.Sidecar, spec *rpc.InterceptSpec, rp agentconfig.ReplacePolicy) error {
+	if spec == nil || rp != agentconfig.ReplacePolicyIntercept ||
+		!wl.GetPodTemplate().Spec.HostNetwork || !managerutil.GetEnv(ctx).AgentInitContainerEnabled {
+		return nil
+	}
+	var ics []*agentconfig.Intercept
+	if spec.NoDefaultPort {
+		cn, err := icept.FindContainer(sc, spec)
+		if err != nil {
+			return nil
+		}
+		ics = cn.Intercepts
+	} else {
+		_, ic, err := icept.FindIntercept(sc, spec)
+		if err != nil {
+			return nil
+		}
+		ics = []*agentconfig.Intercept{ic}
+	}
+	for _, ic := range ics {
+		if ic.Headless || ic.TargetPortNumeric {
+			return errcat.User.Newf(
+				"%s uses host networking and its Service port is numeric or headless. "+
+					"Intercepting it would need packet redirection in the node's network namespace, "+
+					"which Telepresence does not do",
+				wl)
+		}
+	}
+	return nil
 }
 
 func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, error) {
