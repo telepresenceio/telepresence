@@ -209,15 +209,8 @@ func TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams(t *testing.T) {
 	for _, f := range frames {
 		req.NotEqual("other", f.PodNamespace, "nothing about a denied namespace may be sent")
 		req.NotEqual("agent-other", f.PodName, "no pod of a denied namespace may be named")
+		req.Empty(f.GetError(), "no note about skipped logs may be sent")
 	}
-	var noted bool
-	for _, f := range frames {
-		if f.PodName == "" && f.GetError() != "" {
-			noted = true
-			req.NotContains(f.GetError(), "other")
-		}
-	}
-	req.True(noted, "a generic pod-less note must say that some logs were skipped")
 }
 
 // TestStreamLogs_ConnectOnly_NamesNoAgentPods: a caller without any logs
