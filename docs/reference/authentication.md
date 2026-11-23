@@ -416,26 +416,27 @@ bulkiest data path telepresence carries for no real confidentiality gain.
 
 ### Version skew
 
-An old client presents no credential at all and is served normally by
-disabled/permissive agents; only enforcing mode requires it to be upgraded
-first. A new client talking to an old agent gets no benefit from its
-credential — the old agent has no verification code path, so its ports stay
-exactly as open as before — but nothing breaks. Talking through a manager
-that predates session credentials, a new agent never receives credential
-material to verify against. The manager tells it so, and the agent then
-accepts every connection and call unauthenticated. An agent that has not yet
-heard from its manager refuses every FTP login, SFTP connection, `WatchDial`
-and `Tunnel` call until it has: the gRPC calls report `Unavailable`, which a
-client can retry.
+An old client presents no credential at all and is served normally
+by disabled/permissive agents; only enforcing mode requires it to be
+upgraded first. A new client talking to an old agent gets no benefit from
+its credential, but nothing breaks. The old agent has no verification
+code path, so its ports stay exactly as open as before. Talking through
+a manager that predates session credentials, a new agent never receives
+credential material to verify against. The manager tells it so, and the
+agent then accepts every connection and call unauthenticated. An agent
+that has not yet heard from its manager refuses every FTP login, SFTP
+connection, `WatchDial` and `Tunnel` call until it has: the gRPC calls
+report `Unavailable`, which a client can retry.
 
 The [access levels](#access-levels) add two more cases:
 
-- **An agent of version 2.34 or later with an older traffic-manager.** The
-  agent requires a traffic-manager of version 2.34 or later when
-  authentication is enforced. The traffic-manager answers the access call
-  with `Unimplemented`, and the agent refuses every session, logging an
-  error, until the traffic-manager has been upgraded. Upgrade the
-  traffic-manager before the agents are restarted.
+- **An agent of version 2.34 or later with an older traffic-manager.**
+  The agent requires a traffic-manager of version 2.34 or later when
+  authentication is enforced. The traffic-manager answers the access call with
+  `Unimplemented`, and the agent refuses every session, logging an error,
+  until the traffic-manager has been upgraded. This case arises when the
+  traffic-manager is downgraded, or when the `agent.image` Helm value names
+  a newer agent than the traffic-manager.
 - **An agent older than 2.34 with a current traffic-manager.** The agent
   never asks for access levels and checks the session credential only. This
   lasts until the traffic-manager has replaced the agent's pod, which it
