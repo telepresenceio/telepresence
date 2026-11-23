@@ -18,12 +18,11 @@ const (
 	wshardValidSuffix = "wshard-valid.internal"
 	wshardAlsoProxy   = "198.51.100.0/24"
 
-	wshardHostileSshfs     = "/wshard/hostile/sshfs"
-	wshardHostileMounts    = "/wshard/hostile/mounts"
-	wshardHostileGateway   = "wshard-hostile.example"
-	wshardHostileChart     = "oci://wshard-hostile.example/chart"
-	wshardHostileAgent     = "wshard-hostile.example/agent:evil"
-	wshardHostileCollector = "wshard-hostile.example:443"
+	wshardHostileSshfs   = "/wshard/hostile/sshfs"
+	wshardHostileMounts  = "/wshard/hostile/mounts"
+	wshardHostileGateway = "wshard-hostile.example"
+	wshardHostileChart   = "oci://wshard-hostile.example/chart"
+	wshardHostileAgent   = "wshard-hostile.example/agent:evil"
 
 	wshardManagerConfigMap = "traffic-manager"
 	wshardClientYAMLKey    = "client.yaml"
@@ -81,9 +80,6 @@ type wshardSessionConfig struct {
 		Images struct {
 			AgentImage string `json:"agentImage"`
 		} `json:"images"`
-		Usage struct {
-			CollectorAddress string `json:"collectorAddress"`
-		} `json:"usage"`
 		Routing struct {
 			AlsoProxy []string `json:"alsoProxySubnets"`
 		} `json:"routing"`
@@ -124,7 +120,7 @@ func (s *WshardManagerConfig) Test_InvalidDNSNamesAreDropped() {
 }
 
 // Test_LocalSettingsAreNotAdopted serves values for the settings that name
-// local programs, directories, images, charts and the usage collector, and
+// local programs, directories, images and charts, and
 // asserts that the session's effective configuration keeps its own values
 // while it adopts a routing setting served in the same configuration.
 func (s *WshardManagerConfig) Test_LocalSettingsAreNotAdopted() {
@@ -149,7 +145,6 @@ func (s *WshardManagerConfig) Test_LocalSettingsAreNotAdopted() {
 	doc["docker"] = map[string]any{"hostGateway": wshardHostileGateway}
 	doc["helm"] = map[string]any{"chartURL": wshardHostileChart}
 	doc["images"] = map[string]any{"agentImage": wshardHostileAgent}
-	doc["usage"] = map[string]any{"collectorAddress": wshardHostileCollector}
 
 	patchConfigMap := func(content string) error {
 		patch, err := json.Marshal(map[string]any{"data": map[string]string{wshardClientYAMLKey: content}})
@@ -190,5 +185,4 @@ func (s *WshardManagerConfig) Test_LocalSettingsAreNotAdopted() {
 	s.NotEqual(wshardHostileGateway, cc.Docker.HostGateway, "docker.hostGateway")
 	s.NotEqual(wshardHostileChart, cc.Helm.ChartURL, "helm.chartURL")
 	s.NotEqual(wshardHostileAgent, cc.Images.AgentImage, "images.agentImage")
-	s.NotEqual(wshardHostileCollector, cc.Usage.CollectorAddress, "usage.collectorAddress")
 }
