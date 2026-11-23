@@ -375,13 +375,20 @@ func (s *AgentidSessionAccess) Test_FtpLoginWithSessionTokenRefused() {
 	s.False(loggedIn, "a session without access to this agent must not log in to its FTP port using its own session token")
 }
 
+// agentidSuite is what agentidInstallFileShareAgent needs from a suite.
+type agentidSuite interface {
+	T() *testing.T
+	AppNamespace() string
+	Connect(opts ...rt.ConnOpt) *rt.Conn
+}
+
 // agentidInstallFileShareAgent connects as the suite's granted identity,
 // intercepts wl with mounts enabled so the agent reports its mount paths,
 // and returns the intercepted container and the remote path of EchoWithConfigVolume's marker file (the
 // path the client itself is told, TELEPRESENCE_MOUNTS, rather than an
 // assumption about the agent's internal layout). The agent is left running
 // after detach.
-func agentidInstallFileShareAgent(s *AgentidSessionAccess, wl *rt.Workload) (container, path string) {
+func agentidInstallFileShareAgent(s agentidSuite, wl *rt.Workload) (container, path string) {
 	t := s.T()
 	conn := s.Connect()
 	a := conn.Intercept(t, wl, cli.MountFalse())
