@@ -14,6 +14,12 @@ A malformed gRPC message could make the traffic-manager or a traffic-agent exit.
 The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The traffic-manager enforces authentication by default](reference/authentication#moving-an-existing-installation-to-enforcing)</div></div>
+<div style="margin-left: 15px">
+
+The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. Clients older than 2.31.0 are refused. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The active gRPC request gauge counts requests again](howtos/monitoring)</div></div>
 <div style="margin-left: 15px">
 
