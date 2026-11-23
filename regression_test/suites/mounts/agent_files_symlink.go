@@ -51,8 +51,8 @@ type agenthardListEntry struct {
 }
 
 // Test_ClientLinkDoesNotLeaveExport holds a node-agent intercept with a mount and talks SFTP to
-// the traffic-agent the way the client's mount does. It tries to create a link that points at
-// the root file system of the intercepted container, and then to read and to write through
+// the traffic-agent through a tunnel, the way the client's mount does. It tries to create a
+// link that points at the root file system of the intercepted container, and then to read and to write through
 // it. The link must be refused, and neither the read nor the write may succeed.
 func (s *AgenthardSftp) Test_ClientLinkDoesNotLeaveExport() {
 	t := s.T()
@@ -73,7 +73,7 @@ func (s *AgenthardSftp) Test_ClientLinkDoesNotLeaveExport() {
 	check.EventuallyFile(t, tokenFilePath(root), isNonEmpty, mountTimeout)
 
 	agentNS, agentPod, sftpPort, _ := agenthardLocateAgent(ctx, s, ns, wl.Name)
-	dial, err := rt.AgenthardPodDialer(rt.Env{Ctx: ctx, T: t, R: r})
+	dial, err := rt.AgenthardSftpDialer(rt.Env{Ctx: ctx, T: t, R: r})
 	s.Require().NoError(err)
 	conn, err := dial(ctx, agentNS, agentPod, sftpPort)
 	s.Require().NoError(err, "dialing the SFTP port of %s.%s", agentPod, agentNS)

@@ -106,7 +106,7 @@ func (s *AgenthardSftp) agenthardAttachWithMount(wl *rt.Workload) (*rt.Attach, *
 
 	agentNS, agentPod, sftpPort, ftpPort := agenthardLocateAgent(ctx, s, ns, wl.Name)
 	s.Require().NotZero(ftpPort, "the traffic-agent of %s should have an FTP port", wl.Name)
-	dial, err := rt.AgenthardPodDialer(rt.Env{Ctx: ctx, T: t, R: s.R()})
+	dial, err := rt.AgenthardSftpDialer(rt.Env{Ctx: ctx, T: t, R: s.R()})
 	s.Require().NoError(err)
 	conn, err := dial(ctx, agentNS, agentPod, sftpPort)
 	s.Require().NoError(err, "dialing the SFTP port of %s.%s", agentPod, agentNS)
