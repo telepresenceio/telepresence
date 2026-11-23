@@ -425,7 +425,13 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			// Debug output stays off: it would echo the password (a session token).
 			// The FTP server follows only the mount directories the exports symlinks
 			// lead to; see addAppMounts and exportProcMounts, which create them.
-			roots, skipped := ftpRoots(config.SymlinkRoots(), readOnlyExports(ac))
+			// A sidecar has its read-only mounts read-only from the kubelet. A node-agent
+			// reaches them through the target container, where they may be writable.
+			var readOnly []string
+			if config.NodeAgent() {
+				readOnly = readOnlyExports(ac)
+			}
+			roots, skipped := ftpRoots(config.SymlinkRoots(), readOnly)
 			if len(skipped) > 0 {
 				clog.Infof(ctx, "Not offering %s over FTP, which cannot enforce read-only mounts or serve single files; they remain available over SFTP",
 					strings.Join(skipped, ", "))
