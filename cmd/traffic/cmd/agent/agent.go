@@ -188,8 +188,8 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 }
 
 // withoutDebugLogging returns a context whose logger drops debug and trace records. The FTP
-// server turns on its protocol echo, which logs every received line including "PASS <token>",
-// when debug logging is enabled on the context it is started with.
+// library's debug output echoes the protocol exchange, including the password (a session
+// token), so the FTP server is never started with debug logging enabled.
 func withoutDebugLogging(ctx context.Context) context.Context {
 	return clog.WithLogger(ctx, slog.New(noDebugHandler{clog.Logger(ctx).Handler()}))
 }
@@ -405,6 +405,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			if !config.PodIP().Is6() {
 				publicHost = config.PodIP().String()
 			}
+			// Debug output stays off: it would echo the password (a session token).
 			// The FTP server follows only the mount directories the exports symlinks
 			// lead to; see addAppMounts and exportProcMounts, which create them.
 			return ftp.StartWithValidator(withoutDebugLogging(ctx), publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
