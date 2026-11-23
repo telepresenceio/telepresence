@@ -162,7 +162,7 @@ func useLookupName(qName, noSearchDomain string) (string, bool) {
 		return qName, true
 	}
 	dots := 0
-	name := qName[:len(qName)-1]
+	name := strings.TrimSuffix(qName, ".")
 	for _, c := range name {
 		if c == '.' {
 			dots++
@@ -233,6 +233,9 @@ func makeError(err error) (RRs, int, error) {
 //nolint:cyclop // yeah, there are a lot of qTypes
 func Lookup(ctx context.Context, qType uint16, qName, noSearchDomain string) (RRs, int, error) {
 	var answer RRs
+	if qName == "" || qName == "." {
+		return nil, dns.RcodeFormatError, status.Error(codes.InvalidArgument, "empty DNS name")
+	}
 	r := &net.Resolver{StrictErrors: true}
 	switch qType {
 	case dns.TypeA:
@@ -291,7 +294,7 @@ func Lookup(ctx context.Context, qType uint16, qName, noSearchDomain string) (RR
 			Target: target,
 		}}
 	case dns.TypeMX:
-		mx, err := r.LookupMX(ctx, qName[:len(qName)-1])
+		mx, err := r.LookupMX(ctx, strings.TrimSuffix(qName, "."))
 		if err != nil {
 			return makeError(err)
 		}
@@ -304,7 +307,7 @@ func Lookup(ctx context.Context, qType uint16, qName, noSearchDomain string) (RR
 			}
 		}
 	case dns.TypeNS:
-		ns, err := r.LookupNS(ctx, qName[:len(qName)-1])
+		ns, err := r.LookupNS(ctx, strings.TrimSuffix(qName, "."))
 		if err != nil {
 			return makeError(err)
 		}
@@ -316,7 +319,7 @@ func Lookup(ctx context.Context, qType uint16, qName, noSearchDomain string) (RR
 			}
 		}
 	case dns.TypeSRV:
-		_, srvs, err := r.LookupSRV(ctx, "", "", qName[:len(qName)-1])
+		_, srvs, err := r.LookupSRV(ctx, "", "", strings.TrimSuffix(qName, "."))
 		if err != nil {
 			rrs, rCode, err := makeError(err)
 			if rCode != dns.RcodeNameError {
@@ -366,7 +369,11 @@ func svcFQN(ctx context.Context, name string, r *net.Resolver) string {
 		return ""
 	}
 	svcName := strings.Join(parts[2:], ".")
-	ips, err := r.LookupIP(ctx, "ip", svcName[:len(svcName)-1])
+	bareName := strings.TrimSuffix(svcName, ".")
+	if bareName == "" {
+		return ""
+	}
+	ips, err := r.LookupIP(ctx, "ip", bareName)
 	if err != nil || len(ips) < 1 {
 		return ""
 	}
