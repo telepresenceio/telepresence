@@ -705,6 +705,10 @@ func (s *session) complexClusterLookup(ctx context.Context, q *dns2.Question) (d
 		return nil, dns2.RcodeServerFailure, err
 	}
 	if len(s.localTranslationSubnets) > 0 {
+		if err = checkAddressRecords(answer); err != nil {
+			s.dnsFailures++
+			return nil, dns2.RcodeServerFailure, err
+		}
 		for _, rr := range answer {
 			switch rr := rr.(type) {
 			case *dns2.A:
@@ -1116,6 +1120,23 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 		}
 	}
 	return s.reconcileSubnets(mgrInfo, subnets)
+}
+
+// checkAddressRecords returns an error if an A or AAAA record has an address of the wrong length.
+func checkAddressRecords(rrs dnsproxy.RRs) error {
+	for _, rr := range rrs {
+		switch rr := rr.(type) {
+		case *dns2.A:
+			if len(rr.A) != net.IPv4len {
+				return fmt.Errorf("malformed A record for %q: %d address bytes", rr.Hdr.Name, len(rr.A))
+			}
+		case *dns2.AAAA:
+			if len(rr.AAAA) != net.IPv6len {
+				return fmt.Errorf("malformed AAAA record for %q: %d address bytes", rr.Hdr.Name, len(rr.AAAA))
+			}
+		}
+	}
+	return nil
 }
 
 func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
