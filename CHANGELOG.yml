@@ -53,7 +53,8 @@ items:
           <code>enforcing</code>. A traffic-manager that is installed or
           upgraded without an explicit mode authenticates every client and
           traffic-agent, and checks that a client holds a grant for what it
-          does. Clients older than 2.31.0 are refused.
+          does. An enforcing traffic-manager refuses clients older than
+          2.31.0; a permissive one still serves them.
           <code>telepresence helm upgrade</code> without value flags uses the
           new chart's defaults together with the values that were set earlier,
           so an existing installation that never set the mode becomes

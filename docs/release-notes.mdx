@@ -23,7 +23,7 @@ The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grp
 <Note>
 	<Title type="change" docs="reference/authentication#moving-an-existing-installation-to-enforcing">The traffic-manager enforces authentication by default</Title>
 	<Body>
-The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. Clients older than 2.31.0 are refused. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
+The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. An enforcing traffic-manager refuses clients older than 2.31.0; a permissive one still serves them. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
   </Body>
 </Note>
 <Note>
