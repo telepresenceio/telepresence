@@ -37,10 +37,9 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) e
 	resp, err := s.manager.GetQuicAgentCert(fetchCtx, s.sessionInfo)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
-			// The traffic-manager predates agent QUIC certificates. Expected skew;
+			// The traffic-manager predates agent QUIC certificates;
 			// the agent stays on its port-forwarded path, and fileShareAuth stays
-			// unpopulated, so file-sharing connections keep being accepted
-			// unauthenticated.
+			// unpopulated, so file-sharing connections and tunnel calls are refused.
 			clog.Debugf(fetchCtx, "quicserver: traffic-manager predates QUIC agent certificates")
 			return nil
 		}

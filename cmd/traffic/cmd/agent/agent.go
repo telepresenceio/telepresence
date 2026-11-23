@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"path/filepath"
@@ -149,15 +150,41 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 	}
 }
 
+// withoutDebugLogging returns a context whose logger drops debug and trace records. The FTP
+// server turns on its protocol echo, which logs every received line including "PASS <token>",
+// when debug logging is enabled on the context it is started with.
+func withoutDebugLogging(ctx context.Context) context.Context {
+	return clog.WithLogger(ctx, slog.New(noDebugHandler{clog.Logger(ctx).Handler()}))
+}
+
+type noDebugHandler struct{ slog.Handler }
+
+func (h noDebugHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level > slog.LevelDebug && h.Handler.Enabled(ctx, level)
+}
+
+func (h noDebugHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return noDebugHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h noDebugHandler) WithGroup(name string) slog.Handler {
+	return noDebugHandler{h.Handler.WithGroup(name)}
+}
+
 // serveSftpConn gates conn on its source address before serving it: every legitimate
 // consumer reaches this port through the telepresence tunnel, which the agent itself
 // dials, so its connections carry the pod's own source address (or loopback); anything
 // else is a direct connection that bypassed the tunnel, refused once auth.enforcing()
-// and served as before otherwise. See fromOwnPod.
+// and served otherwise. Every connection is refused until auth holds credential
+// material. See fromOwnPod.
 func serveSftpConn(ctx context.Context, conn net.Conn, srv *sftpserver.Server, auth *fileShareAuth, podIP netip.Addr) {
 	defer conn.Close()
 	clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
 
+	if !auth.ready() {
+		clog.Warnf(ctx, "sftp: closing connection from %s; the agent has no session credential material yet", conn.RemoteAddr())
+		return
+	}
 	if auth.enforcing() && !fromOwnPod(conn.RemoteAddr(), podIP) {
 		clog.Warnf(ctx, "sftp: closing direct connection from %s; a direct connection to the SFTP port requires the tunnel",
 			conn.RemoteAddr())
@@ -342,7 +369,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			}
 			// config.SymlinkRoots lists the trees the exports symlinks may lead
 			// into; see addAppMounts and exportProcMounts, which create them.
-			return ftp.StartWithValidator(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
+			return ftp.StartWithValidator(withoutDebugLogging(ctx), publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
 				srv.FileShareAuth().validatePassword, config.SymlinkRoots()...)
 		})
 	} else {

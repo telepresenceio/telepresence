@@ -10,6 +10,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
 	agentrpc "github.com/telepresenceio/telepresence/rpc/v2/agent"
 	mgrrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -126,14 +128,18 @@ func TestFileShareAuth_ValidatePassword_Permissive(t *testing.T) {
 	}
 }
 
-// TestFileShareAuth_ValidatePassword_NilSnapshotAcceptsAnything covers the state before
-// any manager has ever supplied credential material: there is nothing to verify
-// against, so every login succeeds, exactly as it did before this credential existed.
-func TestFileShareAuth_ValidatePassword_NilSnapshotAcceptsAnything(t *testing.T) {
+// TestFileShareAuth_ValidatePassword_NilSnapshotRefuses covers the state before any
+// manager has supplied credential material: every login is refused.
+func TestFileShareAuth_ValidatePassword_NilSnapshotRefuses(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	a := &fileShareAuth{}
+	require.False(t, a.ready())
 	require.False(t, a.enforcing())
-	require.NoError(t, a.validatePassword(ctx, "u", "not-a-token"))
+	require.Error(t, a.validatePassword(ctx, "u", "not-a-token"))
+	require.Error(t, a.validatePassword(ctx, "u", "anonymous"))
+
+	a.set(generateTestKey(t).Public().(*ecdsa.PublicKey), "permissive")
+	require.True(t, a.ready())
 	require.NoError(t, a.validatePassword(ctx, "u", "anonymous"))
 }
 
@@ -221,12 +227,16 @@ func TestFileShareAuth_VerifySession_Invalid(t *testing.T) {
 }
 
 // TestFileShareAuth_VerifySession_NilSnapshot covers the state before any manager has
-// ever supplied credential material: there is nothing to verify against, so the call is
-// treated exactly as before this check existed.
+// supplied credential material: the call is refused with codes.Unavailable.
 func TestFileShareAuth_VerifySession_NilSnapshot(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	a := &fileShareAuth{}
 	verified, err := a.verifySession(ctx, tunnel.SessionID("session-1"))
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.False(t, verified)
+
+	a.set(generateTestKey(t).Public().(*ecdsa.PublicKey), "permissive")
+	verified, err = a.verifySession(ctx, tunnel.SessionID("session-1"))
 	require.NoError(t, err)
 	require.False(t, verified)
 }
@@ -382,9 +392,28 @@ func TestServeSftpConn_ForeignEnforcingCloses(t *testing.T) {
 	require.Error(t, err, "expected the connection to be closed before completing the SFTP version exchange")
 }
 
+// TestServeSftpConn_NilSnapshotCloses asserts that every connection is closed while the
+// agent holds no credential material, and served once it does.
+func TestServeSftpConn_NilSnapshotCloses(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	f := newSftpGateFixture(t)
+	auth := &fileShareAuth{}
+	podIP := netip.MustParseAddr("10.42.0.7")
+	own := &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 4444}
+	addr := f.listen(t, ctx, auth, podIP, own)
+
+	conn, err := net.Dial("tcp", addr)
+	require.NoError(t, err)
+	_, err = sftp.NewClientPipe(conn, conn)
+	require.Error(t, err)
+	conn.Close()
+
+	auth.set(nil, "permissive")
+	requireListsFixture(t, addr)
+}
+
 // TestServeSftpConn_ForeignPermissiveServes asserts that a foreign-source connection is
-// still served, exactly as before this gate existed, when the snapshot's mode is
-// permissive.
+// served when the snapshot's mode is permissive.
 func TestServeSftpConn_ForeignPermissiveServes(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	f := newSftpGateFixture(t)
@@ -768,4 +797,15 @@ func receiveWithin(t *testing.T, ch <-chan int) int {
 		t.Fatal("timed out waiting for a refresh call")
 		return 0
 	}
+}
+
+// TestWithoutDebugLogging asserts that the context handed to the FTP server reports debug
+// logging as disabled, which keeps the server from echoing received lines such as PASS.
+func TestWithoutDebugLogging(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	require.True(t, clog.Enabled(ctx, slog.LevelDebug))
+	ctx = withoutDebugLogging(ctx)
+	require.False(t, clog.Enabled(ctx, slog.LevelDebug))
+	require.True(t, clog.Enabled(ctx, slog.LevelInfo))
+	require.False(t, clog.Enabled(clog.With(ctx, "k", "v"), slog.LevelDebug))
 }
