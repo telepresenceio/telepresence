@@ -980,6 +980,7 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 	ctx, sink := usg.InstallManager(ctx, "test-install")
 
 	s := newNodeAgentTestState()
@@ -1019,6 +1020,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
@@ -1054,6 +1056,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 	ctx, sink := usg.InstallManager(ctx, "test-install")
 
 	s := newNodeAgentTestState()
@@ -1100,6 +1103,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
@@ -1139,6 +1143,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
@@ -1274,6 +1279,7 @@ func TestEnsureNodeAgent_AllReplicas_CreatesOneJobPerPod(t *testing.T) {
 	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
@@ -1323,6 +1329,7 @@ func TestEnsureNodeAgent_Ingest_CreatesOnlyOneJob(t *testing.T) {
 	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
@@ -1357,6 +1364,7 @@ func TestEnsureNodeAgent_Ingest_ReusesJobForAdmissibleTarget(t *testing.T) {
 	ci := fake.NewSimpleClientset(objs...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
@@ -1368,4 +1376,33 @@ func TestEnsureNodeAgent_Ingest_ReusesJobForAdmissibleTarget(t *testing.T) {
 
 	created, _ := nodeAgentJobActionCounts(ci.Actions())
 	assert.Zero(t, created, "nothing should be created when a still-admissible job already exists")
+}
+
+// TestEnsureNodeAgent_ImageAndManagerHostFromManager verifies that the node-agent Job runs the
+// manager's own image and addresses the manager's own host, whatever the stored config says.
+func TestEnsureNodeAgent_ImageAndManagerHostFromManager(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	cfg.AgentImage = "evil.example/agent:1"
+	cfg.ManagerHost = "evil.example"
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	ci := fake.NewSimpleClientset(pod)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+
+	require.NoError(t, newNodeAgentTestState().ensureNodeAgent(ctx, wl, cfg, true))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1)
+	cn := jobs.Items[0].Spec.Template.Spec.Containers[0]
+	assert.Equal(t, "ghcr.io/telepresenceio/tel2:2.99.0", cn.Image)
+	for _, ev := range cn.Env {
+		assert.NotContains(t, ev.Value, "evil.example", ev.Name)
+	}
 }

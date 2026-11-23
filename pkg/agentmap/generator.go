@@ -100,6 +100,9 @@ func (cfg *GeneratorConfig) Generate(
 	wl k8sapi.Workload,
 	existingConfig *agentconfig.Sidecar,
 ) (*agentconfig.Sidecar, error) {
+	// Work on a copy, so that mount policies from one workload's annotations never reach another's.
+	local := *cfg
+	cfg = &local
 	if TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
 		return nil, errcat.User.Newf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
 	}
@@ -382,6 +385,12 @@ nextContainerPort:
 				// port is a configuration error that won't be fixed by retrying.
 				return nil, errcat.User.Newf("found no container port that matches port annotation %s", p)
 			}
+			if cn == nil {
+				if cn = soleApplicationContainer(cns); cn == nil {
+					return nil, errcat.User.Newf(
+						"port annotation %s matches no declared container port, and the pod has more than one container to assign it to", p)
+				}
+			}
 			appPort = &core.ContainerPort{
 				Name:          fmt.Sprintf("port-%s", Base26(anonNameIndex)),
 				ContainerPort: int32(num),
@@ -417,6 +426,20 @@ nextContainerPort:
 		ccs = append(ccs, cfg.newContainerConfig(cn, len(ccs), []*agentconfig.Intercept{ic}, containerReplacePolicy(existingConfig, cn)))
 	}
 	return ccs, nil
+}
+
+func soleApplicationContainer(cns []core.Container) *core.Container {
+	var found *core.Container
+	for i := range cns {
+		if cns[i].Name == agentconfig.ContainerName {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = &cns[i]
+	}
+	return found
 }
 
 func containerReplacePolicy(existingConfig *agentconfig.Sidecar, cn *core.Container) agentconfig.ReplacePolicy {

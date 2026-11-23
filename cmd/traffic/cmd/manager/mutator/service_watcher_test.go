@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -85,4 +86,50 @@ func TestUpdatedServiceIncludesNewlySelectedWorkload(t *testing.T) {
 		names = append(names, config.sc.AgentName)
 	}
 	assert.Equal(t, []string{stable.Name}, names)
+}
+
+func TestNewlyMatchingServiceStoresButDoesNotEvict(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	old := wanted.Clone()
+	old.ManagerHost = "traffic-manager.old"
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-old", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	f.evictionsSucceed()
+
+	f.cw.applyRegeneratedConfig(f.ctx, k8sapi.Deployment(deployment), old, wanted, false)
+
+	assert.Zero(t, f.cw.pendingRequests.Load(), "a Service that newly matches the workload must not request an eviction")
+	assert.Zero(t, f.evictions.Load())
+	assert.Equal(t, wanted, f.cw.Get(name, ns), "the new config is stored for the next pod start")
+}
+
+func TestUnchangedConfigIsNotEvictedForClaimedService(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-old", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	f.evictionsSucceed()
+
+	f.cw.applyRegeneratedConfig(f.ctx, k8sapi.Deployment(deployment), wanted, wanted.Clone(), true)
+
+	assert.Zero(t, f.cw.pendingRequests.Load())
+	assert.Zero(t, f.evictions.Load())
+}
+
+func TestChangedConfigIsEvictedForClaimedService(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	old := wanted.Clone()
+	old.ManagerHost = "traffic-manager.old"
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-old", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	f.evictionsSucceed()
+
+	f.cw.applyRegeneratedConfig(f.ctx, k8sapi.Deployment(deployment), old, wanted, true)
+
+	assert.Equal(t, int32(1), f.cw.pendingRequests.Load(), "an intercept that referred to the Service keeps its pods in step")
 }

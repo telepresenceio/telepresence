@@ -46,8 +46,11 @@ type Env struct {
 	// must match agentInjector.webhook.port's chart default (values.yaml)
 	// -- the agent-injector Service's targetPort is unconditional on that
 	// value regardless of which mode created the listening process.
-	MutatorWebhookPort           uint16 `default:"8443"`
-	ManagerNamespace             string
+	MutatorWebhookPort uint16 `default:"8443"`
+	ManagerNamespace   string
+	// UninstallHookServiceAccount is the name, in ManagerNamespace, of the ServiceAccount that the
+	// pre-delete hook runs as. Only its token may call /uninstall; when empty, no token may.
+	UninstallHookServiceAccount  string
 	AgentRestApiPort             uint16
 	AgentArrivalTimeout          time.Duration `default:"30s"`
 	MaxNamespaceSpecificWatchers int           `default:"10"`
