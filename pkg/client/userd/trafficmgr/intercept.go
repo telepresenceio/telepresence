@@ -75,6 +75,13 @@ type intercept struct {
 	// Mount read-only
 	readOnly bool
 
+	// local is true when this daemon created the intercept in this session. Only such an
+	// intercept gets mounts, listeners, an API server, shortcuts and dial targets.
+	local bool
+
+	// localPorts are the ports that the local request asked to forward to the pod.
+	localPorts []string
+
 	// ownsMountPoint is true when this daemon created ClientMountPoint (the CLI asked
 	// for a generated mount point) and is therefore responsible for removing it.
 	ownsMountPoint atomic.Bool
@@ -103,6 +110,9 @@ type awaitIntercept struct {
 	// the mount to take place in a host
 	mountPort int32
 
+	// localPorts are the ports that the local request asked to forward to the pod.
+	localPorts []string
+
 	// ownsMountPoint is true when this daemon created mountPoint and must remove it once
 	// the intercept ends.
 	ownsMountPoint bool
@@ -111,22 +121,10 @@ type awaitIntercept struct {
 	waitCh   chan<- interceptResult
 }
 
-func (ic *intercept) localPorts() []string {
-	// Older versions use ii.extraPorts (TCP only), newer versions use ii.localPorts.
-	ps := ic.Spec.LocalPorts
-	if len(ps) == 0 {
-		for _, ep := range ic.Spec.ExtraPorts {
-			ps = append(ps, strconv.Itoa(int(ep)))
-		}
-		ic.Spec.LocalPorts = ps
-	}
-	return ps
-}
-
 func (ic *intercept) podAccess() *podAccess {
 	return &podAccess{
 		ctx:              ic.ctx,
-		localPorts:       ic.localPorts(),
+		localPorts:       ic.localPorts,
 		workload:         ic.Spec.Agent,
 		namespace:        ic.Spec.Namespace,
 		podIP:            ic.PodIp,
@@ -186,9 +184,13 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 }
 
 func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*manager.InterceptInfo) {
+	intercepts = slices.DeleteFunc(slices.Clone(intercepts), func(ii *manager.InterceptInfo) bool {
+		return ii == nil || ii.Spec == nil
+	})
 	// The root daemon must know the targets before any waiter is told that an intercept is
 	// active and before a removal is reported as done.
-	s.pushInterceptTargets(intercepts)
+	owned := s.ownedIntercepts(intercepts)
+	s.pushInterceptTargets(owned)
 	s.setCurrentIntercepts(intercepts)
 	pat.initSnapshot()
 	for id := range s.agentless {
@@ -204,6 +206,11 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		s.currentInterceptsLock.Lock()
 		ic := s.currentIntercepts[ii.Id]
+		if !ic.local {
+			// Nothing is mounted, forwarded or served for an intercept this daemon did not create.
+			s.currentInterceptsLock.Unlock()
+			continue
+		}
 		aw := s.interceptWaiters[ii.Spec.Name]
 		if aw != nil {
 			delete(s.interceptWaiters, ii.Spec.Name)
@@ -275,7 +282,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		pat.start(pa)
 	}
 	pat.cancelUnwanted(s, nil)
-	s.pushInterceptShortcuts(intercepts)
+	s.pushInterceptShortcuts(owned)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does
@@ -299,6 +306,24 @@ func (s *session) getCurrentInterceptInfos() []*manager.InterceptInfo {
 	return ifs
 }
 
+// ownedIntercepts returns the entries that this daemon created in this session: those it
+// already tracks as its own, and new ones that match a pending AddIntercept.
+func (s *session) ownedIntercepts(iis []*manager.InterceptInfo) []*manager.InterceptInfo {
+	s.currentInterceptsLock.Lock()
+	defer s.currentInterceptsLock.Unlock()
+	owned := make([]*manager.InterceptInfo, 0, len(iis))
+	for _, ii := range iis {
+		if ic, ok := s.currentIntercepts[ii.Id]; ok {
+			if ic.local {
+				owned = append(owned, ii)
+			}
+		} else if _, ok := s.interceptWaiters[ii.Spec.Name]; ok {
+			owned = append(owned, ii)
+		}
+	}
+	return owned
+}
+
 func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	s.currentInterceptsLock.Lock()
 	intercepts := make(map[string]*intercept, len(iis))
@@ -307,14 +332,17 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	for i, ii := range iis {
 		ic, ok := s.currentIntercepts[ii.Id]
 		if ok {
-			// retain ClientMountPoint, it's assigned in the client and never passed from the traffic-manager
+			// retain ClientMountPoint, it's assigned in the client and never taken from the traffic-manager
 			ii.ClientMountPoint = ic.ClientMountPoint
 			ic.InterceptInfo = ii
 		} else {
 			ic = &intercept{InterceptInfo: ii, finalRemovalDone: make(chan struct{})}
 			ic.ctx, ic.cancel = context.WithCancel(s)
 			clog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
+			ic.ClientMountPoint = ""
 			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
+				ic.local = true
+				ic.localPorts = aw.localPorts
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
 				ic.readOnly = aw.readOnly
@@ -784,6 +812,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	s.interceptWaiters[spec.Name] = &awaitIntercept{
 		mountPoint:     ir.MountPoint,
 		mountPort:      ir.LocalMountPort,
+		localPorts:     slices.Clone(spec.LocalPorts),
 		ownsMountPoint: ownsMountPoint,
 		readOnly:       ir.MountReadOnly,
 		waitCh:         waitCh,
@@ -1099,8 +1128,9 @@ func (s *session) reconcileAPIServers() {
 	agentAPIPort := func(ii *manager.InterceptInfo) int {
 		is := ii.Spec
 		if ps, ok := ii.Environment[agentconfig.EnvAPIPort]; ok {
+			// The port can only come from the cluster, so a privileged one is refused.
 			port, err := strconv.ParseUint(ps, 10, 16)
-			if err == nil {
+			if err == nil && port >= 1024 {
 				return int(port)
 			}
 			clog.Errorf(s, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
@@ -1110,7 +1140,7 @@ func (s *session) reconcileAPIServers() {
 
 	for _, ic := range s.currentIntercepts {
 		ii := ic.InterceptInfo
-		if ic.Disposition == manager.InterceptDispositionType_ACTIVE {
+		if ic.local && ic.Disposition == manager.InterceptDispositionType_ACTIVE {
 			if port := agentAPIPort(ii); port > 0 {
 				wantedPorts[port] = struct{}{}
 				wantedMatchers[ic.Id] = ii
