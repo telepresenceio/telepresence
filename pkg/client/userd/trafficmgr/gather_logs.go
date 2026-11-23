@@ -290,6 +290,34 @@ type podLogAssembly struct {
 	errText string
 }
 
+// recordSkippedNote saves a pod-less error frame, the manager's note that some
+// logs were skipped, as a file and a result entry.
+func recordSkippedNote(ctx context.Context, exportDir string, chunk *manager.LogChunk, result map[string]string) {
+	e := chunk.GetError()
+	if e == "" {
+		return
+	}
+	const skippedFile = "skipped-agent-logs.txt"
+	if err := os.WriteFile(filepath.Join(exportDir, skippedFile), []byte(e+"\n"), 0o666); err != nil {
+		clog.Error(ctx, err)
+	}
+	result[skippedFile] = e
+}
+
+// validLogSource reports whether the pod name and namespace of chunk are valid Kubernetes names.
+// The first chunk from an invalid source is logged and noted in result.
+func validLogSource(ctx context.Context, chunk *manager.LogChunk, ignored map[string]bool, result map[string]string) bool {
+	if len(validation.IsDNS1123Subdomain(chunk.PodName)) == 0 && len(validation.IsDNS1123Label(chunk.PodNamespace)) == 0 {
+		return true
+	}
+	if ik := chunk.PodName + "/" + chunk.PodNamespace; !ignored[ik] {
+		ignored[ik] = true
+		clog.Warnf(ctx, "Ignoring log data for pod %q in namespace %q: not valid Kubernetes names", chunk.PodName, chunk.PodNamespace)
+		result[fmt.Sprintf("invalid-pod-%d", len(ignored))] = "ignored log data from a pod with an invalid name or namespace"
+	}
+	return false
+}
+
 // gatherLogChunks assembles LogChunk frames into one <pod>.<namespace>.log (and an
 // optional .yaml) per pod, plus a result map. Frames from different pods interleave
 // on the stream, but a given pod's own frames arrive in order: BEGIN, data/error, END.
@@ -315,12 +343,11 @@ func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkRecei
 			return result, err
 		}
 
-		if len(validation.IsDNS1123Subdomain(chunk.PodName)) > 0 || len(validation.IsDNS1123Label(chunk.PodNamespace)) > 0 {
-			if ik := chunk.PodName + "/" + chunk.PodNamespace; !ignored[ik] {
-				ignored[ik] = true
-				clog.Warnf(ctx, "Ignoring log data for pod %q in namespace %q: not valid Kubernetes names", chunk.PodName, chunk.PodNamespace)
-				result[fmt.Sprintf("invalid-pod-%d", len(ignored))] = "ignored log data from a pod with an invalid name or namespace"
-			}
+		if chunk.PodName == "" && chunk.PodNamespace == "" {
+			recordSkippedNote(ctx, exportDir, chunk, result)
+			continue
+		}
+		if !validLogSource(ctx, chunk, ignored, result) {
 			continue
 		}
 		key := chunk.PodName + "." + chunk.PodNamespace

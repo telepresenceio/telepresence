@@ -347,3 +347,20 @@ func TestInDir(t *testing.T) {
 		require.Error(t, err, n)
 	}
 }
+
+func TestGatherLogChunks_SkippedNote(t *testing.T) {
+	exportDir := t.TempDir()
+	frames := []*manager.LogChunk{
+		errChunk("", "", "some logs were skipped"),
+		begin("agent-a", "default"),
+		dataChunk("agent-a", "default", "hello"),
+		end("agent-a", "default"),
+	}
+	result, err := gatherLogChunks(context.Background(), exportDir, &fakeLogChunkStream{chunks: frames})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"agent-a.default.log":    "ok",
+		"skipped-agent-logs.txt": "some logs were skipped",
+	}, result)
+	requireFileContent(t, exportDir, "skipped-agent-logs.txt", "some logs were skipped\n")
+}
