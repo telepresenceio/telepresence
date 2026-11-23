@@ -312,9 +312,10 @@ helm upgrade --namespace ambassador --reuse-values traffic-manager oci://ghcr.io
 ```
 
 `helm upgrade --reuse-values` keeps the values of the installed release, including the defaults of the old chart, so a
-changed chart default does not take effect. From 2.34.0 that means the mode stays as it was. Without `--reuse-values`,
-Helm uses the new chart's defaults, so an installation that never set `security.authentication.mode` becomes
-`enforcing`; add `--set security.authentication.mode=permissive` to keep the previous mode.
+changed chart default does not take effect. From 2.34.0 that means the mode stays as it was. Without `--reuse-values`
+and without value flags, Helm uses the new chart's defaults with the values that you supplied earlier on top, so an
+installation that never set `security.authentication.mode` becomes `enforcing`. To keep the previous mode and your
+earlier values, use `--reset-then-reuse-values --set security.authentication.mode=permissive` (Helm 3.14 or later).
 
 If you want to upgrade (or downgrade) the Traffic Manager to a specific version, add a `--version` flag with the version
 number to the upgrade command, e.g.: `--version v2.20.3`.
