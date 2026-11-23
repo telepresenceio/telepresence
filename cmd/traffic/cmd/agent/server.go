@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -108,7 +109,20 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
 	}
 
-	endPoint := tunnel.NewDialer(stream, func() {}, ingressBytes, egressBytes)
+	var endPoint tunnel.Endpoint
+	if stream.ID().Protocol() == types.ProtoTCP && isOwnSftpDestination(stream.ID().Destination(), s.SftpPort(), s.PodIP()) {
+		conn, err := s.openSftpConn(ctx)
+		if err != nil {
+			return errors.FromError(err, codes.Unavailable, err.Error())
+		}
+		defer conn.Close()
+		if err := stream.Send(ctx, tunnel.NewMessage(tunnel.DialOK, nil)); err != nil {
+			return err
+		}
+		endPoint = tunnel.NewConnEndpoint(stream, conn, func() {}, ingressBytes, egressBytes)
+	} else {
+		endPoint = tunnel.NewDialer(stream, func() {}, ingressBytes, egressBytes)
+	}
 	endPoint.Start(ctx)
 	<-endPoint.Done()
 
