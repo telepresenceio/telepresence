@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 func TestInterceptTargets(t *testing.T) {
@@ -97,4 +98,50 @@ func TestInterceptTargets(t *testing.T) {
 		require.NoError(t, ap.UnmarshalBinary(got[1].Target))
 		assert.Equal(t, "127.0.0.1:9001", ap.String())
 	})
+}
+
+func TestForeignInterceptDoesNothingLocal(t *testing.T) {
+	// The cluster path cannot play a false traffic-manager, so the snapshot handling is checked here.
+	s := newWorkloadSnapshotTestSession(t, map[string]*intercept{})
+	s.Context = client.WithConfig(s.Context, client.GetDefaultConfig())
+	s.interceptWaiters = map[string]*awaitIntercept{}
+	s.localDestinations = map[string]destinationSet{}
+
+	foreign := &manager.InterceptInfo{
+		Id:               "x",
+		Disposition:      manager.InterceptDispositionType_ACTIVE,
+		PodIp:            "10.0.0.9",
+		SftpPort:         2222,
+		MountPoint:       "/export",
+		ClientMountPoint: "/home/user",
+		Environment:      map[string]string{"TELEPRESENCE_API_PORT": "9980"},
+		Spec: &manager.InterceptSpec{
+			Name: "foreign", Namespace: "ns", Agent: "echo", TargetHost: "127.0.0.1", TargetPort: 8080,
+			LocalPorts: []string{"8081"},
+		},
+	}
+	noSpec := &manager.InterceptInfo{Id: "y", Disposition: manager.InterceptDispositionType_ACTIVE}
+
+	// Must not panic on the entry without a spec.
+	pat := newPodAccessTracker()
+	s.handleInterceptSnapshot(pat, []*manager.InterceptInfo{foreign, noSpec, nil})
+
+	require.Len(t, s.currentIntercepts, 1)
+	ic := s.currentIntercepts["x"]
+	require.NotNil(t, ic)
+	assert.False(t, ic.local)
+	assert.Empty(t, ic.ClientMountPoint)
+	pa := ic.podAccess()
+	assert.False(t, pa.shouldMount())
+	assert.False(t, pa.shouldForward())
+	assert.Empty(t, pat.alivePods)
+	assert.Empty(t, s.currentAPIServers)
+	assert.Empty(t, s.ownedIntercepts([]*manager.InterceptInfo{foreign}))
+	assert.Empty(t, interceptTargets(s.ownedIntercepts([]*manager.InterceptInfo{foreign}), s.localDestinations))
+	assert.Empty(t, s.interceptShortcuts(s.ownedIntercepts([]*manager.InterceptInfo{foreign}), true))
+
+	// An entry that matches a pending local request is owned.
+	s.interceptWaiters["mine"] = &awaitIntercept{}
+	mine := &manager.InterceptInfo{Id: "z", Spec: &manager.InterceptSpec{Name: "mine"}}
+	assert.Len(t, s.ownedIntercepts([]*manager.InterceptInfo{mine}), 1)
 }
