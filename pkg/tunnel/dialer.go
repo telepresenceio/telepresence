@@ -30,6 +30,7 @@ const (
 	tcpConnTTL       = 2 * time.Hour // Default tcp_keepalive_time on Linux
 	udpConnTTL       = 2 * time.Second
 	localDialTimeout = 2 * time.Second
+	maxDialTimeout   = time.Minute
 	slowDialResponse = 2 * time.Second
 )
 
@@ -156,7 +157,7 @@ func (h *dialer) Start(ctx context.Context) {
 			// Set up the idle timer to close and release this handler when it's been idle for a while.
 			h.connected = connecting
 
-			dto := h.stream.DialTimeout()
+			dto := min(h.stream.DialTimeout(), maxDialTimeout)
 			dst := id.Destination()
 			dstAddr := dst.Addr()
 			if dstAddr.Is6() {
