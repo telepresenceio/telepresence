@@ -251,7 +251,6 @@ func (s *AgentidSessionAccess) Test_TunnelToLoopbackFtpBannerRefused() {
 
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetFtpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
-
 	if err != nil {
 		agentidRequireRefusedOrEnded(t, "opening the tunnel to the FTP port", err)
 		return
@@ -296,7 +295,6 @@ func (s *AgentidSessionAccess) Test_SftpMarkerFileReadRefused() {
 
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetSftpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
-
 	if err != nil {
 		agentidRequireRefusedOrEnded(t, "opening the tunnel to the SFTP port", err)
 		return
@@ -352,7 +350,6 @@ func (s *AgentidSessionAccess) Test_FtpLoginWithSessionTokenRefused() {
 
 	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetFtpPort()))
 	conn, err := agentidOpenAgentTunnel(callCtx, ac, sessionTok, sessionTokenSessionID(t, sessionTok), dst)
-
 	if err != nil {
 		agentidRequireRefusedOrEnded(t, "opening the tunnel to the FTP port", err)
 		return
