@@ -30,6 +30,7 @@ func init() {
 }
 
 const (
+	agenthardPodWait      = 30 * time.Second
 	agenthardExports      = "/tel_app_exports"
 	agenthardSftpDeadline = 2 * time.Minute
 	agenthardWalkDepth    = 8
@@ -135,9 +136,34 @@ func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string
 	if port == 0 {
 		t.Fatalf("no intercept of %s with an SFTP port in the list output", name)
 	}
+	start := time.Now()
+	for {
+		agentNS, pod = agenthardFindPod(ctx, s, podName, podIP)
+		if pod != "" {
+			break
+		}
+		if time.Since(start) >= agenthardPodWait || ctx.Err() != nil {
+			t.Fatalf("no pod with IP %s found for the traffic-agent of %s within %s", podIP, name, agenthardPodWait)
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return agentNS, pod, port
+}
+
+// agenthardFindPod returns the namespace and name of the pod with the given IP, preferring the
+// pod named podName, or "" when no pod has that IP.
+func agenthardFindPod(ctx context.Context, s *AgenthardSftp, podName, podIP string) (agentNS, pod string) {
 	out, err := s.R().Kubectl(ctx, "", "get", "pods", "-A", "-o",
 		`jsonpath={range .items[*]}{.metadata.namespace}|{.metadata.name}|{.status.podIP}{"\n"}{end}`)
-	s.Require().NoError(err)
+	if err != nil {
+		if ctx.Err() == nil {
+			s.Require().NoError(err)
+		}
+		return "", ""
+	}
 	for _, line := range strings.Split(out, "\n") {
 		parts := strings.SplitN(strings.TrimSpace(line), "|", 3)
 		if len(parts) != 3 || parts[2] != podIP {
@@ -147,10 +173,7 @@ func agenthardLocateAgent(ctx context.Context, s *AgenthardSftp, ns, name string
 			agentNS, pod = parts[0], parts[1]
 		}
 	}
-	if pod == "" {
-		t.Fatalf("no pod with IP %s found for the traffic-agent of %s", podIP, name)
-	}
-	return agentNS, pod, port
+	return agentNS, pod
 }
 
 // agenthardFindProcRoot returns the /proc/<pid>/root prefix of the first link under dir whose
