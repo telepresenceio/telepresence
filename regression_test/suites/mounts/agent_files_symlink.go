@@ -25,7 +25,7 @@ type AgenthardSftp struct {
 }
 
 func init() {
-	rt.Register(&AgenthardSftp{}, rt.InArea("mounts"), rt.NeedsManager(managers.NodeAgent()),
+	rt.Register(&AgenthardSftp{}, rt.InArea("mounts"), rt.NeedsManager(managers.NodeAgentAuthPermissive()),
 		rt.Requires(rt.FUSE), rt.NotOn("windows"))
 }
 

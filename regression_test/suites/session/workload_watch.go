@@ -37,7 +37,7 @@ type WorkloadWatch struct {
 func init() {
 	rt.Register(&WorkloadWatch{},
 		rt.InArea("session"),
-		rt.NeedsManager(managers.Default),
+		rt.NeedsManager(managers.AuthPermissive()),
 		rt.WithLabels(rt.CompatCore),
 	)
 }

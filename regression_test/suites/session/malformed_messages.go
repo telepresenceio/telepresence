@@ -50,7 +50,7 @@ type MalformedMessages struct {
 }
 
 func init() {
-	rt.Register(&MalformedMessages{}, rt.InArea("session"), rt.NeedsManager(managers.Default))
+	rt.Register(&MalformedMessages{}, rt.InArea("session"), rt.NeedsManager(managers.AuthPermissive()))
 }
 
 // malformedTarget identifies one container whose survival is asserted.
