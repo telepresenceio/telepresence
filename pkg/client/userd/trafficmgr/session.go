@@ -87,6 +87,8 @@ type workloadWatch struct {
 }
 
 type session struct {
+	targetsPublisher interceptTargetsPublisher
+
 	*k8s.Cluster
 	service            userd.Service
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
@@ -1649,7 +1651,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 		}
 		if err == nil {
 			clog.Info(s, "Reconnected to root daemon")
-			s.pushInterceptTargets(s.getCurrentInterceptInfos())
+			s.resendInterceptTargets()
 			s.updateDaemonNamespaces()
 			return
 		}

@@ -68,10 +68,24 @@ func TestAddRequestTaps_HugeContentLength(t *testing.T) {
 	req.ContentLength = declared
 	req.Header.Set("X-Test", "value")
 
-	start := time.Now()
-	taps, tapReader, err := addRequestTaps(context.Background(), req, 1, 16)
-	require.NoError(t, err)
-	require.Less(t, time.Since(start), 2*time.Second)
+	type result struct {
+		taps      []io.Reader
+		tapReader *teeReader
+		err       error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		taps, tapReader, err := addRequestTaps(context.Background(), req, 1, 16)
+		resCh <- result{taps, tapReader, err}
+	}()
+	var res result
+	select {
+	case res = <-resCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("addRequestTaps did not return within 2s")
+	}
+	require.NoError(t, res.err)
+	taps, tapReader := res.taps, res.tapReader
 	tapReader.closeTaps()
 
 	b, err := io.ReadAll(taps[0])

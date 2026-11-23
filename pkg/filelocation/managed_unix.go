@@ -16,7 +16,7 @@ func checkManaged(path, root string) error {
 }
 
 // checkManagedOwner walks from path up to root. Each element must be owned by the given user, not be writable by
-// group or others, and not be a symbolic link.
+// group or others, not be a symbolic link, and (on macOS) have no access control entry that allows changes.
 func checkManagedOwner(path, root string, owner uint32) error {
 	path = filepath.Clean(path)
 	root = filepath.Clean(root)
@@ -40,6 +40,13 @@ func checkManagedOwner(path, root string, owner uint32) error {
 		}
 		if fi.Mode().Perm()&0o022 != 0 {
 			return &UntrustedError{Path: path, Reason: fmt.Sprintf("%s is writable by group or others (mode %04o)", p, fi.Mode().Perm())}
+		}
+		acl, err := aclWriter(p)
+		if err != nil {
+			return &UntrustedError{Path: path, Reason: err.Error()}
+		}
+		if acl != "" {
+			return &UntrustedError{Path: path, Reason: fmt.Sprintf("%s has an access control entry that allows changes: %s", p, acl)}
 		}
 		if p == root {
 			return nil

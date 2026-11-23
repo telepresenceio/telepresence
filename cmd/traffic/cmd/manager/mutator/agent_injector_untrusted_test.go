@@ -141,24 +141,20 @@ func deleteRequest(pod *core.Pod) *admission.AdmissionRequest {
 	return req
 }
 
-func TestInject_DeleteInactivatesOnlyKnownPods(t *testing.T) {
+func TestInject_DeleteReviewDoesNotInactivate(t *testing.T) {
 	known := untrustedPod("known-uid", nil)
 	ctx := untrustedInjectorContext(t, nil, known)
 	cw := NewWatcher()
 	a := agentInjector{agentConfigs: cw}
 
-	forged := untrustedPod("forged-uid", nil)
-	_, err := a.Inject(ctx, deleteRequest(forged))
-	require.NoError(t, err)
-	assert.False(t, cw.IsInactive("forged-uid"))
-
-	renamed := untrustedPod("known-uid", nil)
-	renamed.Name = "other"
-	_, err = a.Inject(ctx, deleteRequest(renamed))
+	_, err := a.Inject(ctx, deleteRequest(known))
 	require.NoError(t, err)
 	assert.False(t, cw.IsInactive("known-uid"))
 
-	_, err = a.Inject(ctx, deleteRequest(known))
-	require.NoError(t, err)
+	cw.(*configWatcher).inactivateTerminating(known, false)
+	assert.False(t, cw.IsInactive("known-uid"), "a pod that isn't terminating stays active")
+	now := meta.Now()
+	known.DeletionTimestamp = &now
+	cw.(*configWatcher).inactivateTerminating(known, false)
 	assert.True(t, cw.IsInactive("known-uid"))
 }

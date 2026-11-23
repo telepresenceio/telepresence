@@ -153,7 +153,7 @@ func (c *configWatcher) reconcile(ctx context.Context, key WorkloadKey) (pending
 	if !state.requested {
 		return false, nil
 	}
-	pending, err = c.reconcileLocked(ctx, key, state)
+	pending, err = c.reconcileLockedRecovering(ctx, key, state)
 	switch {
 	case err != nil:
 		if ctx.Err() != nil {
@@ -171,6 +171,17 @@ func (c *configWatcher) reconcile(ctx context.Context, key WorkloadKey) (pending
 		state.failures = 0
 	}
 	return pending, err
+}
+
+// reconcileLockedRecovering reports a panic of reconcileLocked as an error, so that it counts as a failure.
+func (c *configWatcher) reconcileLockedRecovering(ctx context.Context, key WorkloadKey, state *workloadEvictionState) (pending bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			clog.Errorf(ctx, "panic in eviction pass for %s: %v\n%s", key, r, debug.Stack())
+			pending, err = false, fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return c.reconcileLocked(ctx, key, state)
 }
 
 func (c *configWatcher) reconcileLocked(ctx context.Context, key WorkloadKey, state *workloadEvictionState) (bool, error) {
@@ -339,6 +350,7 @@ func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInfor
 			defer recoverHandlerPanic(ctx, "pod")
 			oldPod, oldOK := oldObj.(*core.Pod)
 			newPod, newOK := newObj.(*core.Pod)
+			c.inactivateTerminating(newObj, false)
 			if oldOK && newOK &&
 				podIsReady(oldPod) == podIsReady(newPod) &&
 				oldPod.Status.Phase == newPod.Status.Phase &&
@@ -349,9 +361,20 @@ func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInfor
 		},
 		DeleteFunc: func(obj any) {
 			defer recoverHandlerPanic(ctx, "pod")
+			c.inactivateTerminating(obj, true)
 			c.podChanged(ctx, obj)
 		},
 	})
+}
+
+// inactivateTerminating hides the agent of a pod that is being deleted or, when deleted is set, is gone.
+func (c *configWatcher) inactivateTerminating(obj any, deleted bool) {
+	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		obj = tombstone.Obj
+	}
+	if pod, ok := obj.(*core.Pod); ok && pod.UID != "" && (deleted || pod.DeletionTimestamp != nil) {
+		c.Inactivate(pod.UID)
+	}
 }
 
 func (c *configWatcher) podChanged(ctx context.Context, obj any) {

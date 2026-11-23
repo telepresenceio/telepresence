@@ -1387,7 +1387,12 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 	cfg = GetDefaultConfig()
 	sysDir := filelocation.AppSystemConfigDir(c)
 	if file, pinned := c.Value(configFileKey{}).(string); pinned {
-		err = mergeConfigFile(c, cfg, file)
+		// The installed system config is trusted only when the administrator owns it, however it is named.
+		if file == filepath.Join(filelocation.RootConfigDir, ConfigFile) {
+			err = mergeSystemConfigFile(c, cfg, filelocation.RootConfigDir)
+		} else {
+			err = mergeConfigFile(c, cfg, file)
+		}
 	} else {
 		if err := mergeSystemConfigFile(c, cfg, sysDir); err != nil {
 			return nil, err

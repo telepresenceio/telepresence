@@ -54,10 +54,11 @@ func readFrame(r io.Reader) ([]byte, error) {
 	if _, err := io.ReadFull(r, lb[:]); err != nil {
 		return nil, err
 	}
-	n := int(binary.BigEndian.Uint32(lb[:]))
-	if n > maxFrameSize {
-		return nil, fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", n, maxFrameSize)
+	size := binary.BigEndian.Uint32(lb[:])
+	if size > maxFrameSize {
+		return nil, fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", size, maxFrameSize)
 	}
+	n := int(size)
 	if n == 0 {
 		return []byte{}, nil
 	}

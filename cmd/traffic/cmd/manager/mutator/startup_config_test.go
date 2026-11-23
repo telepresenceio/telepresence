@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -23,6 +25,7 @@ const startupImage = "registry.example/tel2:manager"
 
 func startupDeployment(ns, name string) *apps.Deployment {
 	d := stableDeployment(ns, name, 1, nil)
+	d.UID = types.UID("uid-" + name)
 	d.Spec.Template.Annotations = map[string]string{
 		annotation.InjectTrafficAgent:   "enabled",
 		annotation.InjectContainerPorts: "8080",
@@ -33,6 +36,13 @@ func startupDeployment(ns, name string) *apps.Deployment {
 		Ports: []core.ContainerPort{{Name: "http", ContainerPort: 8080, Protocol: core.ProtocolTCP}},
 	}}
 	return d
+}
+
+func ownedBy(pod *core.Pod, d *apps.Deployment) *core.Pod {
+	pod.OwnerReferences = []meta.OwnerReference{{
+		APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: d.Name, UID: d.UID, Controller: new(true),
+	}}
+	return pod
 }
 
 func startupConfigJSON(t *testing.T, sc *agentconfig.Sidecar) string {
@@ -94,7 +104,7 @@ func TestStartupRebuildsConfigFromManagerValues(t *testing.T) {
 		PullSecrets:         []core.LocalObjectReference{{Name: "evil"}},
 		Containers:          []*agentconfig.Container{{Name: "app", Replace: agentconfig.ReplacePolicyContainer}},
 	}
-	pod := agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true)
+	pod := ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
 	f := startupFixture(t, d, pod)
 
 	sc := f.cw.Get("web", "a")
@@ -121,7 +131,7 @@ func TestRestoreAgentConfigUsesGeneratedConfig(t *testing.T) {
 		AgentImage:   "evil.example/agent:1",
 		Containers:   []*agentconfig.Container{{Name: "app", Replace: agentconfig.ReplacePolicyContainer}},
 	}
-	pod := agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true)
+	pod := ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
 	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, d, pod)
 	managerutil.GetEnv(f.ctx).AgentPort = 9900
 	ctx := WithMap(managerutil.WithResolvedAgentImageRetriever(f.ctx, managerutil.ImageFromEnv(startupImage)), f.cw)
@@ -136,11 +146,20 @@ func TestRestoreAgentConfigUsesGeneratedConfig(t *testing.T) {
 	// An annotation naming another workload restores nothing.
 	f.cw.Delete("web", "a")
 	annotated.AgentName, annotated.WorkloadName = "other", "other"
-	pod = agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true)
+	pod = ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
 	f.updateStore(pod)
 	require.NoError(t, RestoreAgentConfig(ctx, k8sapi.Deployment(d)))
 	assert.Nil(t, f.cw.Get("web", "a"))
 	assert.Nil(t, f.cw.Get("other", "a"))
+
+	// A pod that carries the workload's labels and annotation but is controlled by another object
+	// restores nothing.
+	annotated.AgentName, annotated.WorkloadName = "web", "web"
+	pod = ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
+	pod.OwnerReferences[0].UID = "someone-else"
+	f.updateStore(pod)
+	require.NoError(t, RestoreAgentConfig(ctx, k8sapi.Deployment(d)))
+	assert.Nil(t, f.cw.Get("web", "a"))
 }
 
 func TestHandlerPanicIsRecovered(t *testing.T) {

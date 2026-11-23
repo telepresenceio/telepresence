@@ -34,4 +34,30 @@ func TestInterceptTargets(t *testing.T) {
 	require.NoError(t, ap.UnmarshalBinary(got[1].Target))
 	assert.Equal(t, "[fd00::1]:9090", ap.String())
 	assert.Equal(t, "UDP", got[1].Protocol)
+
+	t.Run("pod ports and service workloads", func(t *testing.T) {
+		got := interceptTargets([]*manager.InterceptInfo{{
+			Disposition: manager.InterceptDispositionType_ACTIVE,
+			Spec: &manager.InterceptSpec{
+				Namespace: "ns", Agent: "echo", TargetHost: "127.0.0.1", TargetPort: 8080,
+				PodPorts: []string{"9000:9001", "9100:9101/UDP"},
+			},
+			ServiceWorkloads: []*manager.InterceptWorkload{
+				{Namespace: "ns", WorkloadName: "echo"},
+				{Namespace: "ns", WorkloadName: "other"},
+			},
+		}})
+		seen := map[string]bool{}
+		for _, tg := range got {
+			var ap netip.AddrPort
+			require.NoError(t, ap.UnmarshalBinary(tg.Target))
+			seen[tg.Workload+" "+tg.Protocol+" "+ap.String()] = true
+		}
+		assert.Len(t, got, 6)
+		for _, wl := range []string{"echo", "other"} {
+			assert.True(t, seen[wl+" TCP 127.0.0.1:8080"])
+			assert.True(t, seen[wl+" TCP 127.0.0.1:9001"])
+			assert.True(t, seen[wl+" UDP 127.0.0.1:9101"])
+		}
+	})
 }

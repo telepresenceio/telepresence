@@ -85,6 +85,7 @@ type service struct {
 	serviceNameFQN     string
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
+	reconnects         sessionLocks
 
 	// quicCA is always non-nil: it backs both the QUIC tunnel's mTLS trust (gated
 	// separately by the QUIC listener) and the session credential minted by
@@ -120,6 +121,44 @@ type service struct {
 }
 
 var _ rpc.ManagerServer = &service{}
+
+// sessionLocks hands out one mutex per session ID. The zero value is ready
+// for use.
+type sessionLocks struct {
+	mu    sync.Mutex
+	locks map[tunnel.SessionID]*sessionLock
+}
+
+type sessionLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lock blocks until the lock for id is held and returns the function that
+// releases it.
+func (l *sessionLocks) lock(id tunnel.SessionID) func() {
+	l.mu.Lock()
+	if l.locks == nil {
+		l.locks = make(map[tunnel.SessionID]*sessionLock)
+	}
+	sl := l.locks[id]
+	if sl == nil {
+		sl = &sessionLock{}
+		l.locks[id] = sl
+	}
+	sl.refs++
+	l.mu.Unlock()
+
+	sl.mu.Lock()
+	return func() {
+		sl.mu.Unlock()
+		l.mu.Lock()
+		if sl.refs--; sl.refs == 0 {
+			delete(l.locks, id)
+		}
+		l.mu.Unlock()
+	}
+}
 
 // checkCompat checks if a CompatibilityVersion has been set for this traffic-manager, and if so, errors with
 // an Unimplemented error mentioning the given name if it is less than the required version.
@@ -300,11 +339,14 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	ctx = managerutil.WithSessionInfo(ctx, info.Session)
 	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
 	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "a session id is required")
+		return nil, status.Error(codes.InvalidArgument, "Session ID is required")
 	}
 	if state.IsAgentSessionID(sessionID) {
 		return nil, status.Error(codes.InvalidArgument, "not a client session id")
 	}
+	// Concurrent calls for one session wait for the restore to finish and
+	// then see its outcome.
+	defer s.reconnects.lock(sessionID)()
 	if session := s.state.GetClient(sessionID); session != nil {
 		if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
 			return nil, err
@@ -1805,7 +1847,8 @@ func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptReq
 		return nil, err
 	}
 	interceptID := string(managerutil.GetSessionID(ctx)) + ":" + request.GetName()
-	if intercept, ok := s.state.GetIntercept(interceptID); ok {
+	if intercept, ok := s.state.GetIntercept(interceptID); ok &&
+		intercept.GetClientSession().GetSessionId() == string(managerutil.GetSessionID(ctx)) {
 		return intercept.InterceptInfo, nil
 	}
 	return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", request.Name)
@@ -2605,6 +2648,9 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 func (s *service) ownedClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
 	ctx = managerutil.WithSessionInfo(ctx, sessionInfo)
 	sessionID := tunnel.SessionID(sessionInfo.GetSessionId())
+	if sessionID == "" {
+		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
 	session := s.state.GetClient(sessionID)
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
