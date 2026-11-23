@@ -1104,7 +1104,9 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
 		clog.Infof(s, "Setting client DNS to %s", vifDNS)
 		clog.Infof(s, "Setting cluster domain to %q", d.ClusterDomain)
-		s.dnsServer.SetClusterDNS(d, dnsAddress)
+		if err := s.dnsServer.SetClusterDNS(s, d, dnsAddress); err != nil {
+			return err
+		}
 	}
 	return s.reconcileSubnets(mgrInfo, subnets)
 }
