@@ -242,72 +242,9 @@ func TestFileShareAuth_VerifySession_NilSnapshot(t *testing.T) {
 	require.False(t, verified)
 }
 
-// TestFromOwnPod covers fromOwnPod's classification of a connection's remote address:
-// the pod's own address (in both its plain and 4-in-6-mapped forms) and loopback are
-// "from own pod"; anything else, including a non-TCP net.Addr, is foreign.
-func TestFromOwnPod(t *testing.T) {
-	podIPv4 := netip.MustParseAddr("10.42.0.7")
-	podIPv6 := netip.MustParseAddr("2001:db8::7")
-
-	tests := []struct {
-		name   string
-		remote net.Addr
-		podIP  netip.Addr
-		want   bool
-	}{
-		{
-			name:   "own pod IPv4",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.0.7").To4(), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "own pod IPv4, 4-in-6 mapped form",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 1234}, // net.ParseIP returns the 16-byte mapped form
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "own pod IPv6",
-			remote: &net.TCPAddr{IP: net.ParseIP("2001:db8::7"), Port: 1234},
-			podIP:  podIPv6,
-			want:   true,
-		},
-		{
-			name:   "loopback v4",
-			remote: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "loopback v6",
-			remote: &net.TCPAddr{IP: net.ParseIP("::1"), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "foreign IP",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 1234},
-			podIP:  podIPv4,
-			want:   false,
-		},
-		{
-			name:   "non-TCP addr",
-			remote: &net.UnixAddr{Name: "/tmp/fileshare-auth-test.sock", Net: "unix"},
-			podIP:  podIPv4,
-			want:   false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, fromOwnPod(tt.remote, tt.podIP))
-		})
-	}
-}
-
-// sftpGateFixture is the tree and confined server shared by the serveSftpConn source-gate
-// tests below. It can be shared read-only across subtests; only the fileShareAuth
-// snapshot, pod IP, and simulated remote address differ per test.
+// sftpGateFixture is the tree and confined server shared by the serveSftpConn tests
+// below. It can be shared read-only across subtests; only the fileShareAuth snapshot
+// differs per test.
 type sftpGateFixture struct {
 	srv *sftpserver.Server
 }
@@ -321,21 +258,10 @@ func newSftpGateFixture(t *testing.T) *sftpGateFixture {
 	return &sftpGateFixture{srv: srv}
 }
 
-// remoteAddrConn wraps a net.Conn and reports remote from RemoteAddr instead of the
-// wrapped conn's own address, so a test dialing over real loopback TCP can simulate an
-// arbitrary source address at serveSftpConn's gate.
-type remoteAddrConn struct {
-	net.Conn
-	remote net.Addr
-}
-
-func (c *remoteAddrConn) RemoteAddr() net.Addr { return c.remote }
-
-// listen starts a real TCP listener whose accept loop wraps every connection to report
-// remote as its RemoteAddr and runs it through serveSftpConn -- exactly as agent.go's
-// sftpServer wires the production listener -- and returns its address, so a test can
-// dial it as a real client would.
-func (f *sftpGateFixture) listen(t *testing.T, ctx context.Context, auth *fileShareAuth, podIP netip.Addr, remote net.Addr) string {
+// listen starts a real TCP listener whose accept loop runs every connection through
+// serveSftpConn -- exactly as agent.go's sftpServer wires the production listener -- and
+// returns its address, so a test can dial it as a real client would.
+func (f *sftpGateFixture) listen(t *testing.T, ctx context.Context, auth *fileShareAuth) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -346,7 +272,7 @@ func (f *sftpGateFixture) listen(t *testing.T, ctx context.Context, auth *fileSh
 			if err != nil {
 				return
 			}
-			go serveSftpConn(ctx, &remoteAddrConn{Conn: conn, remote: remote}, f.srv, auth, podIP)
+			go serveSftpConn(ctx, conn, f.srv, auth)
 		}
 	}()
 	return ln.Addr().String()
@@ -373,17 +299,14 @@ func requireListsFixture(t *testing.T, addr string) {
 	require.Contains(t, names, "hello.txt")
 }
 
-// TestServeSftpConn_ForeignEnforcingCloses asserts that a connection whose source
-// address is neither the pod's own nor loopback is closed before it ever receives an
-// SFTP response once the snapshot's mode is enforcing.
-func TestServeSftpConn_ForeignEnforcingCloses(t *testing.T) {
+// TestServeSftpConn_EnforcingCloses asserts that no direct connection is served once the
+// snapshot's mode is enforcing.
+func TestServeSftpConn_EnforcingCloses(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	f := newSftpGateFixture(t)
 	auth := &fileShareAuth{}
 	auth.set(nil, "enforcing")
-	podIP := netip.MustParseAddr("10.42.0.7")
-	foreign := &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 4444}
-	addr := f.listen(t, ctx, auth, podIP, foreign)
+	addr := f.listen(t, ctx, auth)
 
 	conn, err := net.Dial("tcp", addr)
 	require.NoError(t, err)
@@ -399,9 +322,7 @@ func TestServeSftpConn_NilSnapshotCloses(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	f := newSftpGateFixture(t)
 	auth := &fileShareAuth{}
-	podIP := netip.MustParseAddr("10.42.0.7")
-	own := &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 4444}
-	addr := f.listen(t, ctx, auth, podIP, own)
+	addr := f.listen(t, ctx, auth)
 
 	conn, err := net.Dial("tcp", addr)
 	require.NoError(t, err)
@@ -413,43 +334,43 @@ func TestServeSftpConn_NilSnapshotCloses(t *testing.T) {
 	requireListsFixture(t, addr)
 }
 
-// TestServeSftpConn_ForeignPermissiveServes asserts that a foreign-source connection is
-// served when the snapshot's mode is permissive.
-func TestServeSftpConn_ForeignPermissiveServes(t *testing.T) {
+// TestServeSftpConn_PermissiveServes asserts that a direct connection is served when the
+// snapshot's mode is permissive.
+func TestServeSftpConn_PermissiveServes(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	f := newSftpGateFixture(t)
 	auth := &fileShareAuth{}
 	auth.set(nil, "permissive")
-	podIP := netip.MustParseAddr("10.42.0.7")
-	foreign := &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 4444}
-	addr := f.listen(t, ctx, auth, podIP, foreign)
+	addr := f.listen(t, ctx, auth)
 
 	requireListsFixture(t, addr)
 }
 
-// TestServeSftpConn_OwnSourceEnforcingServes asserts that connections whose source
-// address is the pod's own, or loopback, are served even in enforcing mode -- these are
-// exactly the connections the tunnel delivers, since the agent dials them itself.
-func TestServeSftpConn_OwnSourceEnforcingServes(t *testing.T) {
+// TestIsOwnSftpDestination covers the address classification that decides whether a
+// tunnel stream is connected to the in-process SFTP server. The cluster cannot vary the
+// node-agent's pod IP and the target pod's IP independently.
+func TestIsOwnSftpDestination(t *testing.T) {
 	podIP := netip.MustParseAddr("10.42.0.7")
 	tests := []struct {
-		name   string
-		remote net.Addr
+		name string
+		dst  string
+		want bool
 	}{
-		{"own pod address", &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 5555}},
-		{"loopback", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5555}},
+		{"loopback", "127.0.0.1:2222", true},
+		{"loopback v6", "[::1]:2222", true},
+		{"unspecified", "0.0.0.0:2222", true},
+		{"pod IP", "10.42.0.7:2222", true},
+		{"pod IP 4-in-6", "[::ffff:10.42.0.7]:2222", true},
+		{"other pod", "10.42.9.9:2222", false},
+		{"other port", "127.0.0.1:2223", false},
+		{"no port", "127.0.0.1:0", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := testutil.NewContext(t, false)
-			f := newSftpGateFixture(t)
-			auth := &fileShareAuth{}
-			auth.set(nil, "enforcing")
-			addr := f.listen(t, ctx, auth, podIP, tt.remote)
-
-			requireListsFixture(t, addr)
+			require.Equal(t, tt.want, isOwnSftpDestination(netip.MustParseAddrPort(tt.dst), 2222, podIP))
 		})
 	}
+	require.False(t, isOwnSftpDestination(netip.MustParseAddrPort("127.0.0.1:0"), 0, podIP), "port 0 is never the SFTP port")
 }
 
 // fakeQuicAgentCertManager is a minimal stand-in for the traffic-manager's

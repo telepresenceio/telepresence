@@ -360,36 +360,26 @@ SFTP carries no credential of its own. Two things protect it instead:
 
 - **Confinement.** The server is confined to the agent's exports tree; it
   cannot open a path outside it regardless of what the client requests.
-- **A source gate, active in enforcing mode only.** Every legitimate
+- **No direct connections, in enforcing mode only.** Every legitimate
   consumer — sshfs, the IPv6 mount path, and the `--local-mount-port` bridge
-  used by docker-volume-telemount — reaches the SFTP port through the
-  telepresence tunnel, and the agent dials that connection itself, so it
-  always arrives from the pod's own address or loopback. In enforcing mode
-  the agent refuses any SFTP connection arriving from anywhere else;
-  disabled/permissive modes serve every connection as before (logged).
-  Session authentication is therefore transitive: the client proves its
-  session at the tunnel, the agent dials its own SFTP listener from that
-  tunnel, and the listener trusts only connections that arrived that way.
+  used by docker-volume-telemount — reaches the SFTP server through the
+  telepresence tunnel. When a tunnel stream, whose session the agent has
+  already authorized for file access, targets the agent's own SFTP port, the
+  agent connects it to the SFTP server inside the agent process, over a
+  private socket pair, instead of dialing the port. In enforcing mode the
+  SFTP port itself closes every TCP connection. Session authentication is
+  therefore the only way to reach the server; disabled/permissive modes
+  still serve direct connections (logged).
 
 SFTP is deliberately not wrapped in its own TLS layer: the QUIC tunnel is
 already TLS 1.3 end-to-end, and the port-forward path is already TLS on its
 client-to-manager leg, so an SFTP-level TLS wrap would double-encrypt the
 bulkiest data path telepresence carries for no real confidentiality gain.
 
-Three weaknesses remain, accepted as improvements over the previous, fully
-open listener rather than as complete mitigations:
-
-- Every container of the agent's pod shares its network. Another
-  container in that pod reaches the SFTP port from loopback and passes
-  the source gate, so it can read and write the volumes that the agent
-  shares for the other containers of the pod.
-- An agent injected into a `hostNetwork` workload (Telepresence does not inject
-  one when the Service port is numeric or headless, since that needs packet
-  redirection on the node) shares its pod address with
-  every other workload on that node, so the source gate degrades to
-  same-node granularity there.
-- A pod CIDR that is routable but never proxied through the tunnel can still
-  reach the SFTP port directly; only enforcing mode cuts it off.
+In disabled and permissive modes the SFTP port still serves every TCP
+connection that reaches it, including connections from the other containers
+of the agent's pod and from a pod CIDR that is routable but not proxied
+through the tunnel. Only enforcing mode closes the port.
 
 ### Version skew
 

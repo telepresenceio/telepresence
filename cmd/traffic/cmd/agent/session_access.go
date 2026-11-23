@@ -169,6 +169,13 @@ func needsFileAccess(dst netip.AddrPort, sftpPort, ftpPort uint16, podIPs ...net
 	if port == 0 || (port != sftpPort && port != ftpPort) {
 		return false
 	}
+	return isOwnAddr(ip, true, podIPs...)
+}
+
+// isOwnAddr reports whether ip is one of podIPs or an address of a local interface.
+// When the interface addresses cannot be read, it returns onError.
+func isOwnAddr(ip netip.Addr, onError bool, podIPs ...netip.Addr) bool {
+	ip = ip.Unmap()
 	for _, pip := range podIPs {
 		if pip.IsValid() && ip == pip.Unmap() {
 			return true
@@ -176,7 +183,7 @@ func needsFileAccess(dst netip.AddrPort, sftpPort, ftpPort uint16, podIPs ...net
 	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return true
+		return onError
 	}
 	for _, addr := range addrs {
 		if ipNet, ok := addr.(*net.IPNet); ok {
@@ -186,4 +193,14 @@ func needsFileAccess(dst netip.AddrPort, sftpPort, ftpPort uint16, podIPs ...net
 		}
 	}
 	return false
+}
+
+// isOwnSftpDestination reports whether a TCP dial to dst from this process would reach
+// the agent's own SFTP listener.
+func isOwnSftpDestination(dst netip.AddrPort, sftpPort uint16, podIP netip.Addr) bool {
+	if sftpPort == 0 || dst.Port() != sftpPort {
+		return false
+	}
+	ip := dst.Addr().Unmap()
+	return ip.IsLoopback() || ip.IsUnspecified() || isOwnAddr(ip, false, podIP)
 }

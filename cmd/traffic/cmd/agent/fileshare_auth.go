@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
-	"net"
-	"net/netip"
 	"sync/atomic"
 	"time"
 
@@ -156,22 +154,4 @@ func sessionTokenFrom(ctx context.Context) string {
 		}
 	}
 	return ""
-}
-
-// fromOwnPod reports whether remote is a connection delivered through the tunnel:
-// every legitimate consumer reaches the file-sharing ports through the telepresence
-// tunnel, whose connections the agent itself dials, so their source address is the
-// agent pod's own IP (or loopback); a foreign source is a direct cross-network
-// connection that bypassed the tunnel.
-func fromOwnPod(remote net.Addr, podIP netip.Addr) bool {
-	tcpAddr, ok := remote.(*net.TCPAddr)
-	if !ok {
-		return false
-	}
-	ip, ok := netip.AddrFromSlice(tcpAddr.IP)
-	if !ok {
-		return false
-	}
-	ip = ip.Unmap()
-	return ip == podIP.Unmap() || ip.IsLoopback()
 }
