@@ -39,14 +39,17 @@ func (s *AgenthardWiretap) Test_HugeContentLengthIsTapped() {
 	t := s.T()
 	ctx := s.Ctx()
 	conn := s.Connect()
-	wl := s.Workload(workloads.Echo("agenthard-wiretap"))
+	wl := rt.Mutate(t, rt.WorkloadFixture(s.AppNamespace(), workloads.Echo("agenthard-wiretap")))
 	ls := s.LocalEcho()
 
 	a := conn.Wiretap(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), cli.HTTPHeader(agenthardTapHeader, agenthardTapValue))
 	defer a.Detach(t)
 	t.Cleanup(func() {
-		// A stuck request handler is removed with the pod that runs it.
-		_, _ = s.R().Kubectl(ctx, wl.Namespace, "delete", "pod", "-l", "app="+wl.Name, "--wait=false")
+		// After a failure a request handler may be stuck; it is removed with the pod that
+		// runs it.
+		if t.Failed() {
+			_, _ = s.R().Kubectl(ctx, wl.Namespace, "delete", "pod", "-l", "app="+wl.Name, "--wait=false")
+		}
 	})
 
 	svcURL := wl.ServiceURL()

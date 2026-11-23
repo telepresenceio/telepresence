@@ -38,15 +38,12 @@ func TestAcceptLoop_ErrorThenConnection(t *testing.T) {
 	defer c1.Close()
 	defer c2.Close()
 
-	var mu sync.Mutex
-	var got []net.Conn
+	got := make(chan net.Conn, 1)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		AcceptLoop(context.Background(), &flakyListener{conn: c1}, func(_ context.Context, c net.Conn) error {
-			mu.Lock()
-			got = append(got, c)
-			mu.Unlock()
+			got <- c
 			return nil
 		})
 	}()
@@ -55,11 +52,12 @@ func TestAcceptLoop_ErrorThenConnection(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("AcceptLoop did not return")
 	}
-	time.Sleep(50 * time.Millisecond)
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, got, 1)
-	require.NotNil(t, got[0])
+	select {
+	case c := <-got:
+		require.NotNil(t, c)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connection was not passed to the callback")
+	}
 }
 
 func TestNextAcceptDelay(t *testing.T) {

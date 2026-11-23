@@ -31,6 +31,7 @@ const maxRedirectHops = 8
 // export is the destination of an agent-created symlink: rel names the mounted directory (or
 // file) within root.
 type export struct {
+	link   string // path of the exporting symlink, relative to the exports root
 	target string
 	root   *os.Root
 	rel    string
@@ -132,6 +133,7 @@ func New(exportsDir string, bases, readOnly []string) (*Server, error) {
 		}
 		if e := openExport(br, rel); e != nil {
 			e.target = target
+			e.link = link
 			s.links[link] = e
 		}
 	}
@@ -310,6 +312,9 @@ func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
 	}
 	rel := path.Join(prefix, leaf)
 	if !followLeaf {
+		if ro, err = s.resolvedReadOnly(ro, root, rel, exp, false); err != nil {
+			return nil, err
+		}
 		return &resolved{root: root, rel: rel, exp: exp, readOnly: ro}, nil
 	}
 	for hops := 0; hops < maxRedirectHops; hops++ {
@@ -318,6 +323,9 @@ func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
 			return nil, rerr
 		}
 		if !ok {
+			if ro, err = s.resolvedReadOnly(ro, root, rel, exp, true); err != nil {
+				return nil, err
+			}
 			return &resolved{root: root, rel: rel, exp: exp, readOnly: ro}, nil
 		}
 		e, err := s.redirect(root, rel, target)
@@ -327,6 +335,74 @@ func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
 		root, rel, exp = e.root, e.rel, e
 	}
 	return nil, fmt.Errorf("sftpserver: too many nested symlinks resolving %q", p)
+}
+
+// resolvedReadOnly returns true if ro is set or if rel, once the relative symlinks inside
+// the export exp are followed, lies under a read-only mount. A link in a writable mount to
+// a nested read-only mount is thereby read-only too.
+func (s *Server) resolvedReadOnly(ro bool, root *os.Root, rel string, exp *export, followLeaf bool) (bool, error) {
+	if ro || exp == nil || len(s.readOnly) == 0 {
+		return ro, nil
+	}
+	if exp.rel != "." {
+		return s.isReadOnly(exp.link), nil
+	}
+	canon, err := canonicalRel(root, rel, followLeaf)
+	if err != nil {
+		return false, err
+	}
+	return s.isReadOnly(path.Join(exp.link, canon)), nil
+}
+
+// maxRelativeLinks bounds the relative symlinks canonicalRel follows.
+const maxRelativeLinks = 40
+
+// canonicalRel returns rel with every relative symlink under root replaced by its target,
+// the leaf only if followLeaf is set. Absolute symlinks and missing entries are kept as is.
+func canonicalRel(root *os.Root, rel string, followLeaf bool) (string, error) {
+	pending := strings.Split(rel, "/")
+	var done []string
+	links := 0
+	for len(pending) > 0 {
+		comp := pending[0]
+		pending = pending[1:]
+		switch comp {
+		case "", ".":
+			continue
+		case "..":
+			if len(done) == 0 {
+				return "", os.ErrPermission
+			}
+			done = done[:len(done)-1]
+			continue
+		}
+		cand := path.Join(append(done, comp)...)
+		if len(pending) == 0 && !followLeaf {
+			done = append(done, comp)
+			break
+		}
+		info, err := root.Lstat(cand)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			done = append(done, comp)
+			continue
+		}
+		target, err := root.Readlink(cand)
+		if err != nil {
+			return "", err
+		}
+		if path.IsAbs(target) {
+			done = append(done, comp)
+			continue
+		}
+		if links++; links > maxRelativeLinks {
+			return "", fmt.Errorf("sftpserver: too many symbolic links resolving %q", rel)
+		}
+		pending = append(strings.Split(target, "/"), pending...)
+	}
+	if len(done) == 0 {
+		return ".", nil
+	}
+	return path.Join(done...), nil
 }
 
 // withTwoPaths resolves from and to independently, exactly as a single-path operation

@@ -38,7 +38,10 @@ type listenerSwitch struct {
 }
 
 func (c chanListener) Accept() (net.Conn, error) {
-	ce := <-c.ch
+	ce, ok := <-c.ch
+	if !ok {
+		return nil, net.ErrClosed
+	}
 	return ce.conn, ce.err
 }
 
@@ -88,6 +91,9 @@ func (l *listenerSwitch) Serve() error {
 				// Secondary accept loop is running; notify it of the error too.
 				secondaryCh <- ce
 			}
+			// Later accepts on either listener report net.ErrClosed.
+			close(primaryCh)
+			close(secondaryCh)
 			return err
 		}
 		if l.secondary.Load() {
