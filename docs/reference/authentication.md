@@ -204,8 +204,13 @@ The traffic-manager's authentication posture is controlled by the Helm value
 | Mode | Behavior |
 |------|----------|
 | `disabled` | No token validation at all. |
-| `permissive` (default) | Tokens are validated and used for authorization checks and session binding, but no call is ever rejected for lacking or failing authentication. Decisions are logged for audit. |
+| `permissive` (default) | Tokens are validated and used for authorization checks and session binding, but a call with a missing or invalid token is served as unauthenticated. Decisions are logged for audit. |
 | `enforcing` | Calls without a valid bearer token are rejected (`Unauthenticated`), and an unauthorized intercept is rejected (`PermissionDenied`). |
+
+In every mode, a call whose token could not be checked because the
+traffic-manager's limit on token reviews was reached is refused with
+`ResourceExhausted`. A token the manager accepted earlier is checked under a
+separate allowance, so a flood of unknown tokens does not lock it out.
 
 Set it at install or upgrade time:
 

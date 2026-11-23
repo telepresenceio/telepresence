@@ -316,3 +316,26 @@ func TestReviewAdmission_UnknownTokenFlood(t *testing.T) {
 	assert.LessOrEqual(t, int(reviews.Load()), 10)
 	assert.GreaterOrEqual(t, limited, 90)
 }
+
+// TestReviewAdmission_PermissiveRefusesThrottled: a token that cannot be
+// reviewed because the budget is spent is refused in permissive mode, while
+// a call without a token is still served.
+func TestReviewAdmission_PermissiveRefusesThrottled(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(string, []string) *authnv1.TokenReviewStatus {
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+	a := NewAuthenticator(ci, WithReviewAdmission())
+	a.reviewer.limiter = rate.NewLimiter(0, 2)
+	i := NewInterceptor(a, ModePermissive)
+
+	_, err := i.authenticate(externalCtxWithBearer("bad-1"), "/m")
+	require.NoError(t, err, "an invalid token is served unauthenticated in permissive mode")
+
+	_, err = i.authenticate(externalCtxWithBearer("bad-2"), "/m")
+	require.Error(t, err)
+	assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+
+	_, err = i.authenticate(context.Background(), "/m")
+	require.NoError(t, err, "a call without a token is served")
+}
