@@ -8,7 +8,9 @@ func TestValues_AuthEnforced(t *testing.T) {
 		v    *Values
 		want bool
 	}{
-		{"unset", &Values{}, false},
+		{"unset", &Values{}, true},
+		{"empty", &Values{Security: Security{Authentication: Authentication{Mode: new("")}}}, true},
+		{"disabled", &Values{Security: Security{Authentication: Authentication{Mode: new("disabled")}}}, false},
 		{"permissive", &Values{Security: Security{Authentication: Authentication{Mode: new("permissive")}}}, false},
 		{"enforcing", &Values{Security: Security{Authentication: Authentication{Mode: new(AuthModeEnforcing)}}}, true},
 	}

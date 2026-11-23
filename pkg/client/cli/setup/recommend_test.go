@@ -409,7 +409,7 @@ func TestX509AuthEnabled(t *testing.T) {
 		values *helm.Values
 		want   bool
 	}{
-		{"no security block", &helm.Values{}, false},
+		{"no security block", &helm.Values{}, true},
 		{"permissive mode", sec("permissive", helm.X509{}), false},
 		// an absent x509 block and a present-but-empty one are the same value.
 		{"enforcing, x509 absent", sec("enforcing", helm.X509{}), true},
