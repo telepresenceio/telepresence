@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,4 +130,88 @@ func TestDialUserDaemon_PresentsTokenFromInfoFile(t *testing.T) {
 	t.Cleanup(func() { _ = conn2.Close() })
 	_, err = healthpb.NewHealthClient(conn2).Check(ctx, &healthpb.HealthCheckRequest{})
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestPublishPort_CompletesPlaceholderAndKeepsToken(t *testing.T) {
+	ctx, dir := cacheCtx(t)
+	il := daemon.NewUserInfoLoader(ctx)
+	require.NoError(t, il.SaveInfo(&daemon.Info{Name: "n", Token: "secret"}, daemon.InfoFileName))
+
+	require.NoError(t, il.PublishPort(daemon.InfoFileName, 4321))
+	loaded, err := il.LoadInfo(daemon.InfoFileName)
+	require.NoError(t, err)
+	assert.Equal(t, uint16(4321), loaded.DaemonPort)
+	assert.Equal(t, "secret", loaded.Token)
+	assert.Equal(t, "n", loaded.Name)
+
+	// A shorter value replaces a longer one without leaving a tail.
+	require.NoError(t, il.PublishPort(daemon.InfoFileName, 1))
+	b, err := os.ReadFile(filepath.Join(dir, "userd", daemon.InfoFileName))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"name":"n","daemon_port":1,"container_pid":0,"token":"secret"}`, string(b))
+}
+
+func TestPublishPort_RootInfo(t *testing.T) {
+	ctx, _ := cacheCtx(t)
+	il := daemon.NewRootInfoLoader(ctx, false)
+	require.NoError(t, il.SaveInfo(&daemon.RootInfo{}, daemon.InfoFileName))
+	require.NoError(t, il.PublishPort(daemon.InfoFileName, 4321))
+	loaded, err := il.LoadInfo(daemon.InfoFileName)
+	require.NoError(t, err)
+	assert.Equal(t, uint16(4321), loaded.DaemonPort)
+}
+
+func TestPublishPort_NeverCreatesOrFollows(t *testing.T) {
+	ctx, dir := cacheCtx(t)
+	il := daemon.NewRootInfoLoader(ctx, false)
+	require.Error(t, il.PublishPort(daemon.InfoFileName, 1))
+	assert.NoFileExists(t, filepath.Join(dir, "rootd", daemon.InfoFileName))
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+	target := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.WriteFile(target, []byte("{}"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "rootd"), 0o755))
+	require.NoError(t, os.Symlink(target, filepath.Join(dir, "rootd", daemon.InfoFileName)))
+	require.Error(t, il.PublishPort(daemon.InfoFileName, 1))
+	b, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "{}", string(b))
+}
+
+func TestDialDaemon_UnpublishedPort(t *testing.T) {
+	ctx, _ := cacheCtx(t)
+	il := daemon.NewRootInfoLoader(ctx, false)
+	require.NoError(t, il.SaveInfo(&daemon.RootInfo{}, daemon.InfoFileName))
+	_, err := il.DialDaemon(ctx, false)
+	assert.ErrorIs(t, err, daemon.ErrNoRootDaemon)
+}
+
+func TestDialDaemon_WaitsForPublishedPort(t *testing.T) {
+	ctx, _ := cacheCtx(t)
+	svc := server.NewWithAuth(ctx, server.TokenInterceptors("t"))
+	healthpb.RegisterHealthServer(svc, health.NewServer())
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() { _ = svc.Serve(lis) }()
+	t.Cleanup(svc.Stop)
+
+	il := daemon.NewUserInfoLoader(ctx)
+	require.NoError(t, il.SaveInfo(&daemon.Info{Token: "t"}, daemon.InfoFileName))
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = il.PublishPort(daemon.InfoFileName, uint16(lis.Addr().(*net.TCPAddr).Port))
+	}()
+	conn, err := il.DialDaemon(ctx, true)
+	require.NoError(t, err)
+	_ = conn.Close()
+}
+
+func TestIsEphemeralAddress(t *testing.T) {
+	assert.True(t, daemon.IsEphemeralAddress("127.0.0.1:0"))
+	assert.True(t, daemon.IsEphemeralAddress(":0"))
+	assert.False(t, daemon.IsEphemeralAddress(":8083"))
+	assert.False(t, daemon.IsEphemeralAddress("127.0.0.1:4038"))
+	assert.False(t, daemon.IsEphemeralAddress("garbage"))
 }
