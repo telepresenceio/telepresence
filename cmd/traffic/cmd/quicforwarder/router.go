@@ -28,6 +28,9 @@ const (
 	// TTL".
 	handshakeTTL = 3 * time.Second
 
+	// defaultMaxHandshakes bounds the number of handshake-cache entries.
+	defaultMaxHandshakes = 4096
+
 	// dropLogRate limits how often a non-dropNotReady drop reason is logged;
 	// the counters in metrics.go still count every drop regardless.
 	dropLogEventsPerSecond = 5
@@ -95,8 +98,11 @@ type Router struct {
 	clock     func() time.Time
 	dropLimit *rate.Limiter
 
+	maxHandshakes int
+
 	mu              sync.Mutex
 	handshakes      map[handshakeKey]*handshakeEntry
+	capLogged       bool // first drop at the handshake cap logged; cleared by Sweep
 	notReadyLogOnce sync.Once
 }
 
@@ -110,6 +116,8 @@ func NewRouter(allowlist backendPicker, sink flowSink, m *metrics) *Router {
 		clock:      time.Now,
 		dropLimit:  rate.NewLimiter(rate.Limit(dropLogEventsPerSecond), dropLogBurst),
 		handshakes: make(map[handshakeKey]*handshakeEntry),
+
+		maxHandshakes: defaultMaxHandshakes,
 	}
 }
 
@@ -219,6 +227,16 @@ func (r *Router) routeInitial(ctx context.Context, src netip.AddrPort, dcid []by
 	r.mu.Lock()
 	entry, ok := r.handshakes[key]
 	if !ok {
+		if r.maxHandshakes > 0 && len(r.handshakes) >= r.maxHandshakes {
+			logIt := !r.capLogged
+			r.capLogged = true
+			r.mu.Unlock()
+			if logIt {
+				clog.Warnf(ctx, "quic-forwarder: handshake cache limit %d reached; dropping new handshakes", r.maxHandshakes)
+			}
+			r.metrics.addDrop(dropCapExceeded)
+			return
+		}
 		entry = &handshakeEntry{acc: quicfwd.NewCryptoAccumulator(), created: r.clock()}
 		r.handshakes[key] = entry
 	}
@@ -290,6 +308,9 @@ func (r *Router) Sweep(ctx context.Context) {
 	}
 	for _, k := range expired {
 		delete(r.handshakes, k)
+	}
+	if r.maxHandshakes > 0 && len(r.handshakes) < r.maxHandshakes {
+		r.capLogged = false
 	}
 	r.mu.Unlock()
 

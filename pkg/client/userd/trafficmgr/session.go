@@ -1648,6 +1648,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 		}
 		if err == nil {
 			clog.Info(s, "Reconnected to root daemon")
+			s.pushInterceptTargets(s.getCurrentInterceptInfos())
 			s.updateDaemonNamespaces()
 			return
 		}

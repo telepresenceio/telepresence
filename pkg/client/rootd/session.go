@@ -243,6 +243,10 @@ type session struct {
 	// handlers instead of being tunneled to the cluster. Nil when there are none.
 	interceptShortcuts atomic.Pointer[shortcutTable]
 
+	// Local destinations that traffic-agents may ask this daemon to dial. Nil until
+	// the user daemon has declared them, which refuses every dial request.
+	interceptTargets atomic.Pointer[interceptTargets]
+
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 
 	// quicConn is the client's current QUIC connection to the traffic-manager, set
@@ -1486,6 +1490,7 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			// so we can report incoming-dial counters to the user daemon
 			// at session end (see daemon.Activity).
 			s.agentClients.SetDialMetrics(s)
+			s.agentClients.SetDialPolicy(s.dialAllowed)
 			// Flush the DNS cache whenever the agent set changes. A workload may have been recreated
 			// with a new Service ClusterIP, which would otherwise be masked by a stale cache entry.
 			s.agentClients.SetChangeListener(s.dnsServer.Flush)

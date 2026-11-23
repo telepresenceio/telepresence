@@ -21,6 +21,9 @@ type flowEntry struct {
 	pc         *ipv4.PacketConn
 	gro        bool         // UDP_GRO enabled on conn; see enableGRO.
 	lastActive atomic.Int64 // UnixNano
+	heard      atomic.Bool  // the backend has sent at least one datagram back
+	ipKey      netip.Addr   // source-IP key counted against the per-IP cap
+	created    int64        // UnixNano
 }
 
 func (e *flowEntry) touch() {
@@ -41,8 +44,84 @@ type flowTable struct {
 	frontPC *ipv4.PacketConn
 	metrics *metrics
 
+	batchPools [2]sync.Pool // indexed by whether GRO is enabled
+
+	// Limits, settable by tests before use.
+	maxFlows      int
+	maxFlowsPerIP int
+	halfOpenAfter time.Duration
+
 	mu    sync.RWMutex
 	flows map[netip.AddrPort]*flowEntry
+	perIP map[netip.Addr]int
+	// reserved counts flows in the table plus those being created.
+	reserved int
+	// totalCapLogged and ipCapLogged are true from the first drop at a cap until
+	// a flow is released from a table or source at that cap; they guard the
+	// once-per-episode log line.
+	totalCapLogged bool
+	ipCapLogged    bool
+}
+
+const (
+	defaultMaxFlows      = 4096
+	defaultMaxFlowsPerIP = 64
+)
+
+// ipKey maps a source address to its per-IP cap bucket: the unmapped address for
+// IPv4 and the /64 prefix for IPv6.
+func ipKey(a netip.Addr) netip.Addr {
+	a = a.Unmap()
+	if a.Is6() {
+		return netip.PrefixFrom(a, 64).Masked().Addr()
+	}
+	return a
+}
+
+// batchBuffers is the working memory of one pump read/relay cycle.
+type batchBuffers struct {
+	rmsgs   []ipv4.Message
+	wmsgs   []ipv4.Message
+	scratch []byte
+}
+
+func (t *flowTable) getBatchBuffers(gro bool) *batchBuffers {
+	i := 0
+	if gro {
+		i = 1
+	}
+	if b, ok := t.batchPools[i].Get().(*batchBuffers); ok {
+		return b
+	}
+	return &batchBuffers{
+		rmsgs:   newReadBatchMessages(batchSize, gro),
+		wmsgs:   make([]ipv4.Message, 0, batchSize),
+		scratch: make([]byte, maxDatagramSize),
+	}
+}
+
+func (t *flowTable) putBatchBuffers(gro bool, b *batchBuffers) {
+	i := 0
+	if gro {
+		i = 1
+	}
+	t.batchPools[i].Put(b)
+}
+
+// waitReadable blocks until conn has data to read or is closed.
+func waitReadable(conn *net.UDPConn) error {
+	rc, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	first := true
+	return rc.Read(func(uintptr) bool {
+		if first {
+			first = false
+			return false
+		}
+		return true
+	})
 }
 
 func newFlowTable(frontPC *ipv4.PacketConn, m *metrics) *flowTable {
@@ -50,6 +129,11 @@ func newFlowTable(frontPC *ipv4.PacketConn, m *metrics) *flowTable {
 		frontPC: frontPC,
 		metrics: m,
 		flows:   make(map[netip.AddrPort]*flowEntry),
+		perIP:   make(map[netip.Addr]int),
+
+		maxFlows:      defaultMaxFlows,
+		maxFlowsPerIP: defaultMaxFlowsPerIP,
+		halfOpenAfter: defaultHalfOpenExpiry,
 	}
 }
 
@@ -96,19 +180,25 @@ func (t *flowTable) writeBatchToBackend(ctx context.Context, e *flowEntry, msgs 
 // CreateAndForward implements flowSink.
 func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, port uint16, datagrams [][]byte) {
 	backendAddr := netip.AddrPortFrom(backendIP, port)
+	key := ipKey(src.Addr())
+	if !t.reserve(ctx, src, key) {
+		return
+	}
 	conn, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(backendAddr))
 	if err != nil {
+		t.release(key)
 		clog.Debugf(ctx, "quic-forwarder: dial backend %s for flow %s failed: %v", backendAddr, src, err)
 		return
 	}
 	raiseSocketBuffers(conn)
 	gro := enableGRO(conn)
 
-	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn), gro: gro}
+	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn), gro: gro, ipKey: key, created: time.Now().UnixNano()}
 	e.touch()
 
 	t.mu.Lock()
 	if existing, ok := t.flows[src]; ok {
+		t.releaseLocked(key)
 		// A flow for this source address was created concurrently (the main
 		// ingress loop is single-threaded today, so this is only a defensive
 		// path, not an expected race). Keep the existing one and use it
@@ -132,6 +222,56 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 	}
 }
 
+// reserve counts a prospective flow for src against the caps. It reports false, and
+// drops the datagram, when either cap is reached. An existing flow for src is not
+// counted again.
+func (t *flowTable) reserve(ctx context.Context, src netip.AddrPort, key netip.Addr) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.flows[src]; !ok {
+		switch {
+		case t.maxFlows > 0 && t.reserved >= t.maxFlows:
+			t.metrics.addDrop(dropFlowCap)
+			if !t.totalCapLogged {
+				t.totalCapLogged = true
+				clog.Warnf(ctx, "quic-forwarder: flow limit %d reached; dropping datagrams that would create new flows", t.maxFlows)
+			}
+			return false
+		case t.maxFlowsPerIP > 0 && t.perIP[key] >= t.maxFlowsPerIP:
+			t.metrics.addDrop(dropFlowCap)
+			if !t.ipCapLogged {
+				t.ipCapLogged = true
+				clog.Warnf(ctx, "quic-forwarder: per-address flow limit %d reached for %s; dropping datagrams that would create new flows", t.maxFlowsPerIP, key)
+			}
+			return false
+		}
+	}
+	t.reserved++
+	t.perIP[key]++
+	return true
+}
+
+func (t *flowTable) release(key netip.Addr) {
+	t.mu.Lock()
+	t.releaseLocked(key)
+	t.mu.Unlock()
+}
+
+func (t *flowTable) releaseLocked(key netip.Addr) {
+	if t.maxFlows > 0 && t.reserved >= t.maxFlows {
+		t.totalCapLogged = false
+	}
+	if t.maxFlowsPerIP > 0 && t.perIP[key] >= t.maxFlowsPerIP {
+		t.ipCapLogged = false
+	}
+	t.reserved--
+	if t.perIP[key] <= 1 {
+		delete(t.perIP, key)
+	} else {
+		t.perIP[key]--
+	}
+}
+
 // pump reads backend->client traffic off e's backend socket (ReadBatch, i.e. recvmmsg
 // on Linux) and relays it to src on the shared front socket with one WriteBatch per
 // read (or, when the read's datagrams are uniformly sized and the kernel supports it,
@@ -142,45 +282,64 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 // QUIC packet boundaries rather than re-sending whatever the kernel happened to bundle
 // together on receipt.
 func (t *flowTable) pump(ctx context.Context, src netip.AddrPort, e *flowEntry) {
-	rmsgs := newReadBatchMessages(batchSize, e.gro)
-	wmsgs := make([]ipv4.Message, 0, batchSize)
-	scratch := make([]byte, maxDatagramSize)
 	addr := net.UDPAddrFromAddrPort(src)
+	var wmsgs []ipv4.Message
 	yield := func(data []byte) {
 		wmsgs = append(wmsgs, ipv4.Message{Buffers: [][]byte{data}, Addr: addr})
 	}
 
 	for {
-		n, err := e.pc.ReadBatch(rmsgs, 0)
-		if err != nil {
+		// Buffers are held only while a batch is in flight, so idle and
+		// half-open flows cost almost nothing.
+		if err := waitReadable(e.conn); err != nil {
 			return
 		}
-		e.touch()
-		wmsgs = wmsgs[:0]
-		for i := range n {
-			splitGRO(&rmsgs[i], yield)
+		b := t.getBatchBuffers(e.gro)
+		n, err := e.pc.ReadBatch(b.rmsgs, 0)
+		if err != nil {
+			t.putBatchBuffers(e.gro, b)
+			return
 		}
-		if err := writeMsgsBatch(t.frontPC, wmsgs, scratch); err != nil {
+		e.heard.Store(true)
+		e.touch()
+		wmsgs = b.wmsgs[:0]
+		for i := range n {
+			splitGRO(&b.rmsgs[i], yield)
+		}
+		if err := writeMsgsBatch(t.frontPC, wmsgs, b.scratch); err != nil {
 			clog.Debugf(ctx, "quic-forwarder: write to client %s failed: %v", src, err)
 		}
+		b.wmsgs = wmsgs[:0]
+		t.putBatchBuffers(e.gro, b)
 	}
 }
 
 // sweepIdle closes and removes every flow that has seen no traffic in either
-// direction for longer than idle.
+// direction for longer than idle, or, if the backend never answered, for longer than
+// halfOpenAfter.
 func (t *flowTable) sweepIdle(ctx context.Context, idle time.Duration) {
-	cutoff := time.Now().Add(-idle).UnixNano()
+	now := time.Now()
+	cutoff := now.Add(-idle).UnixNano()
+	halfOpenCutoff := now.Add(-min(idle, t.halfOpenAfter)).UnixNano()
 	t.mu.Lock()
 	var closing []netip.AddrPort
 	for src, e := range t.flows {
-		if e.lastActive.Load() < cutoff {
-			closing = append(closing, src)
+		// A half-open flow expires by age, whatever the client sends.
+		if e.heard.Load() {
+			if e.lastActive.Load() >= cutoff {
+				continue
+			}
+		} else if e.created >= halfOpenCutoff && e.lastActive.Load() >= cutoff {
+			continue
 		}
+		closing = append(closing, src)
 	}
 	entries := make([]*flowEntry, 0, len(closing))
 	for _, src := range closing {
-		entries = append(entries, t.flows[src])
+		e := t.flows[src]
+		entries = append(entries, e)
 		delete(t.flows, src)
+		t.releaseLocked(e.ipKey)
 	}
 	t.mu.Unlock()
 
@@ -198,6 +357,9 @@ func (t *flowTable) closeAll() {
 		entries = append(entries, e)
 	}
 	clear(t.flows)
+	clear(t.perIP)
+	t.reserved = 0
+	t.totalCapLogged, t.ipCapLogged = false, false
 	t.mu.Unlock()
 
 	for _, e := range entries {

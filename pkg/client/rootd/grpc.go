@@ -283,6 +283,14 @@ func (s *service) SetInterceptShortcuts(ctx context.Context, request *rpc.SetInt
 	return &emptypb.Empty{}, err
 }
 
+func (s *service) SetInterceptTargets(ctx context.Context, request *rpc.SetInterceptTargetsRequest) (*emptypb.Empty, error) {
+	err := s.withSession(ctx, func(ctx context.Context, session *session) error {
+		session.SetInterceptTargets(ctx, request.Targets)
+		return nil
+	})
+	return &emptypb.Empty{}, err
+}
+
 func (s *service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
 	err = s.withSession(ctx, func(_ context.Context, session *session) error {
 		var ap types.AddrPortProto

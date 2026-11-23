@@ -38,6 +38,7 @@ const (
 	Daemon_LookupIP_FullMethodName              = "/telepresence.daemon.Daemon/LookupIP"
 	Daemon_RerouteRemotePort_FullMethodName     = "/telepresence.daemon.Daemon/RerouteRemotePort"
 	Daemon_SetInterceptShortcuts_FullMethodName = "/telepresence.daemon.Daemon/SetInterceptShortcuts"
+	Daemon_SetInterceptTargets_FullMethodName   = "/telepresence.daemon.Daemon/SetInterceptTargets"
 	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
 	Daemon_WatchAgentPods_FullMethodName        = "/telepresence.daemon.Daemon/WatchAgentPods"
 	Daemon_ProvideCredentials_FullMethodName    = "/telepresence.daemon.Daemon/ProvideCredentials"
@@ -84,6 +85,11 @@ type DaemonClient interface {
 	// connects directly to local intercept handlers instead of tunneling to the cluster.
 	// Each call replaces the previously declared set.
 	SetInterceptShortcuts(ctx context.Context, in *SetInterceptShortcutsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetInterceptTargets declares the local destinations that the session's intercepts
+	// deliver cluster traffic to. The root daemon dials a destination requested by a
+	// traffic-agent only if it is one of these. Each call replaces the previously
+	// declared set.
+	SetInterceptTargets(ctx context.Context, in *SetInterceptTargetsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error)
 	// WatchAgentPods is called by the user daemon to push the agent-pod
 	// projection it derives from its combined traffic-manager watcher. It is
@@ -267,6 +273,16 @@ func (c *daemonClient) SetInterceptShortcuts(ctx context.Context, in *SetInterce
 	return out, nil
 }
 
+func (c *daemonClient) SetInterceptTargets(ctx context.Context, in *SetInterceptTargetsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Daemon_SetInterceptTargets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[0], Daemon_ActivityWatcher_FullMethodName, cOpts...)
@@ -353,6 +369,11 @@ type DaemonServer interface {
 	// connects directly to local intercept handlers instead of tunneling to the cluster.
 	// Each call replaces the previously declared set.
 	SetInterceptShortcuts(context.Context, *SetInterceptShortcutsRequest) (*emptypb.Empty, error)
+	// SetInterceptTargets declares the local destinations that the session's intercepts
+	// deliver cluster traffic to. The root daemon dials a destination requested by a
+	// traffic-agent only if it is one of these. Each call replaces the previously
+	// declared set.
+	SetInterceptTargets(context.Context, *SetInterceptTargetsRequest) (*emptypb.Empty, error)
 	ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error
 	// WatchAgentPods is called by the user daemon to push the agent-pod
 	// projection it derives from its combined traffic-manager watcher. It is
@@ -423,6 +444,9 @@ func (UnimplementedDaemonServer) RerouteRemotePort(context.Context, *ReroutePort
 }
 func (UnimplementedDaemonServer) SetInterceptShortcuts(context.Context, *SetInterceptShortcutsRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetInterceptShortcuts not implemented")
+}
+func (UnimplementedDaemonServer) SetInterceptTargets(context.Context, *SetInterceptTargetsRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetInterceptTargets not implemented")
 }
 func (UnimplementedDaemonServer) ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error {
 	return status.Error(codes.Unimplemented, "method ActivityWatcher not implemented")
@@ -742,6 +766,24 @@ func _Daemon_SetInterceptShortcuts_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_SetInterceptTargets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetInterceptTargetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetInterceptTargets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_SetInterceptTargets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetInterceptTargets(ctx, req.(*SetInterceptTargetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_ActivityWatcher_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -837,6 +879,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetInterceptShortcuts",
 			Handler:    _Daemon_SetInterceptShortcuts_Handler,
+		},
+		{
+			MethodName: "SetInterceptTargets",
+			Handler:    _Daemon_SetInterceptTargets_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

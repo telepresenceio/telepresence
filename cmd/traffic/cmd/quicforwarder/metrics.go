@@ -39,6 +39,9 @@ const (
 	// dropTTLExpired means a handshake-cache entry aged out (handshakeTTL)
 	// without resolving.
 	dropTTLExpired
+	// dropFlowCap means a new flow would exceed the total or per-source-IP
+	// flow cap.
+	dropFlowCap
 	// numDropReasons is a sentinel, not a real reason.
 	numDropReasons
 )
@@ -59,6 +62,8 @@ func (d dropReason) String() string {
 		return "handshake-cap-exceeded"
 	case dropTTLExpired:
 		return "handshake-ttl-expired"
+	case dropFlowCap:
+		return "flow-cap-exceeded"
 	default:
 		return "unknown(" + strconv.Itoa(int(d)) + ")"
 	}
