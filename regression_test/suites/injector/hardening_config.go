@@ -112,7 +112,8 @@ spec:
 	_, err = r.Kubectl(ctx, attackerNS, "rollout", "status", "deployment/injhard-holder", "--timeout=90s")
 	s.Require().NoError(err)
 
-	before := injhardPodsOf(ctx, r, victimNS, name)
+	before, err := injhardPodsOf(ctx, r, victimNS, name)
+	s.Require().NoError(err)
 	s.Require().NotEmpty(before)
 	s.Require().NoError(rt.RestartManager(env))
 
@@ -121,7 +122,11 @@ spec:
 	_, err = r.Kubectl(ctx, victimNS, "rollout", "status", "deployment/"+name, "--timeout=90s")
 	s.Require().NoError(err, "the restarted pods of %s should become ready", name)
 
-	for _, p := range injhardPodsOf(ctx, r, victimNS, name) {
+	after, err := injhardPodsOf(ctx, r, victimNS, name)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(after, "the restarted deployment should have pods")
+	for _, p := range after {
+		s.NotEqual(before[0].UID, p.UID, "pod %s should be a replacement pod", p.UID)
 		s.Equal(before[0].Containers, p.Containers, "pod %s should have the containers it had before", p.UID)
 		for _, c := range p.Containers {
 			s.NotContains(c, "injhard/traffic-agent", "pod %s", p.UID)
@@ -190,9 +195,11 @@ func (s *injhardConfig) Test_ServiceCreatorCannotRestartAgentPods() {
 
 	wl := s.Workload(injhardAgentedTemplate("injhard-svc-victim"))
 	s.Require().Eventually(func() bool {
-		return len(injhardAgentPodUIDs(ctx, r, ns, wl.Name)) > 0
+		uids, err := injhardAgentPodUIDs(ctx, r, ns, wl.Name)
+		return err == nil && len(uids) > 0
 	}, injhardWait, injhardPoll, "%s should get an agent", wl.Name)
-	before := injhardAgentPodUIDs(ctx, r, ns, wl.Name)
+	before, err := injhardAgentPodUIDs(ctx, r, ns, wl.Name)
+	s.Require().NoError(err)
 
 	const sa = "injhard-svc-creator"
 	setup := fmt.Sprintf(`apiVersion: v1
@@ -250,6 +257,7 @@ spec:
 	s.Require().NoError(err, "the account should be able to create the Service")
 
 	s.Never(func() bool {
-		return !slices.Equal(injhardAgentPodUIDs(ctx, r, ns, wl.Name), before)
+		uids, err := injhardAgentPodUIDs(ctx, r, ns, wl.Name)
+		return err == nil && !slices.Equal(uids, before)
 	}, 45*time.Second, injhardPoll, "the agent pods of %s should stay", wl.Name)
 }
