@@ -55,7 +55,9 @@ items:
           traffic-agent, and checks that a client holds a grant for what it
           does. An enforcing traffic-manager refuses clients older than
           2.31.0; a permissive one still serves them. Traffic-agents are
-          upgraded with the traffic-manager and need no action.
+          replaced when the traffic-manager is upgraded and need no action,
+          unless the <code>agent.image</code> Helm values pin an agent older
+          than 2.31.
           <code>telepresence helm upgrade</code> without value flags uses the
           new chart's defaults together with the values that were set earlier,
           so an existing installation that never set the mode becomes

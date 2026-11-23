@@ -253,12 +253,15 @@ for how the command treats values.
 An `enforcing` traffic-manager refuses:
 
 - Clients older than 2.31.0. They send no token.
-- Traffic-agents older than 2.31. They send no token. This needs no action:
-  when the traffic-manager is upgraded, it replaces the pods that carry a
-  traffic-agent, so that they get the agent of its own version. See
-  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing). Only an
-  agent that the traffic-manager's agent-injector did not inject stays as it
-  is.
+- Traffic-agents older than 2.31. They send no token. When the
+  traffic-manager is upgraded, it replaces the pods that carry a
+  traffic-agent, and the new pods get the agent image that the
+  traffic-manager injects. See
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing). That image
+  is the one of the traffic-manager's own version, unless the `agent.image`
+  Helm values pin another one. If they pin an agent older than 2.31, change
+  or remove the pin. An agent that the traffic-manager's agent-injector did
+  not inject stays as it is.
 - A user who lacks the grant a call needs. To connect, the user needs
   `create` on `connections.telepresence.io` in the traffic-manager's
   namespace, or `pods/portforward` there. To intercept, replace, or
@@ -438,10 +441,12 @@ The [access levels](#access-levels) add two more cases:
   traffic-manager is downgraded, or when the `agent.image` Helm value names
   a newer agent than the traffic-manager.
 - **An agent older than 2.34 with a current traffic-manager.** The agent
-  never asks for access levels and checks the session credential only. This
-  lasts until the traffic-manager has replaced the agent's pod, which it
-  does after an upgrade. See
-  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing).
+  never asks for access levels and checks the session credential only. After
+  an upgrade, the traffic-manager replaces the pods that carry a
+  traffic-agent (see
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing)). The case
+  therefore remains only when the `agent.image` Helm values pin an agent
+  older than 2.34, or for an agent that the agent-injector did not inject.
 
 The checks on the agent's identity depend only on the traffic-manager, so
 they apply to agents of every version that sends the `traffic-manager`

@@ -161,9 +161,10 @@ it. An `enforcing` traffic-manager refuses:
   `attachments.telepresence.io` or `pods/portforward` to attach),
 - kubeconfigs that authenticate with a client certificate the traffic-manager cannot verify.
 
-Traffic-agents need no action. When the traffic-manager is upgraded, it replaces the pods that carry a traffic-agent,
-so that they get the agent of the new version. See
-[Agent Rollout Pacing](../reference/cluster-config.md#agent-rollout-pacing).
+When the traffic-manager is upgraded, it replaces the pods that carry a traffic-agent, and the new pods get the agent
+image that it injects. See [Agent Rollout Pacing](../reference/cluster-config.md#agent-rollout-pacing). Traffic-agents
+therefore need no action, unless the `agent.image` Helm values pin an agent older than 2.31. An `enforcing`
+traffic-manager refuses such an agent, so change or remove the pin.
 
 To keep the previous mode while you prepare, add `--set security.authentication.mode=permissive` to the upgrade
 command, together with the values that you set earlier. See
