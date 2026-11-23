@@ -38,9 +38,26 @@ func startupDeployment(ns, name string) *apps.Deployment {
 	return d
 }
 
+// startupReplicaSet returns the ReplicaSet that a Deployment's pods are controlled by.
+func startupReplicaSet(d *apps.Deployment) *apps.ReplicaSet {
+	return &apps.ReplicaSet{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      d.Name + "-rs",
+			Namespace: d.Namespace,
+			UID:       types.UID("uid-" + d.Name + "-rs"),
+			OwnerReferences: []meta.OwnerReference{{
+				APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: d.Name, UID: d.UID, Controller: new(true),
+			}},
+		},
+		Spec: apps.ReplicaSetSpec{Selector: d.Spec.Selector},
+	}
+}
+
+// ownedBy makes the pod controlled by the Deployment's ReplicaSet (see startupReplicaSet).
 func ownedBy(pod *core.Pod, d *apps.Deployment) *core.Pod {
+	rs := startupReplicaSet(d)
 	pod.OwnerReferences = []meta.OwnerReference{{
-		APIVersion: "apps/v1", Kind: string(k8sapi.DeploymentKind), Name: d.Name, UID: d.UID, Controller: new(true),
+		APIVersion: "apps/v1", Kind: string(k8sapi.ReplicaSetKind), Name: rs.Name, UID: rs.UID, Controller: new(true),
 	}}
 	return pod
 }
@@ -105,7 +122,7 @@ func TestStartupRebuildsConfigFromManagerValues(t *testing.T) {
 		Containers:          []*agentconfig.Container{{Name: "app", Replace: agentconfig.ReplacePolicyContainer}},
 	}
 	pod := ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
-	f := startupFixture(t, d, pod)
+	f := startupFixture(t, d, startupReplicaSet(d), pod)
 
 	sc := f.cw.Get("web", "a")
 	require.NotNil(t, sc)
@@ -132,7 +149,7 @@ func TestRestoreAgentConfigUsesGeneratedConfig(t *testing.T) {
 		Containers:   []*agentconfig.Container{{Name: "app", Replace: agentconfig.ReplacePolicyContainer}},
 	}
 	pod := ownedBy(agentPod("a", "web-1", "web", k8sapi.DeploymentKind, startupConfigJSON(t, annotated), true), d)
-	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, d, pod)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, d, startupReplicaSet(d), pod)
 	managerutil.GetEnv(f.ctx).AgentPort = 9900
 	ctx := WithMap(managerutil.WithResolvedAgentImageRetriever(f.ctx, managerutil.ImageFromEnv(startupImage)), f.cw)
 
