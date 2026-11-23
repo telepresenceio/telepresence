@@ -1,12 +1,13 @@
 package setup
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
+	"helm.sh/helm/v3/pkg/chartutil"
 	rbac "k8s.io/api/rbac/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -842,4 +843,146 @@ func (p *Proposal) notesText() string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+func TestRecommend_KafkaValues(t *testing.T) {
+	t.Run("disabled emits only kafka.enabled false", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers())
+		require.NoError(t, err)
+		require.NotNil(t, p.Values.Kafka.Enabled)
+		assert.False(t, *p.Values.Kafka.Enabled)
+		assert.Nil(t, p.Values.Kafka.Webhook.FailurePolicy)
+		assert.Nil(t, p.Values.Kafka.Replicas)
+	})
+	t.Run("enabled emits the failure policy, replicas, and an info note", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.Kafka = true
+			a.KafkaFailurePolicy = KafkaFailurePolicyFail
+			a.KafkaReplicas = 2
+		}))
+		require.NoError(t, err)
+		require.True(t, *p.Values.Kafka.Enabled)
+		assert.Equal(t, KafkaFailurePolicyFail, *p.Values.Kafka.Webhook.FailurePolicy)
+		assert.Equal(t, int32(2), *p.Values.Kafka.Replicas)
+		assert.Contains(t, p.notesText(), "Kafka personal intercepts enabled")
+	})
+	t.Run("Ignore failure policy warns", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.Kafka = true
+			a.KafkaFailurePolicy = KafkaFailurePolicyIgnore
+		}))
+		require.NoError(t, err)
+		assert.Contains(t, p.notesText(), "kafka.webhook.failurePolicy Ignore")
+	})
+	t.Run("pinned on with attach off warns about missing agent machinery", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.Attach = false
+			a.Kafka = true
+		}))
+		require.NoError(t, err)
+		assert.Contains(t, p.notesText(), "kafka.enabled without agent machinery")
+	})
+}
+
+func TestRecommend_KafkaUpgrade(t *testing.T) {
+	t.Run("release enabled and answer keeps it: kafka.enabled does not change", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Kafka: helm.Kafka{
+					Enabled: new(true), Webhook: helm.KafkaWebhook{FailurePolicy: new(KafkaFailurePolicyFail)}, Replicas: new(int32(2)),
+				}},
+			}
+		})
+		p, err := Recommend(facts, recAnswers(func(a *Answers) {
+			a.Kafka = true
+			a.KafkaFailurePolicy = KafkaFailurePolicyFail
+			a.KafkaReplicas = 2
+		}))
+		require.NoError(t, err)
+		assert.NotContains(t, p.ChangedKeys, "kafka.enabled")
+	})
+	t.Run("release disabled and answer enables: an upgrade with the three kafka keys", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(false)}},
+			}
+		})
+		p, err := Recommend(facts, recAnswers(func(a *Answers) { a.Kafka = true }))
+		require.NoError(t, err)
+		assert.Equal(t, ActionUpgrade, p.Action)
+		assert.Contains(t, p.ChangedKeys, "kafka.enabled")
+		assert.Contains(t, p.ChangedKeys, "kafka.replicas")
+		assert.Contains(t, p.ChangedKeys, "kafka.webhook.failurePolicy")
+	})
+	t.Run("disabling an enabled release changes kafka.enabled and warns about the leave-behind", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}},
+			}
+		})
+		p, err := Recommend(facts, recAnswers())
+		require.NoError(t, err)
+		assert.Contains(t, p.ChangedKeys, "kafka.enabled")
+		assert.Contains(t, p.notesText(), "kafka.enabled false removes the tp-kafka provider")
+	})
+}
+
+// kafkaInput pins kafka.enabled to true via the input values document.
+func kafkaInput() *helm.Values {
+	return &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}
+}
+
+func TestRecommendWithInput_KafkaPrivilegeDenial(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.Kafka = Finding{
+			Verdict:  VerdictNo,
+			Evidence: []string{"create customresourcedefinitions.apiextensions.k8s.io"},
+		}
+		f.Privileges.MissingKafka = []string{"create customresourcedefinitions.apiextensions.k8s.io"}
+	})
+
+	t.Run("apply mode errors", func(t *testing.T) {
+		_, err := RecommendWithInput(facts, recAnswers(), kafkaInput(), nil, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "customresourcedefinitions.apiextensions.k8s.io")
+	})
+
+	t.Run("validation mode warns and hands off instead of aborting", func(t *testing.T) {
+		p, err := RecommendWithInput(facts, recAnswers(), kafkaInput(), nil, false)
+		require.NoError(t, err)
+		text := p.notesText()
+		assert.Contains(t, text, "customresourcedefinitions.apiextensions.k8s.io")
+		assert.Contains(t, text, "missing privileges listed above")
+	})
+}
+
+func TestRecommend_KafkaCRDsPresentNote(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) { f.Kafka.CRDs = Finding{Verdict: VerdictYes} })
+	p, err := Recommend(facts, recAnswers(func(a *Answers) { a.Kafka = true }))
+	require.NoError(t, err)
+	assert.Contains(t, p.notesText(), "the Kafka CRDs are already present; the apply updates them in place")
+}
+
+// TestRecommend_KafkaValuesMeetChartSchema pins the setup proposals for the
+// Kafka provider, including the single replica setup offers on a single-node
+// cluster, against the chart's own values schema.
+func TestRecommend_KafkaValuesMeetChartSchema(t *testing.T) {
+	chrt, err := loadEmbeddedChart()
+	require.NoError(t, err)
+	for _, replicas := range []int32{1, 2} {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.Kafka = true
+			a.KafkaFailurePolicy = KafkaFailurePolicyFail
+			a.KafkaReplicas = replicas
+		}))
+		require.NoError(t, err)
+		raw, err := json.Marshal(p.Values)
+		require.NoError(t, err)
+		var vals map[string]any
+		require.NoError(t, json.Unmarshal(raw, &vals))
+		assert.NoError(t, chartutil.ValidateAgainstSchema(chrt, vals), "kafka.replicas %d", replicas)
+	}
 }

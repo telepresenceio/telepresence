@@ -90,6 +90,9 @@ type Env struct {
 	// pod's namespaces) when requested by a client. Defaults to false.
 	NodeAgentEnabled bool
 
+	// KafkaInterceptsEnabled exposes the optional Kafka attachment adapter.
+	KafkaInterceptsEnabled bool
+
 	// NodeAgentCRISocket is the path of the container-runtime socket that is
 	// mounted into node-agent Jobs so that they can resolve a target
 	// container's process ID (Helm value nodeAgent.criSocket). When empty,

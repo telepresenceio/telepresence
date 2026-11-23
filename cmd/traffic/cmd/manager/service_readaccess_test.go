@@ -380,7 +380,7 @@ func TestReadAccess_SessionEventsKeepsIntercepts(t *testing.T) {
 		Disposition:   rpc.InterceptDispositionType_WAITING,
 		ClientSession: e.sess,
 	}
-	require.NoError(t, e.mgr.State().RestoreIntercepts(e.sctx, []*rpc.InterceptInfo{ic}, time.Now()))
+	require.NoError(t, e.mgr.State().RestoreIntercepts(e.sctx, []*rpc.InterceptInfo{ic}, time.Now(), nil))
 	var intercepts, pods int
 	for _, m := range collect(stream.ch) {
 		if m.Intercepts != nil {

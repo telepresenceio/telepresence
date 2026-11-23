@@ -22,3 +22,9 @@ func (v *Values) InjectorName() string {
 	}
 	return DefaultInjectorName
 }
+
+// KafkaEnabled reports whether values enable the Kafka personal-intercept
+// provider.
+func (v *Values) KafkaEnabled() bool {
+	return v.Kafka.Enabled != nil && *v.Kafka.Enabled
+}

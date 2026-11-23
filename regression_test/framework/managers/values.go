@@ -65,7 +65,8 @@ type Values struct {
 	Workloads Workloads `json:"workloads,omitzero"`
 	// Intercept is the chart's intercept.* shape, restricted to the keys
 	// the catalog configures.
-	Intercept Intercept `json:"intercept,omitzero"`
+	Intercept Intercept   `json:"intercept,omitzero"`
+	Kafka     KafkaValues `json:"kafka,omitzero"`
 	// Namespaces and NamespaceSelector are mutually exclusive per the chart
 	// (values.schema.yaml's namespaces/namespaceSelector descriptions):
 	// setting a static Namespaces list must null NamespaceSelector, and
@@ -343,6 +344,11 @@ type Usage struct {
 	Insecure         bool   `json:"insecure,omitempty"`
 }
 
+// KafkaValues is the chart's optional Kafka-provider configuration.
+type KafkaValues struct {
+	Enabled bool `json:"enabled"`
+}
+
 // Baseline returns the manager values every rtest spec starts from: debug
 // logging, the given image coordinates for both the manager and the agent,
 // usage reporting disabled, the agent-arrival timeout the framework's test
@@ -431,6 +437,9 @@ func Merge(base, over Values) Values {
 	}
 	m.Workloads = mergeWorkloads(m.Workloads, over.Workloads)
 	m.Intercept = mergeIntercept(m.Intercept, over.Intercept)
+	if over.Kafka.Enabled {
+		m.Kafka.Enabled = true
+	}
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
 	}

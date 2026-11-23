@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -44,6 +45,8 @@ type Info struct {
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	Replace       bool              `json:"replace,omitempty"         yaml:"replace,omitempty"`
 	Wiretap       bool              `json:"wiretap,omitempty"         yaml:"wiretap,omitempty"`
+	KafkaOnly     bool              `json:"kafka_only,omitempty"      yaml:"kafka_only,omitempty"`
+	KafkaSplits   []string          `json:"kafka_splits,omitempty"    yaml:"kafka_splits,omitempty"`
 	PodIP         string            `json:"pod_ip,omitempty"          yaml:"pod_ip,omitempty"`
 	debug         bool
 }
@@ -81,7 +84,12 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		Global:        spec.Mechanism == "tcp",
 		Replace:       spec.Replace,
 		Wiretap:       spec.Wiretap,
+		KafkaOnly:     spec.GetKafka().GetOnly(),
 	}
+	for _, route := range ii.GetKafkaRoutes() {
+		info.KafkaSplits = append(info.KafkaSplits, route.GetSplit())
+	}
+	slices.Sort(info.KafkaSplits)
 
 	// Replace potentially synthetic TargetHost
 	targetIP, err := netip.ParseAddr(spec.TargetHost)
@@ -140,20 +148,22 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 		kvf.Add("ID", ii.ID)
 	}
 
-	// Show all ports as mappings from containter port to local port.
-	pkv := ioutil.DefaultKeyValueFormatter()
-	pkv.Indent = ""
-	pkv.Separator = " -> "
-	if ii.ContainerPort != 0 {
-		pm, _ := types.NewPortIdentifier(ii.Protocol, strconv.Itoa(int(ii.ContainerPort)))
-		pkv.Add(pm.String(), fmt.Sprintf("%d %s", ii.TargetPort, ii.Protocol))
+	if !ii.KafkaOnly {
+		// Show all ports as mappings from container port to local port.
+		pkv := ioutil.DefaultKeyValueFormatter()
+		pkv.Indent = ""
+		pkv.Separator = " -> "
+		if ii.ContainerPort != 0 {
+			pm, _ := types.NewPortIdentifier(ii.Protocol, strconv.Itoa(int(ii.ContainerPort)))
+			pkv.Add(pm.String(), fmt.Sprintf("%d %s", ii.TargetPort, ii.Protocol))
+		}
+		for _, pp := range ii.PodPorts {
+			pm := types.PortMapping(pp)
+			to := pm.ToAsNumeric()
+			pkv.Add(pm.From().String(), fmt.Sprintf("%d %s", to.Port, to.Proto))
+		}
+		kvf.Add(what, fmt.Sprintf("%s -> %s\n%s", ii.PodIP, ii.TargetHost, pkv))
 	}
-	for _, pp := range ii.PodPorts {
-		pm := types.PortMapping(pp)
-		to := pm.ToAsNumeric()
-		pkv.Add(pm.From().String(), fmt.Sprintf("%d %s", to.Port, to.Proto))
-	}
-	kvf.Add(what, fmt.Sprintf("%s -> %s\n%s", ii.PodIP, ii.TargetHost, pkv))
 
 	if !ii.Global {
 		kvf.Add(what, func() string {
@@ -172,6 +182,9 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 			}
 		}
 		kvf.Add("Reachable via", v)
+	}
+	if len(ii.KafkaSplits) > 0 {
+		kvf.Add("Kafka splits", strings.Join(ii.KafkaSplits, "\n"))
 	}
 
 	if m := ii.Mount; m != nil {

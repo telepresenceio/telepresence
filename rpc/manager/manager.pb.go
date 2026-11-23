@@ -168,7 +168,7 @@ func (x LogChunk_Frame) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogChunk_Frame.Descriptor instead.
 func (LogChunk_Frame) EnumDescriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{26, 0}
+	return file_manager_manager_proto_rawDescGZIP(), []int{29, 0}
 }
 
 type WorkloadInfo_Kind int32
@@ -223,7 +223,7 @@ func (x WorkloadInfo_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkloadInfo_Kind.Descriptor instead.
 func (WorkloadInfo_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{60, 0}
+	return file_manager_manager_proto_rawDescGZIP(), []int{63, 0}
 }
 
 type WorkloadInfo_State int32
@@ -283,7 +283,7 @@ func (x WorkloadInfo_State) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkloadInfo_State.Descriptor instead.
 func (WorkloadInfo_State) EnumDescriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{60, 1}
+	return file_manager_manager_proto_rawDescGZIP(), []int{63, 1}
 }
 
 type WorkloadInfo_AgentState int32
@@ -335,7 +335,7 @@ func (x WorkloadInfo_AgentState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkloadInfo_AgentState.Descriptor instead.
 func (WorkloadInfo_AgentState) EnumDescriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{60, 2}
+	return file_manager_manager_proto_rawDescGZIP(), []int{63, 2}
 }
 
 type WorkloadEvent_Type int32
@@ -384,7 +384,7 @@ func (x WorkloadEvent_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WorkloadEvent_Type.Descriptor instead.
 func (WorkloadEvent_Type) EnumDescriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{61, 0}
+	return file_manager_manager_proto_rawDescGZIP(), []int{64, 0}
 }
 
 // ClientInfo is the self-reported metadata that the on-laptop
@@ -717,6 +717,189 @@ func (x *PortMapping) GetTo() int32 {
 	return 0
 }
 
+type KafkaHeader struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KafkaHeader) Reset() {
+	*x = KafkaHeader{}
+	mi := &file_manager_manager_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KafkaHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KafkaHeader) ProtoMessage() {}
+
+func (x *KafkaHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_manager_manager_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KafkaHeader.ProtoReflect.Descriptor instead.
+func (*KafkaHeader) Descriptor() ([]byte, []int) {
+	return file_manager_manager_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *KafkaHeader) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *KafkaHeader) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+// KafkaIntercept requests personal routes for every enabled KafkaSplit that
+// contains the intercepted workload.
+type KafkaIntercept struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Only          bool                   `protobuf:"varint,1,opt,name=only,proto3" json:"only,omitempty"`
+	Headers       []*KafkaHeader         `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty"`
+	Key           []byte                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	KeyPrefix     []byte                 `protobuf:"bytes,4,opt,name=key_prefix,json=keyPrefix,proto3" json:"key_prefix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KafkaIntercept) Reset() {
+	*x = KafkaIntercept{}
+	mi := &file_manager_manager_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KafkaIntercept) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KafkaIntercept) ProtoMessage() {}
+
+func (x *KafkaIntercept) ProtoReflect() protoreflect.Message {
+	mi := &file_manager_manager_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KafkaIntercept.ProtoReflect.Descriptor instead.
+func (*KafkaIntercept) Descriptor() ([]byte, []int) {
+	return file_manager_manager_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *KafkaIntercept) GetOnly() bool {
+	if x != nil {
+		return x.Only
+	}
+	return false
+}
+
+func (x *KafkaIntercept) GetHeaders() []*KafkaHeader {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *KafkaIntercept) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *KafkaIntercept) GetKeyPrefix() []byte {
+	if x != nil {
+		return x.KeyPrefix
+	}
+	return nil
+}
+
+// KafkaRoute identifies one durable provider route attached to an intercept.
+type KafkaRoute struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Split         string                 `protobuf:"bytes,2,opt,name=split,proto3" json:"split,omitempty"`
+	Environment   map[string]string      `protobuf:"bytes,3,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KafkaRoute) Reset() {
+	*x = KafkaRoute{}
+	mi := &file_manager_manager_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KafkaRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KafkaRoute) ProtoMessage() {}
+
+func (x *KafkaRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_manager_manager_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KafkaRoute.ProtoReflect.Descriptor instead.
+func (*KafkaRoute) Descriptor() ([]byte, []int) {
+	return file_manager_manager_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *KafkaRoute) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *KafkaRoute) GetSplit() string {
+	if x != nil {
+		return x.Split
+	}
+	return ""
+}
+
+func (x *KafkaRoute) GetEnvironment() map[string]string {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
 // InterceptSpec contains static information about an intercept. It is shared by
 // all running agent instances.
 type InterceptSpec struct {
@@ -810,13 +993,15 @@ type InterceptSpec struct {
 	// Set by the traffic-manager when the intercept is expanded to every
 	// workload selected by its Service. Clients leave it unset.
 	SharedService bool `protobuf:"varint,33,opt,name=shared_service,json=sharedService,proto3" json:"shared_service,omitempty"`
+	// Non-nil asks the manager to attach every matching enabled KafkaSplit.
+	Kafka         *KafkaIntercept `protobuf:"bytes,34,opt,name=kafka,proto3" json:"kafka,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InterceptSpec) Reset() {
 	*x = InterceptSpec{}
-	mi := &file_manager_manager_proto_msgTypes[3]
+	mi := &file_manager_manager_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +1013,7 @@ func (x *InterceptSpec) String() string {
 func (*InterceptSpec) ProtoMessage() {}
 
 func (x *InterceptSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[3]
+	mi := &file_manager_manager_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +1026,7 @@ func (x *InterceptSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptSpec.ProtoReflect.Descriptor instead.
 func (*InterceptSpec) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{3}
+	return file_manager_manager_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *InterceptSpec) GetName() string {
@@ -1061,6 +1246,13 @@ func (x *InterceptSpec) GetSharedService() bool {
 	return false
 }
 
+func (x *InterceptSpec) GetKafka() *KafkaIntercept {
+	if x != nil {
+		return x.Kafka
+	}
+	return nil
+}
+
 // InterceptWorkload identifies one workload whose pods participate in a
 // Service-scoped intercept.
 type InterceptWorkload struct {
@@ -1074,7 +1266,7 @@ type InterceptWorkload struct {
 
 func (x *InterceptWorkload) Reset() {
 	*x = InterceptWorkload{}
-	mi := &file_manager_manager_proto_msgTypes[4]
+	mi := &file_manager_manager_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1086,7 +1278,7 @@ func (x *InterceptWorkload) String() string {
 func (*InterceptWorkload) ProtoMessage() {}
 
 func (x *InterceptWorkload) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[4]
+	mi := &file_manager_manager_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1099,7 +1291,7 @@ func (x *InterceptWorkload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptWorkload.ProtoReflect.Descriptor instead.
 func (*InterceptWorkload) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{4}
+	return file_manager_manager_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InterceptWorkload) GetNamespace() string {
@@ -1154,6 +1346,8 @@ type InterceptInfo struct {
 	Environment map[string]string `protobuf:"bytes,17,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Map of mount path -> MountPolicy
 	Mounts map[string]int32 `protobuf:"bytes,22,rep,name=mounts,proto3" json:"mounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// Durable Kafka routes attached to this intercept.
+	KafkaRoutes []*KafkaRoute `protobuf:"bytes,24,rep,name=kafka_routes,json=kafkaRoutes,proto3" json:"kafka_routes,omitempty"`
 	// Timestamp for last modification made by traffic-manager
 	ModifiedAt *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=modified_at,json=modifiedAt,proto3" json:"modified_at,omitempty"`
 	// Workloads whose ready Service-selected pods participate in this intercept.
@@ -1166,7 +1360,7 @@ type InterceptInfo struct {
 
 func (x *InterceptInfo) Reset() {
 	*x = InterceptInfo{}
-	mi := &file_manager_manager_proto_msgTypes[5]
+	mi := &file_manager_manager_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1372,7 @@ func (x *InterceptInfo) String() string {
 func (*InterceptInfo) ProtoMessage() {}
 
 func (x *InterceptInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[5]
+	mi := &file_manager_manager_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1385,7 @@ func (x *InterceptInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptInfo.ProtoReflect.Descriptor instead.
 func (*InterceptInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{5}
+	return file_manager_manager_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *InterceptInfo) GetSpec() *InterceptSpec {
@@ -1299,6 +1493,13 @@ func (x *InterceptInfo) GetMounts() map[string]int32 {
 	return nil
 }
 
+func (x *InterceptInfo) GetKafkaRoutes() []*KafkaRoute {
+	if x != nil {
+		return x.KafkaRoutes
+	}
+	return nil
+}
+
 func (x *InterceptInfo) GetModifiedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ModifiedAt
@@ -1323,7 +1524,7 @@ type ReconnectAgentRequest struct {
 
 func (x *ReconnectAgentRequest) Reset() {
 	*x = ReconnectAgentRequest{}
-	mi := &file_manager_manager_proto_msgTypes[6]
+	mi := &file_manager_manager_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1536,7 @@ func (x *ReconnectAgentRequest) String() string {
 func (*ReconnectAgentRequest) ProtoMessage() {}
 
 func (x *ReconnectAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[6]
+	mi := &file_manager_manager_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1549,7 @@ func (x *ReconnectAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconnectAgentRequest.ProtoReflect.Descriptor instead.
 func (*ReconnectAgentRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{6}
+	return file_manager_manager_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ReconnectAgentRequest) GetSession() *SessionInfo {
@@ -1378,7 +1579,7 @@ type ReconnectClientRequest struct {
 
 func (x *ReconnectClientRequest) Reset() {
 	*x = ReconnectClientRequest{}
-	mi := &file_manager_manager_proto_msgTypes[7]
+	mi := &file_manager_manager_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1390,7 +1591,7 @@ func (x *ReconnectClientRequest) String() string {
 func (*ReconnectClientRequest) ProtoMessage() {}
 
 func (x *ReconnectClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[7]
+	mi := &file_manager_manager_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1403,7 +1604,7 @@ func (x *ReconnectClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReconnectClientRequest.ProtoReflect.Descriptor instead.
 func (*ReconnectClientRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{7}
+	return file_manager_manager_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ReconnectClientRequest) GetSession() *SessionInfo {
@@ -1445,7 +1646,7 @@ type SessionInfo struct {
 
 func (x *SessionInfo) Reset() {
 	*x = SessionInfo{}
-	mi := &file_manager_manager_proto_msgTypes[8]
+	mi := &file_manager_manager_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1457,7 +1658,7 @@ func (x *SessionInfo) String() string {
 func (*SessionInfo) ProtoMessage() {}
 
 func (x *SessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[8]
+	mi := &file_manager_manager_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1470,7 +1671,7 @@ func (x *SessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionInfo.ProtoReflect.Descriptor instead.
 func (*SessionInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{8}
+	return file_manager_manager_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SessionInfo) GetSessionId() string {
@@ -1504,7 +1705,7 @@ type AgentsRequest struct {
 
 func (x *AgentsRequest) Reset() {
 	*x = AgentsRequest{}
-	mi := &file_manager_manager_proto_msgTypes[9]
+	mi := &file_manager_manager_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +1717,7 @@ func (x *AgentsRequest) String() string {
 func (*AgentsRequest) ProtoMessage() {}
 
 func (x *AgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[9]
+	mi := &file_manager_manager_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +1730,7 @@ func (x *AgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentsRequest.ProtoReflect.Descriptor instead.
 func (*AgentsRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{9}
+	return file_manager_manager_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AgentsRequest) GetSession() *SessionInfo {
@@ -1555,7 +1756,7 @@ type AgentInfoSnapshot struct {
 
 func (x *AgentInfoSnapshot) Reset() {
 	*x = AgentInfoSnapshot{}
-	mi := &file_manager_manager_proto_msgTypes[10]
+	mi := &file_manager_manager_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1567,7 +1768,7 @@ func (x *AgentInfoSnapshot) String() string {
 func (*AgentInfoSnapshot) ProtoMessage() {}
 
 func (x *AgentInfoSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[10]
+	mi := &file_manager_manager_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1580,7 +1781,7 @@ func (x *AgentInfoSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfoSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentInfoSnapshot) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{10}
+	return file_manager_manager_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AgentInfoSnapshot) GetAgents() []*AgentInfo {
@@ -1600,7 +1801,7 @@ type AgentInfoDelta struct {
 
 func (x *AgentInfoDelta) Reset() {
 	*x = AgentInfoDelta{}
-	mi := &file_manager_manager_proto_msgTypes[11]
+	mi := &file_manager_manager_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +1813,7 @@ func (x *AgentInfoDelta) String() string {
 func (*AgentInfoDelta) ProtoMessage() {}
 
 func (x *AgentInfoDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[11]
+	mi := &file_manager_manager_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,7 +1826,7 @@ func (x *AgentInfoDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfoDelta.ProtoReflect.Descriptor instead.
 func (*AgentInfoDelta) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{11}
+	return file_manager_manager_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AgentInfoDelta) GetUpserts() map[string]*AgentInfo {
@@ -1651,7 +1852,7 @@ type InterceptInfoSnapshot struct {
 
 func (x *InterceptInfoSnapshot) Reset() {
 	*x = InterceptInfoSnapshot{}
-	mi := &file_manager_manager_proto_msgTypes[12]
+	mi := &file_manager_manager_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1663,7 +1864,7 @@ func (x *InterceptInfoSnapshot) String() string {
 func (*InterceptInfoSnapshot) ProtoMessage() {}
 
 func (x *InterceptInfoSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[12]
+	mi := &file_manager_manager_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1676,7 +1877,7 @@ func (x *InterceptInfoSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptInfoSnapshot.ProtoReflect.Descriptor instead.
 func (*InterceptInfoSnapshot) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{12}
+	return file_manager_manager_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *InterceptInfoSnapshot) GetIntercepts() []*InterceptInfo {
@@ -1696,7 +1897,7 @@ type InterceptInfoDelta struct {
 
 func (x *InterceptInfoDelta) Reset() {
 	*x = InterceptInfoDelta{}
-	mi := &file_manager_manager_proto_msgTypes[13]
+	mi := &file_manager_manager_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1708,7 +1909,7 @@ func (x *InterceptInfoDelta) String() string {
 func (*InterceptInfoDelta) ProtoMessage() {}
 
 func (x *InterceptInfoDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[13]
+	mi := &file_manager_manager_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1721,7 +1922,7 @@ func (x *InterceptInfoDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptInfoDelta.ProtoReflect.Descriptor instead.
 func (*InterceptInfoDelta) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{13}
+	return file_manager_manager_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *InterceptInfoDelta) GetUpserts() map[string]*InterceptInfo {
@@ -1753,7 +1954,7 @@ type SessionEventsRequest struct {
 
 func (x *SessionEventsRequest) Reset() {
 	*x = SessionEventsRequest{}
-	mi := &file_manager_manager_proto_msgTypes[14]
+	mi := &file_manager_manager_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1765,7 +1966,7 @@ func (x *SessionEventsRequest) String() string {
 func (*SessionEventsRequest) ProtoMessage() {}
 
 func (x *SessionEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[14]
+	mi := &file_manager_manager_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1778,7 +1979,7 @@ func (x *SessionEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionEventsRequest.ProtoReflect.Descriptor instead.
 func (*SessionEventsRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{14}
+	return file_manager_manager_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SessionEventsRequest) GetSession() *SessionInfo {
@@ -1815,7 +2016,7 @@ type SessionEventsDelta struct {
 
 func (x *SessionEventsDelta) Reset() {
 	*x = SessionEventsDelta{}
-	mi := &file_manager_manager_proto_msgTypes[15]
+	mi := &file_manager_manager_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1827,7 +2028,7 @@ func (x *SessionEventsDelta) String() string {
 func (*SessionEventsDelta) ProtoMessage() {}
 
 func (x *SessionEventsDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[15]
+	mi := &file_manager_manager_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1840,7 +2041,7 @@ func (x *SessionEventsDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionEventsDelta.ProtoReflect.Descriptor instead.
 func (*SessionEventsDelta) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{15}
+	return file_manager_manager_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SessionEventsDelta) GetAgentPods() *AgentPodInfoDelta {
@@ -1867,7 +2068,7 @@ type CreateInterceptRequest struct {
 
 func (x *CreateInterceptRequest) Reset() {
 	*x = CreateInterceptRequest{}
-	mi := &file_manager_manager_proto_msgTypes[16]
+	mi := &file_manager_manager_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1879,7 +2080,7 @@ func (x *CreateInterceptRequest) String() string {
 func (*CreateInterceptRequest) ProtoMessage() {}
 
 func (x *CreateInterceptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[16]
+	mi := &file_manager_manager_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1892,7 +2093,7 @@ func (x *CreateInterceptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInterceptRequest.ProtoReflect.Descriptor instead.
 func (*CreateInterceptRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{16}
+	return file_manager_manager_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CreateInterceptRequest) GetSession() *SessionInfo {
@@ -1925,7 +2126,7 @@ type EnsureAgentRequest struct {
 
 func (x *EnsureAgentRequest) Reset() {
 	*x = EnsureAgentRequest{}
-	mi := &file_manager_manager_proto_msgTypes[17]
+	mi := &file_manager_manager_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1937,7 +2138,7 @@ func (x *EnsureAgentRequest) String() string {
 func (*EnsureAgentRequest) ProtoMessage() {}
 
 func (x *EnsureAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[17]
+	mi := &file_manager_manager_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1950,7 +2151,7 @@ func (x *EnsureAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureAgentRequest.ProtoReflect.Descriptor instead.
 func (*EnsureAgentRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{17}
+	return file_manager_manager_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *EnsureAgentRequest) GetSession() *SessionInfo {
@@ -1992,7 +2193,7 @@ type ReleaseAgentRequest struct {
 
 func (x *ReleaseAgentRequest) Reset() {
 	*x = ReleaseAgentRequest{}
-	mi := &file_manager_manager_proto_msgTypes[18]
+	mi := &file_manager_manager_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2004,7 +2205,7 @@ func (x *ReleaseAgentRequest) String() string {
 func (*ReleaseAgentRequest) ProtoMessage() {}
 
 func (x *ReleaseAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[18]
+	mi := &file_manager_manager_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2017,7 +2218,7 @@ func (x *ReleaseAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseAgentRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseAgentRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{18}
+	return file_manager_manager_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ReleaseAgentRequest) GetSession() *SessionInfo {
@@ -2064,7 +2265,7 @@ type PreparedIntercept struct {
 
 func (x *PreparedIntercept) Reset() {
 	*x = PreparedIntercept{}
-	mi := &file_manager_manager_proto_msgTypes[19]
+	mi := &file_manager_manager_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2076,7 +2277,7 @@ func (x *PreparedIntercept) String() string {
 func (*PreparedIntercept) ProtoMessage() {}
 
 func (x *PreparedIntercept) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[19]
+	mi := &file_manager_manager_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2089,7 +2290,7 @@ func (x *PreparedIntercept) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreparedIntercept.ProtoReflect.Descriptor instead.
 func (*PreparedIntercept) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{19}
+	return file_manager_manager_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *PreparedIntercept) GetError() string {
@@ -2200,7 +2401,7 @@ type RemoveInterceptRequest2 struct {
 
 func (x *RemoveInterceptRequest2) Reset() {
 	*x = RemoveInterceptRequest2{}
-	mi := &file_manager_manager_proto_msgTypes[20]
+	mi := &file_manager_manager_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2212,7 +2413,7 @@ func (x *RemoveInterceptRequest2) String() string {
 func (*RemoveInterceptRequest2) ProtoMessage() {}
 
 func (x *RemoveInterceptRequest2) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[20]
+	mi := &file_manager_manager_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2225,7 +2426,7 @@ func (x *RemoveInterceptRequest2) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveInterceptRequest2.ProtoReflect.Descriptor instead.
 func (*RemoveInterceptRequest2) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{20}
+	return file_manager_manager_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RemoveInterceptRequest2) GetSession() *SessionInfo {
@@ -2252,7 +2453,7 @@ type GetInterceptRequest struct {
 
 func (x *GetInterceptRequest) Reset() {
 	*x = GetInterceptRequest{}
-	mi := &file_manager_manager_proto_msgTypes[21]
+	mi := &file_manager_manager_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2465,7 @@ func (x *GetInterceptRequest) String() string {
 func (*GetInterceptRequest) ProtoMessage() {}
 
 func (x *GetInterceptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[21]
+	mi := &file_manager_manager_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2478,7 @@ func (x *GetInterceptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInterceptRequest.ProtoReflect.Descriptor instead.
 func (*GetInterceptRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{21}
+	return file_manager_manager_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetInterceptRequest) GetSession() *SessionInfo {
@@ -2319,7 +2520,7 @@ type ReviewInterceptRequest struct {
 
 func (x *ReviewInterceptRequest) Reset() {
 	*x = ReviewInterceptRequest{}
-	mi := &file_manager_manager_proto_msgTypes[22]
+	mi := &file_manager_manager_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2331,7 +2532,7 @@ func (x *ReviewInterceptRequest) String() string {
 func (*ReviewInterceptRequest) ProtoMessage() {}
 
 func (x *ReviewInterceptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[22]
+	mi := &file_manager_manager_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2344,7 +2545,7 @@ func (x *ReviewInterceptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewInterceptRequest.ProtoReflect.Descriptor instead.
 func (*ReviewInterceptRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{22}
+	return file_manager_manager_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ReviewInterceptRequest) GetSession() *SessionInfo {
@@ -2434,7 +2635,7 @@ type RemainRequest struct {
 
 func (x *RemainRequest) Reset() {
 	*x = RemainRequest{}
-	mi := &file_manager_manager_proto_msgTypes[23]
+	mi := &file_manager_manager_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2446,7 +2647,7 @@ func (x *RemainRequest) String() string {
 func (*RemainRequest) ProtoMessage() {}
 
 func (x *RemainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[23]
+	mi := &file_manager_manager_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2459,7 +2660,7 @@ func (x *RemainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemainRequest.ProtoReflect.Descriptor instead.
 func (*RemainRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{23}
+	return file_manager_manager_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RemainRequest) GetSession() *SessionInfo {
@@ -2491,7 +2692,7 @@ type LogLevelRequest struct {
 
 func (x *LogLevelRequest) Reset() {
 	*x = LogLevelRequest{}
-	mi := &file_manager_manager_proto_msgTypes[24]
+	mi := &file_manager_manager_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2503,7 +2704,7 @@ func (x *LogLevelRequest) String() string {
 func (*LogLevelRequest) ProtoMessage() {}
 
 func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[24]
+	mi := &file_manager_manager_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2516,7 +2717,7 @@ func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLevelRequest.ProtoReflect.Descriptor instead.
 func (*LogLevelRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{24}
+	return file_manager_manager_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *LogLevelRequest) GetLogLevel() string {
@@ -2559,7 +2760,7 @@ type StreamLogsRequest struct {
 
 func (x *StreamLogsRequest) Reset() {
 	*x = StreamLogsRequest{}
-	mi := &file_manager_manager_proto_msgTypes[25]
+	mi := &file_manager_manager_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2571,7 +2772,7 @@ func (x *StreamLogsRequest) String() string {
 func (*StreamLogsRequest) ProtoMessage() {}
 
 func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[25]
+	mi := &file_manager_manager_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2584,7 +2785,7 @@ func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamLogsRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{25}
+	return file_manager_manager_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StreamLogsRequest) GetSession() *SessionInfo {
@@ -2638,7 +2839,7 @@ type LogChunk struct {
 
 func (x *LogChunk) Reset() {
 	*x = LogChunk{}
-	mi := &file_manager_manager_proto_msgTypes[26]
+	mi := &file_manager_manager_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2650,7 +2851,7 @@ func (x *LogChunk) String() string {
 func (*LogChunk) ProtoMessage() {}
 
 func (x *LogChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[26]
+	mi := &file_manager_manager_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2663,7 +2864,7 @@ func (x *LogChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogChunk.ProtoReflect.Descriptor instead.
 func (*LogChunk) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{26}
+	return file_manager_manager_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *LogChunk) GetPodName() string {
@@ -2760,7 +2961,7 @@ type TelepresenceAPIInfo struct {
 
 func (x *TelepresenceAPIInfo) Reset() {
 	*x = TelepresenceAPIInfo{}
-	mi := &file_manager_manager_proto_msgTypes[27]
+	mi := &file_manager_manager_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2772,7 +2973,7 @@ func (x *TelepresenceAPIInfo) String() string {
 func (*TelepresenceAPIInfo) ProtoMessage() {}
 
 func (x *TelepresenceAPIInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[27]
+	mi := &file_manager_manager_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2785,7 +2986,7 @@ func (x *TelepresenceAPIInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelepresenceAPIInfo.ProtoReflect.Descriptor instead.
 func (*TelepresenceAPIInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{27}
+	return file_manager_manager_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *TelepresenceAPIInfo) GetPort() int32 {
@@ -2815,14 +3016,16 @@ type VersionInfo2 struct {
 	// that certificate, and receives a short-lived manager-issued bearer token
 	// to use as per-RPC authorization metadata. Only the traffic-manager
 	// populates this.
-	AuthX509Port  uint32 `protobuf:"varint,5,opt,name=auth_x509_port,json=authX509Port,proto3" json:"auth_x509_port,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AuthX509Port uint32 `protobuf:"varint,5,opt,name=auth_x509_port,json=authX509Port,proto3" json:"auth_x509_port,omitempty"`
+	// Whether this manager can attach Kafka routes to ordinary intercepts.
+	KafkaIntercepts bool `protobuf:"varint,6,opt,name=kafka_intercepts,json=kafkaIntercepts,proto3" json:"kafka_intercepts,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *VersionInfo2) Reset() {
 	*x = VersionInfo2{}
-	mi := &file_manager_manager_proto_msgTypes[28]
+	mi := &file_manager_manager_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2834,7 +3037,7 @@ func (x *VersionInfo2) String() string {
 func (*VersionInfo2) ProtoMessage() {}
 
 func (x *VersionInfo2) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[28]
+	mi := &file_manager_manager_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2847,7 +3050,7 @@ func (x *VersionInfo2) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionInfo2.ProtoReflect.Descriptor instead.
 func (*VersionInfo2) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{28}
+	return file_manager_manager_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *VersionInfo2) GetName() string {
@@ -2885,6 +3088,13 @@ func (x *VersionInfo2) GetAuthX509Port() uint32 {
 	return 0
 }
 
+func (x *VersionInfo2) GetKafkaIntercepts() bool {
+	if x != nil {
+		return x.KafkaIntercepts
+	}
+	return false
+}
+
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
 type TunnelMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2895,7 +3105,7 @@ type TunnelMessage struct {
 
 func (x *TunnelMessage) Reset() {
 	*x = TunnelMessage{}
-	mi := &file_manager_manager_proto_msgTypes[29]
+	mi := &file_manager_manager_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +3117,7 @@ func (x *TunnelMessage) String() string {
 func (*TunnelMessage) ProtoMessage() {}
 
 func (x *TunnelMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[29]
+	mi := &file_manager_manager_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +3130,7 @@ func (x *TunnelMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelMessage.ProtoReflect.Descriptor instead.
 func (*TunnelMessage) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{29}
+	return file_manager_manager_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TunnelMessage) GetPayload() []byte {
@@ -2965,7 +3175,7 @@ type QuicTunnelEndpoint struct {
 
 func (x *QuicTunnelEndpoint) Reset() {
 	*x = QuicTunnelEndpoint{}
-	mi := &file_manager_manager_proto_msgTypes[30]
+	mi := &file_manager_manager_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2977,7 +3187,7 @@ func (x *QuicTunnelEndpoint) String() string {
 func (*QuicTunnelEndpoint) ProtoMessage() {}
 
 func (x *QuicTunnelEndpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[30]
+	mi := &file_manager_manager_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2990,7 +3200,7 @@ func (x *QuicTunnelEndpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicTunnelEndpoint.ProtoReflect.Descriptor instead.
 func (*QuicTunnelEndpoint) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{30}
+	return file_manager_manager_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *QuicTunnelEndpoint) GetEnabled() bool {
@@ -3068,7 +3278,7 @@ type QuicEndpointCandidate struct {
 
 func (x *QuicEndpointCandidate) Reset() {
 	*x = QuicEndpointCandidate{}
-	mi := &file_manager_manager_proto_msgTypes[31]
+	mi := &file_manager_manager_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3080,7 +3290,7 @@ func (x *QuicEndpointCandidate) String() string {
 func (*QuicEndpointCandidate) ProtoMessage() {}
 
 func (x *QuicEndpointCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[31]
+	mi := &file_manager_manager_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3093,7 +3303,7 @@ func (x *QuicEndpointCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicEndpointCandidate.ProtoReflect.Descriptor instead.
 func (*QuicEndpointCandidate) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{31}
+	return file_manager_manager_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *QuicEndpointCandidate) GetHost() string {
@@ -3133,7 +3343,7 @@ type SessionCredential struct {
 
 func (x *SessionCredential) Reset() {
 	*x = SessionCredential{}
-	mi := &file_manager_manager_proto_msgTypes[32]
+	mi := &file_manager_manager_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3145,7 +3355,7 @@ func (x *SessionCredential) String() string {
 func (*SessionCredential) ProtoMessage() {}
 
 func (x *SessionCredential) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[32]
+	mi := &file_manager_manager_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3158,7 +3368,7 @@ func (x *SessionCredential) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionCredential.ProtoReflect.Descriptor instead.
 func (*SessionCredential) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{32}
+	return file_manager_manager_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SessionCredential) GetCaPem() []byte {
@@ -3217,7 +3427,7 @@ type QuicBackend struct {
 
 func (x *QuicBackend) Reset() {
 	*x = QuicBackend{}
-	mi := &file_manager_manager_proto_msgTypes[33]
+	mi := &file_manager_manager_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3229,7 +3439,7 @@ func (x *QuicBackend) String() string {
 func (*QuicBackend) ProtoMessage() {}
 
 func (x *QuicBackend) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[33]
+	mi := &file_manager_manager_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3242,7 +3452,7 @@ func (x *QuicBackend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicBackend.ProtoReflect.Descriptor instead.
 func (*QuicBackend) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{33}
+	return file_manager_manager_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *QuicBackend) GetIp() []byte {
@@ -3286,7 +3496,7 @@ type QuicBackendSnapshot struct {
 
 func (x *QuicBackendSnapshot) Reset() {
 	*x = QuicBackendSnapshot{}
-	mi := &file_manager_manager_proto_msgTypes[34]
+	mi := &file_manager_manager_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3298,7 +3508,7 @@ func (x *QuicBackendSnapshot) String() string {
 func (*QuicBackendSnapshot) ProtoMessage() {}
 
 func (x *QuicBackendSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[34]
+	mi := &file_manager_manager_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3311,7 +3521,7 @@ func (x *QuicBackendSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicBackendSnapshot.ProtoReflect.Descriptor instead.
 func (*QuicBackendSnapshot) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{34}
+	return file_manager_manager_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *QuicBackendSnapshot) GetBackends() []*QuicBackend {
@@ -3332,7 +3542,7 @@ type DialRequest struct {
 
 func (x *DialRequest) Reset() {
 	*x = DialRequest{}
-	mi := &file_manager_manager_proto_msgTypes[35]
+	mi := &file_manager_manager_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3344,7 +3554,7 @@ func (x *DialRequest) String() string {
 func (*DialRequest) ProtoMessage() {}
 
 func (x *DialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[35]
+	mi := &file_manager_manager_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3357,7 +3567,7 @@ func (x *DialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DialRequest.ProtoReflect.Descriptor instead.
 func (*DialRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{35}
+	return file_manager_manager_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *DialRequest) GetConnId() []byte {
@@ -3410,7 +3620,7 @@ type QuicAgentCert struct {
 
 func (x *QuicAgentCert) Reset() {
 	*x = QuicAgentCert{}
-	mi := &file_manager_manager_proto_msgTypes[36]
+	mi := &file_manager_manager_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3422,7 +3632,7 @@ func (x *QuicAgentCert) String() string {
 func (*QuicAgentCert) ProtoMessage() {}
 
 func (x *QuicAgentCert) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[36]
+	mi := &file_manager_manager_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3435,7 +3645,7 @@ func (x *QuicAgentCert) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicAgentCert.ProtoReflect.Descriptor instead.
 func (*QuicAgentCert) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{36}
+	return file_manager_manager_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *QuicAgentCert) GetEnabled() bool {
@@ -3492,7 +3702,7 @@ type LookupRequest struct {
 
 func (x *LookupRequest) Reset() {
 	*x = LookupRequest{}
-	mi := &file_manager_manager_proto_msgTypes[37]
+	mi := &file_manager_manager_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3504,7 +3714,7 @@ func (x *LookupRequest) String() string {
 func (*LookupRequest) ProtoMessage() {}
 
 func (x *LookupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[37]
+	mi := &file_manager_manager_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3517,7 +3727,7 @@ func (x *LookupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupRequest.ProtoReflect.Descriptor instead.
 func (*LookupRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{37}
+	return file_manager_manager_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *LookupRequest) GetSession() *SessionInfo {
@@ -3544,7 +3754,7 @@ type LookupResponse struct {
 
 func (x *LookupResponse) Reset() {
 	*x = LookupResponse{}
-	mi := &file_manager_manager_proto_msgTypes[38]
+	mi := &file_manager_manager_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3556,7 +3766,7 @@ func (x *LookupResponse) String() string {
 func (*LookupResponse) ProtoMessage() {}
 
 func (x *LookupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[38]
+	mi := &file_manager_manager_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3569,7 +3779,7 @@ func (x *LookupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LookupResponse.ProtoReflect.Descriptor instead.
 func (*LookupResponse) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{38}
+	return file_manager_manager_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *LookupResponse) GetIps() [][]byte {
@@ -3592,7 +3802,7 @@ type DNSRequest struct {
 
 func (x *DNSRequest) Reset() {
 	*x = DNSRequest{}
-	mi := &file_manager_manager_proto_msgTypes[39]
+	mi := &file_manager_manager_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3604,7 +3814,7 @@ func (x *DNSRequest) String() string {
 func (*DNSRequest) ProtoMessage() {}
 
 func (x *DNSRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[39]
+	mi := &file_manager_manager_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3617,7 +3827,7 @@ func (x *DNSRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSRequest.ProtoReflect.Descriptor instead.
 func (*DNSRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{39}
+	return file_manager_manager_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DNSRequest) GetSession() *SessionInfo {
@@ -3653,7 +3863,7 @@ type DNSResponse struct {
 
 func (x *DNSResponse) Reset() {
 	*x = DNSResponse{}
-	mi := &file_manager_manager_proto_msgTypes[40]
+	mi := &file_manager_manager_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3665,7 +3875,7 @@ func (x *DNSResponse) String() string {
 func (*DNSResponse) ProtoMessage() {}
 
 func (x *DNSResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[40]
+	mi := &file_manager_manager_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3678,7 +3888,7 @@ func (x *DNSResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSResponse.ProtoReflect.Descriptor instead.
 func (*DNSResponse) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{40}
+	return file_manager_manager_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *DNSResponse) GetRCode() int32 {
@@ -3714,7 +3924,7 @@ type ResolveServicePortRequest struct {
 
 func (x *ResolveServicePortRequest) Reset() {
 	*x = ResolveServicePortRequest{}
-	mi := &file_manager_manager_proto_msgTypes[41]
+	mi := &file_manager_manager_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3726,7 +3936,7 @@ func (x *ResolveServicePortRequest) String() string {
 func (*ResolveServicePortRequest) ProtoMessage() {}
 
 func (x *ResolveServicePortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[41]
+	mi := &file_manager_manager_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3739,7 +3949,7 @@ func (x *ResolveServicePortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveServicePortRequest.ProtoReflect.Descriptor instead.
 func (*ResolveServicePortRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{41}
+	return file_manager_manager_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ResolveServicePortRequest) GetSession() *SessionInfo {
@@ -3789,7 +3999,7 @@ type ResolveServicePortResponse struct {
 
 func (x *ResolveServicePortResponse) Reset() {
 	*x = ResolveServicePortResponse{}
-	mi := &file_manager_manager_proto_msgTypes[42]
+	mi := &file_manager_manager_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3801,7 +4011,7 @@ func (x *ResolveServicePortResponse) String() string {
 func (*ResolveServicePortResponse) ProtoMessage() {}
 
 func (x *ResolveServicePortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[42]
+	mi := &file_manager_manager_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3814,7 +4024,7 @@ func (x *ResolveServicePortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveServicePortResponse.ProtoReflect.Descriptor instead.
 func (*ResolveServicePortResponse) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{42}
+	return file_manager_manager_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ResolveServicePortResponse) GetClusterIp() []byte {
@@ -3845,7 +4055,7 @@ type DNSAgentResponse struct {
 
 func (x *DNSAgentResponse) Reset() {
 	*x = DNSAgentResponse{}
-	mi := &file_manager_manager_proto_msgTypes[43]
+	mi := &file_manager_manager_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3857,7 +4067,7 @@ func (x *DNSAgentResponse) String() string {
 func (*DNSAgentResponse) ProtoMessage() {}
 
 func (x *DNSAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[43]
+	mi := &file_manager_manager_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3870,7 +4080,7 @@ func (x *DNSAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNSAgentResponse.ProtoReflect.Descriptor instead.
 func (*DNSAgentResponse) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{43}
+	return file_manager_manager_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DNSAgentResponse) GetSession() *SessionInfo {
@@ -3905,7 +4115,7 @@ type IPNet struct {
 
 func (x *IPNet) Reset() {
 	*x = IPNet{}
-	mi := &file_manager_manager_proto_msgTypes[44]
+	mi := &file_manager_manager_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3917,7 +4127,7 @@ func (x *IPNet) String() string {
 func (*IPNet) ProtoMessage() {}
 
 func (x *IPNet) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[44]
+	mi := &file_manager_manager_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3930,7 +4140,7 @@ func (x *IPNet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IPNet.ProtoReflect.Descriptor instead.
 func (*IPNet) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{44}
+	return file_manager_manager_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *IPNet) GetIp() []byte {
@@ -3978,7 +4188,7 @@ type ClusterInfo struct {
 
 func (x *ClusterInfo) Reset() {
 	*x = ClusterInfo{}
-	mi := &file_manager_manager_proto_msgTypes[45]
+	mi := &file_manager_manager_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3990,7 +4200,7 @@ func (x *ClusterInfo) String() string {
 func (*ClusterInfo) ProtoMessage() {}
 
 func (x *ClusterInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[45]
+	mi := &file_manager_manager_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4003,7 +4213,7 @@ func (x *ClusterInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClusterInfo.ProtoReflect.Descriptor instead.
 func (*ClusterInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{45}
+	return file_manager_manager_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ClusterInfo) GetServiceCidrs() [][]byte {
@@ -4087,7 +4297,7 @@ type Routing struct {
 
 func (x *Routing) Reset() {
 	*x = Routing{}
-	mi := &file_manager_manager_proto_msgTypes[46]
+	mi := &file_manager_manager_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4099,7 +4309,7 @@ func (x *Routing) String() string {
 func (*Routing) ProtoMessage() {}
 
 func (x *Routing) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[46]
+	mi := &file_manager_manager_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4112,7 +4322,7 @@ func (x *Routing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Routing.ProtoReflect.Descriptor instead.
 func (*Routing) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{46}
+	return file_manager_manager_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *Routing) GetAlsoProxySubnets() []*IPNet {
@@ -4151,7 +4361,7 @@ type DNS struct {
 
 func (x *DNS) Reset() {
 	*x = DNS{}
-	mi := &file_manager_manager_proto_msgTypes[47]
+	mi := &file_manager_manager_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4163,7 +4373,7 @@ func (x *DNS) String() string {
 func (*DNS) ProtoMessage() {}
 
 func (x *DNS) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[47]
+	mi := &file_manager_manager_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4176,7 +4386,7 @@ func (x *DNS) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DNS.ProtoReflect.Descriptor instead.
 func (*DNS) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{47}
+	return file_manager_manager_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DNS) GetIncludeSuffixes() []string {
@@ -4217,7 +4427,7 @@ type CLIConfig struct {
 
 func (x *CLIConfig) Reset() {
 	*x = CLIConfig{}
-	mi := &file_manager_manager_proto_msgTypes[48]
+	mi := &file_manager_manager_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4229,7 +4439,7 @@ func (x *CLIConfig) String() string {
 func (*CLIConfig) ProtoMessage() {}
 
 func (x *CLIConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[48]
+	mi := &file_manager_manager_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4242,7 +4452,7 @@ func (x *CLIConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CLIConfig.ProtoReflect.Descriptor instead.
 func (*CLIConfig) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{48}
+	return file_manager_manager_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CLIConfig) GetConfigYaml() []byte {
@@ -4261,7 +4471,7 @@ type AgentImageFQN struct {
 
 func (x *AgentImageFQN) Reset() {
 	*x = AgentImageFQN{}
-	mi := &file_manager_manager_proto_msgTypes[49]
+	mi := &file_manager_manager_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4273,7 +4483,7 @@ func (x *AgentImageFQN) String() string {
 func (*AgentImageFQN) ProtoMessage() {}
 
 func (x *AgentImageFQN) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[49]
+	mi := &file_manager_manager_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4286,7 +4496,7 @@ func (x *AgentImageFQN) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentImageFQN.ProtoReflect.Descriptor instead.
 func (*AgentImageFQN) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{49}
+	return file_manager_manager_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *AgentImageFQN) GetFQN() string {
@@ -4321,7 +4531,7 @@ type AgentPodInfo struct {
 
 func (x *AgentPodInfo) Reset() {
 	*x = AgentPodInfo{}
-	mi := &file_manager_manager_proto_msgTypes[50]
+	mi := &file_manager_manager_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4333,7 +4543,7 @@ func (x *AgentPodInfo) String() string {
 func (*AgentPodInfo) ProtoMessage() {}
 
 func (x *AgentPodInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[50]
+	mi := &file_manager_manager_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4346,7 +4556,7 @@ func (x *AgentPodInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentPodInfo.ProtoReflect.Descriptor instead.
 func (*AgentPodInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{50}
+	return file_manager_manager_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *AgentPodInfo) GetPodId() string {
@@ -4428,7 +4638,7 @@ type AgentPodInfoSnapshot struct {
 
 func (x *AgentPodInfoSnapshot) Reset() {
 	*x = AgentPodInfoSnapshot{}
-	mi := &file_manager_manager_proto_msgTypes[51]
+	mi := &file_manager_manager_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4440,7 +4650,7 @@ func (x *AgentPodInfoSnapshot) String() string {
 func (*AgentPodInfoSnapshot) ProtoMessage() {}
 
 func (x *AgentPodInfoSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[51]
+	mi := &file_manager_manager_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4453,7 +4663,7 @@ func (x *AgentPodInfoSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentPodInfoSnapshot.ProtoReflect.Descriptor instead.
 func (*AgentPodInfoSnapshot) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{51}
+	return file_manager_manager_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *AgentPodInfoSnapshot) GetAgents() []*AgentPodInfo {
@@ -4473,7 +4683,7 @@ type AgentPodInfoDelta struct {
 
 func (x *AgentPodInfoDelta) Reset() {
 	*x = AgentPodInfoDelta{}
-	mi := &file_manager_manager_proto_msgTypes[52]
+	mi := &file_manager_manager_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4485,7 +4695,7 @@ func (x *AgentPodInfoDelta) String() string {
 func (*AgentPodInfoDelta) ProtoMessage() {}
 
 func (x *AgentPodInfoDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[52]
+	mi := &file_manager_manager_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4498,7 +4708,7 @@ func (x *AgentPodInfoDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentPodInfoDelta.ProtoReflect.Descriptor instead.
 func (*AgentPodInfoDelta) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{52}
+	return file_manager_manager_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *AgentPodInfoDelta) GetUpserts() map[string]*AgentPodInfo {
@@ -4526,7 +4736,7 @@ type AgentConfigRequest struct {
 
 func (x *AgentConfigRequest) Reset() {
 	*x = AgentConfigRequest{}
-	mi := &file_manager_manager_proto_msgTypes[53]
+	mi := &file_manager_manager_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4538,7 +4748,7 @@ func (x *AgentConfigRequest) String() string {
 func (*AgentConfigRequest) ProtoMessage() {}
 
 func (x *AgentConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[53]
+	mi := &file_manager_manager_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4551,7 +4761,7 @@ func (x *AgentConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentConfigRequest.ProtoReflect.Descriptor instead.
 func (*AgentConfigRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{53}
+	return file_manager_manager_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *AgentConfigRequest) GetSession() *SessionInfo {
@@ -4584,7 +4794,7 @@ type AgentConfigResponse struct {
 
 func (x *AgentConfigResponse) Reset() {
 	*x = AgentConfigResponse{}
-	mi := &file_manager_manager_proto_msgTypes[54]
+	mi := &file_manager_manager_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4596,7 +4806,7 @@ func (x *AgentConfigResponse) String() string {
 func (*AgentConfigResponse) ProtoMessage() {}
 
 func (x *AgentConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[54]
+	mi := &file_manager_manager_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4609,7 +4819,7 @@ func (x *AgentConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentConfigResponse.ProtoReflect.Descriptor instead.
 func (*AgentConfigResponse) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{54}
+	return file_manager_manager_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *AgentConfigResponse) GetData() []byte {
@@ -4632,7 +4842,7 @@ type TunnelMetrics struct {
 
 func (x *TunnelMetrics) Reset() {
 	*x = TunnelMetrics{}
-	mi := &file_manager_manager_proto_msgTypes[55]
+	mi := &file_manager_manager_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4644,7 +4854,7 @@ func (x *TunnelMetrics) String() string {
 func (*TunnelMetrics) ProtoMessage() {}
 
 func (x *TunnelMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[55]
+	mi := &file_manager_manager_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4657,7 +4867,7 @@ func (x *TunnelMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TunnelMetrics.ProtoReflect.Descriptor instead.
 func (*TunnelMetrics) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{55}
+	return file_manager_manager_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *TunnelMetrics) GetClientSessionId() string {
@@ -4690,7 +4900,7 @@ type KnownWorkloadKinds struct {
 
 func (x *KnownWorkloadKinds) Reset() {
 	*x = KnownWorkloadKinds{}
-	mi := &file_manager_manager_proto_msgTypes[56]
+	mi := &file_manager_manager_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4702,7 +4912,7 @@ func (x *KnownWorkloadKinds) String() string {
 func (*KnownWorkloadKinds) ProtoMessage() {}
 
 func (x *KnownWorkloadKinds) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[56]
+	mi := &file_manager_manager_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4715,7 +4925,7 @@ func (x *KnownWorkloadKinds) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KnownWorkloadKinds.ProtoReflect.Descriptor instead.
 func (*KnownWorkloadKinds) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{56}
+	return file_manager_manager_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *KnownWorkloadKinds) GetKinds() []WorkloadInfo_Kind {
@@ -4736,7 +4946,7 @@ type ServicePort struct {
 
 func (x *ServicePort) Reset() {
 	*x = ServicePort{}
-	mi := &file_manager_manager_proto_msgTypes[57]
+	mi := &file_manager_manager_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4748,7 +4958,7 @@ func (x *ServicePort) String() string {
 func (*ServicePort) ProtoMessage() {}
 
 func (x *ServicePort) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[57]
+	mi := &file_manager_manager_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4761,7 +4971,7 @@ func (x *ServicePort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServicePort.ProtoReflect.Descriptor instead.
 func (*ServicePort) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{57}
+	return file_manager_manager_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ServicePort) GetName() string {
@@ -4807,7 +5017,7 @@ type RouteAssociation struct {
 
 func (x *RouteAssociation) Reset() {
 	*x = RouteAssociation{}
-	mi := &file_manager_manager_proto_msgTypes[58]
+	mi := &file_manager_manager_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4819,7 +5029,7 @@ func (x *RouteAssociation) String() string {
 func (*RouteAssociation) ProtoMessage() {}
 
 func (x *RouteAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[58]
+	mi := &file_manager_manager_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4832,7 +5042,7 @@ func (x *RouteAssociation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteAssociation.ProtoReflect.Descriptor instead.
 func (*RouteAssociation) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{58}
+	return file_manager_manager_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *RouteAssociation) GetType() string {
@@ -4905,7 +5115,7 @@ type ServiceAssociation struct {
 
 func (x *ServiceAssociation) Reset() {
 	*x = ServiceAssociation{}
-	mi := &file_manager_manager_proto_msgTypes[59]
+	mi := &file_manager_manager_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4917,7 +5127,7 @@ func (x *ServiceAssociation) String() string {
 func (*ServiceAssociation) ProtoMessage() {}
 
 func (x *ServiceAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[59]
+	mi := &file_manager_manager_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4930,7 +5140,7 @@ func (x *ServiceAssociation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceAssociation.ProtoReflect.Descriptor instead.
 func (*ServiceAssociation) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{59}
+	return file_manager_manager_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ServiceAssociation) GetName() string {
@@ -4974,7 +5184,7 @@ type WorkloadInfo struct {
 
 func (x *WorkloadInfo) Reset() {
 	*x = WorkloadInfo{}
-	mi := &file_manager_manager_proto_msgTypes[60]
+	mi := &file_manager_manager_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4986,7 +5196,7 @@ func (x *WorkloadInfo) String() string {
 func (*WorkloadInfo) ProtoMessage() {}
 
 func (x *WorkloadInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[60]
+	mi := &file_manager_manager_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4999,7 +5209,7 @@ func (x *WorkloadInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadInfo.ProtoReflect.Descriptor instead.
 func (*WorkloadInfo) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{60}
+	return file_manager_manager_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *WorkloadInfo) GetKind() WorkloadInfo_Kind {
@@ -5082,7 +5292,7 @@ type WorkloadEvent struct {
 
 func (x *WorkloadEvent) Reset() {
 	*x = WorkloadEvent{}
-	mi := &file_manager_manager_proto_msgTypes[61]
+	mi := &file_manager_manager_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5094,7 +5304,7 @@ func (x *WorkloadEvent) String() string {
 func (*WorkloadEvent) ProtoMessage() {}
 
 func (x *WorkloadEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[61]
+	mi := &file_manager_manager_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5107,7 +5317,7 @@ func (x *WorkloadEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadEvent.ProtoReflect.Descriptor instead.
 func (*WorkloadEvent) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{61}
+	return file_manager_manager_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *WorkloadEvent) GetType() WorkloadEvent_Type {
@@ -5139,7 +5349,7 @@ type WorkloadEventsDelta struct {
 
 func (x *WorkloadEventsDelta) Reset() {
 	*x = WorkloadEventsDelta{}
-	mi := &file_manager_manager_proto_msgTypes[62]
+	mi := &file_manager_manager_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5151,7 +5361,7 @@ func (x *WorkloadEventsDelta) String() string {
 func (*WorkloadEventsDelta) ProtoMessage() {}
 
 func (x *WorkloadEventsDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[62]
+	mi := &file_manager_manager_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5164,7 +5374,7 @@ func (x *WorkloadEventsDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadEventsDelta.ProtoReflect.Descriptor instead.
 func (*WorkloadEventsDelta) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{62}
+	return file_manager_manager_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *WorkloadEventsDelta) GetSince() *timestamppb.Timestamp {
@@ -5198,7 +5408,7 @@ type WorkloadEventsRequest struct {
 
 func (x *WorkloadEventsRequest) Reset() {
 	*x = WorkloadEventsRequest{}
-	mi := &file_manager_manager_proto_msgTypes[63]
+	mi := &file_manager_manager_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5210,7 +5420,7 @@ func (x *WorkloadEventsRequest) String() string {
 func (*WorkloadEventsRequest) ProtoMessage() {}
 
 func (x *WorkloadEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[63]
+	mi := &file_manager_manager_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5223,7 +5433,7 @@ func (x *WorkloadEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadEventsRequest.ProtoReflect.Descriptor instead.
 func (*WorkloadEventsRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{63}
+	return file_manager_manager_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *WorkloadEventsRequest) GetSessionInfo() *SessionInfo {
@@ -5260,7 +5470,7 @@ type UninstallAgentsRequest struct {
 
 func (x *UninstallAgentsRequest) Reset() {
 	*x = UninstallAgentsRequest{}
-	mi := &file_manager_manager_proto_msgTypes[64]
+	mi := &file_manager_manager_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5272,7 +5482,7 @@ func (x *UninstallAgentsRequest) String() string {
 func (*UninstallAgentsRequest) ProtoMessage() {}
 
 func (x *UninstallAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[64]
+	mi := &file_manager_manager_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5285,7 +5495,7 @@ func (x *UninstallAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UninstallAgentsRequest.ProtoReflect.Descriptor instead.
 func (*UninstallAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{64}
+	return file_manager_manager_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *UninstallAgentsRequest) GetSessionInfo() *SessionInfo {
@@ -5314,7 +5524,7 @@ type NamespaceList struct {
 
 func (x *NamespaceList) Reset() {
 	*x = NamespaceList{}
-	mi := &file_manager_manager_proto_msgTypes[65]
+	mi := &file_manager_manager_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5326,7 +5536,7 @@ func (x *NamespaceList) String() string {
 func (*NamespaceList) ProtoMessage() {}
 
 func (x *NamespaceList) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[65]
+	mi := &file_manager_manager_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5339,7 +5549,7 @@ func (x *NamespaceList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NamespaceList.ProtoReflect.Descriptor instead.
 func (*NamespaceList) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{65}
+	return file_manager_manager_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *NamespaceList) GetNamespaces() []string {
@@ -5371,7 +5581,7 @@ type AgentInfo_Mechanism struct {
 
 func (x *AgentInfo_Mechanism) Reset() {
 	*x = AgentInfo_Mechanism{}
-	mi := &file_manager_manager_proto_msgTypes[66]
+	mi := &file_manager_manager_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5383,7 +5593,7 @@ func (x *AgentInfo_Mechanism) String() string {
 func (*AgentInfo_Mechanism) ProtoMessage() {}
 
 func (x *AgentInfo_Mechanism) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[66]
+	mi := &file_manager_manager_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5434,7 +5644,7 @@ type AgentInfo_ContainerInfo struct {
 
 func (x *AgentInfo_ContainerInfo) Reset() {
 	*x = AgentInfo_ContainerInfo{}
-	mi := &file_manager_manager_proto_msgTypes[67]
+	mi := &file_manager_manager_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5446,7 +5656,7 @@ func (x *AgentInfo_ContainerInfo) String() string {
 func (*AgentInfo_ContainerInfo) ProtoMessage() {}
 
 func (x *AgentInfo_ContainerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[67]
+	mi := &file_manager_manager_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5505,7 +5715,7 @@ type AgentInfo_InterceptTarget struct {
 
 func (x *AgentInfo_InterceptTarget) Reset() {
 	*x = AgentInfo_InterceptTarget{}
-	mi := &file_manager_manager_proto_msgTypes[69]
+	mi := &file_manager_manager_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5517,7 +5727,7 @@ func (x *AgentInfo_InterceptTarget) String() string {
 func (*AgentInfo_InterceptTarget) ProtoMessage() {}
 
 func (x *AgentInfo_InterceptTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[69]
+	mi := &file_manager_manager_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5592,7 +5802,7 @@ type WorkloadInfo_Intercept struct {
 
 func (x *WorkloadInfo_Intercept) Reset() {
 	*x = WorkloadInfo_Intercept{}
-	mi := &file_manager_manager_proto_msgTypes[81]
+	mi := &file_manager_manager_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5604,7 +5814,7 @@ func (x *WorkloadInfo_Intercept) String() string {
 func (*WorkloadInfo_Intercept) ProtoMessage() {}
 
 func (x *WorkloadInfo_Intercept) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[81]
+	mi := &file_manager_manager_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5617,7 +5827,7 @@ func (x *WorkloadInfo_Intercept) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadInfo_Intercept.ProtoReflect.Descriptor instead.
 func (*WorkloadInfo_Intercept) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{60, 0}
+	return file_manager_manager_proto_rawDescGZIP(), []int{63, 0}
 }
 
 func (x *WorkloadInfo_Intercept) GetClient() string {
@@ -5694,7 +5904,24 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x0econtainer_port\x18\a \x01(\x05R\rcontainerPortJ\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\x86\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"7\n" +
+	"\vKafkaHeader\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"\x92\x01\n" +
+	"\x0eKafkaIntercept\x12\x12\n" +
+	"\x04only\x18\x01 \x01(\bR\x04only\x12;\n" +
+	"\aheaders\x18\x02 \x03(\v2!.telepresence.manager.KafkaHeaderR\aheaders\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\fR\x03key\x12\x1d\n" +
+	"\n" +
+	"key_prefix\x18\x04 \x01(\fR\tkeyPrefix\"\xcb\x01\n" +
+	"\n" +
+	"KafkaRoute\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05split\x18\x02 \x01(\tR\x05split\x12S\n" +
+	"\venvironment\x18\x03 \x03(\v21.telepresence.manager.KafkaRoute.EnvironmentEntryR\venvironment\x1a>\n" +
+	"\x10EnvironmentEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc2\n" +
 	"\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
@@ -5735,7 +5962,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"serviceIps\x12\x1d\n" +
 	"\n" +
 	"node_agent\x18  \x01(\bR\tnodeAgent\x12%\n" +
-	"\x0eshared_service\x18! \x01(\bR\rsharedService\x1a@\n" +
+	"\x0eshared_service\x18! \x01(\bR\rsharedService\x12:\n" +
+	"\x05kafka\x18\" \x01(\v2$.telepresence.manager.KafkaInterceptR\x05kafka\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +
@@ -5746,7 +5974,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x11InterceptWorkload\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12#\n" +
 	"\rworkload_kind\x18\x02 \x01(\tR\fworkloadKind\x12#\n" +
-	"\rworkload_name\x18\x03 \x01(\tR\fworkloadName\"\xdf\a\n" +
+	"\rworkload_name\x18\x03 \x01(\tR\fworkloadName\"\xa4\b\n" +
 	"\rInterceptInfo\x127\n" +
 	"\x04spec\x18\x01 \x01(\v2#.telepresence.manager.InterceptSpecR\x04spec\x12\x0e\n" +
 	"\x02id\x18\x05 \x01(\tR\x02id\x12H\n" +
@@ -5764,7 +5992,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"mountPoint\x12.\n" +
 	"\x13mechanism_args_desc\x18\f \x01(\tR\x11mechanismArgsDesc\x12V\n" +
 	"\venvironment\x18\x11 \x03(\v24.telepresence.manager.InterceptInfo.EnvironmentEntryR\venvironment\x12G\n" +
-	"\x06mounts\x18\x16 \x03(\v2/.telepresence.manager.InterceptInfo.MountsEntryR\x06mounts\x12;\n" +
+	"\x06mounts\x18\x16 \x03(\v2/.telepresence.manager.InterceptInfo.MountsEntryR\x06mounts\x12C\n" +
+	"\fkafka_routes\x18\x18 \x03(\v2 .telepresence.manager.KafkaRouteR\vkafkaRoutes\x12;\n" +
 	"\vmodified_at\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"modifiedAt\x12T\n" +
 	"\x11service_workloads\x18\x17 \x03(\v2'.telepresence.manager.InterceptWorkloadR\x10serviceWorkloads\x1a>\n" +
@@ -5911,13 +6140,14 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x03END\x10\x02B\t\n" +
 	"\apayload\")\n" +
 	"\x13TelepresenceAPIInfo\x12\x12\n" +
-	"\x04port\x18\x01 \x01(\x05R\x04port\"\xae\x01\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\"\xd9\x01\n" +
 	"\fVersionInfo2\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
 	"\x0eauth_supported\x18\x03 \x01(\bR\rauthSupported\x12#\n" +
 	"\rauth_required\x18\x04 \x01(\bR\fauthRequired\x12$\n" +
-	"\x0eauth_x509_port\x18\x05 \x01(\rR\fauthX509Port\")\n" +
+	"\x0eauth_x509_port\x18\x05 \x01(\rR\fauthX509Port\x12)\n" +
+	"\x10kafka_intercepts\x18\x06 \x01(\bR\x0fkafkaIntercepts\")\n" +
 	"\rTunnelMessage\x12\x18\n" +
 	"\apayload\x18\x01 \x01(\fR\apayload\"\xbd\x02\n" +
 	"\x12QuicTunnelEndpoint\x12\x18\n" +
@@ -6193,7 +6423,7 @@ func file_manager_manager_proto_rawDescGZIP() []byte {
 }
 
 var file_manager_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_manager_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
+var file_manager_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 86)
 var file_manager_manager_proto_goTypes = []any{
 	(InterceptDispositionType)(0),      // 0: telepresence.manager.InterceptDispositionType
 	(LogChunk_Frame)(0),                // 1: telepresence.manager.LogChunk.Frame
@@ -6204,263 +6434,271 @@ var file_manager_manager_proto_goTypes = []any{
 	(*ClientInfo)(nil),                 // 6: telepresence.manager.ClientInfo
 	(*AgentInfo)(nil),                  // 7: telepresence.manager.AgentInfo
 	(*PortMapping)(nil),                // 8: telepresence.manager.PortMapping
-	(*InterceptSpec)(nil),              // 9: telepresence.manager.InterceptSpec
-	(*InterceptWorkload)(nil),          // 10: telepresence.manager.InterceptWorkload
-	(*InterceptInfo)(nil),              // 11: telepresence.manager.InterceptInfo
-	(*ReconnectAgentRequest)(nil),      // 12: telepresence.manager.ReconnectAgentRequest
-	(*ReconnectClientRequest)(nil),     // 13: telepresence.manager.ReconnectClientRequest
-	(*SessionInfo)(nil),                // 14: telepresence.manager.SessionInfo
-	(*AgentsRequest)(nil),              // 15: telepresence.manager.AgentsRequest
-	(*AgentInfoSnapshot)(nil),          // 16: telepresence.manager.AgentInfoSnapshot
-	(*AgentInfoDelta)(nil),             // 17: telepresence.manager.AgentInfoDelta
-	(*InterceptInfoSnapshot)(nil),      // 18: telepresence.manager.InterceptInfoSnapshot
-	(*InterceptInfoDelta)(nil),         // 19: telepresence.manager.InterceptInfoDelta
-	(*SessionEventsRequest)(nil),       // 20: telepresence.manager.SessionEventsRequest
-	(*SessionEventsDelta)(nil),         // 21: telepresence.manager.SessionEventsDelta
-	(*CreateInterceptRequest)(nil),     // 22: telepresence.manager.CreateInterceptRequest
-	(*EnsureAgentRequest)(nil),         // 23: telepresence.manager.EnsureAgentRequest
-	(*ReleaseAgentRequest)(nil),        // 24: telepresence.manager.ReleaseAgentRequest
-	(*PreparedIntercept)(nil),          // 25: telepresence.manager.PreparedIntercept
-	(*RemoveInterceptRequest2)(nil),    // 26: telepresence.manager.RemoveInterceptRequest2
-	(*GetInterceptRequest)(nil),        // 27: telepresence.manager.GetInterceptRequest
-	(*ReviewInterceptRequest)(nil),     // 28: telepresence.manager.ReviewInterceptRequest
-	(*RemainRequest)(nil),              // 29: telepresence.manager.RemainRequest
-	(*LogLevelRequest)(nil),            // 30: telepresence.manager.LogLevelRequest
-	(*StreamLogsRequest)(nil),          // 31: telepresence.manager.StreamLogsRequest
-	(*LogChunk)(nil),                   // 32: telepresence.manager.LogChunk
-	(*TelepresenceAPIInfo)(nil),        // 33: telepresence.manager.TelepresenceAPIInfo
-	(*VersionInfo2)(nil),               // 34: telepresence.manager.VersionInfo2
-	(*TunnelMessage)(nil),              // 35: telepresence.manager.TunnelMessage
-	(*QuicTunnelEndpoint)(nil),         // 36: telepresence.manager.QuicTunnelEndpoint
-	(*QuicEndpointCandidate)(nil),      // 37: telepresence.manager.QuicEndpointCandidate
-	(*SessionCredential)(nil),          // 38: telepresence.manager.SessionCredential
-	(*QuicBackend)(nil),                // 39: telepresence.manager.QuicBackend
-	(*QuicBackendSnapshot)(nil),        // 40: telepresence.manager.QuicBackendSnapshot
-	(*DialRequest)(nil),                // 41: telepresence.manager.DialRequest
-	(*QuicAgentCert)(nil),              // 42: telepresence.manager.QuicAgentCert
-	(*LookupRequest)(nil),              // 43: telepresence.manager.LookupRequest
-	(*LookupResponse)(nil),             // 44: telepresence.manager.LookupResponse
-	(*DNSRequest)(nil),                 // 45: telepresence.manager.DNSRequest
-	(*DNSResponse)(nil),                // 46: telepresence.manager.DNSResponse
-	(*ResolveServicePortRequest)(nil),  // 47: telepresence.manager.ResolveServicePortRequest
-	(*ResolveServicePortResponse)(nil), // 48: telepresence.manager.ResolveServicePortResponse
-	(*DNSAgentResponse)(nil),           // 49: telepresence.manager.DNSAgentResponse
-	(*IPNet)(nil),                      // 50: telepresence.manager.IPNet
-	(*ClusterInfo)(nil),                // 51: telepresence.manager.ClusterInfo
-	(*Routing)(nil),                    // 52: telepresence.manager.Routing
-	(*DNS)(nil),                        // 53: telepresence.manager.DNS
-	(*CLIConfig)(nil),                  // 54: telepresence.manager.CLIConfig
-	(*AgentImageFQN)(nil),              // 55: telepresence.manager.AgentImageFQN
-	(*AgentPodInfo)(nil),               // 56: telepresence.manager.AgentPodInfo
-	(*AgentPodInfoSnapshot)(nil),       // 57: telepresence.manager.AgentPodInfoSnapshot
-	(*AgentPodInfoDelta)(nil),          // 58: telepresence.manager.AgentPodInfoDelta
-	(*AgentConfigRequest)(nil),         // 59: telepresence.manager.AgentConfigRequest
-	(*AgentConfigResponse)(nil),        // 60: telepresence.manager.AgentConfigResponse
-	(*TunnelMetrics)(nil),              // 61: telepresence.manager.TunnelMetrics
-	(*KnownWorkloadKinds)(nil),         // 62: telepresence.manager.KnownWorkloadKinds
-	(*ServicePort)(nil),                // 63: telepresence.manager.ServicePort
-	(*RouteAssociation)(nil),           // 64: telepresence.manager.RouteAssociation
-	(*ServiceAssociation)(nil),         // 65: telepresence.manager.ServiceAssociation
-	(*WorkloadInfo)(nil),               // 66: telepresence.manager.WorkloadInfo
-	(*WorkloadEvent)(nil),              // 67: telepresence.manager.WorkloadEvent
-	(*WorkloadEventsDelta)(nil),        // 68: telepresence.manager.WorkloadEventsDelta
-	(*WorkloadEventsRequest)(nil),      // 69: telepresence.manager.WorkloadEventsRequest
-	(*UninstallAgentsRequest)(nil),     // 70: telepresence.manager.UninstallAgentsRequest
-	(*NamespaceList)(nil),              // 71: telepresence.manager.NamespaceList
-	(*AgentInfo_Mechanism)(nil),        // 72: telepresence.manager.AgentInfo.Mechanism
-	(*AgentInfo_ContainerInfo)(nil),    // 73: telepresence.manager.AgentInfo.ContainerInfo
-	nil,                                // 74: telepresence.manager.AgentInfo.ContainersEntry
-	(*AgentInfo_InterceptTarget)(nil),  // 75: telepresence.manager.AgentInfo.InterceptTarget
-	nil,                                // 76: telepresence.manager.AgentInfo.ContainerInfo.EnvironmentEntry
-	nil,                                // 77: telepresence.manager.AgentInfo.ContainerInfo.MountsEntry
-	nil,                                // 78: telepresence.manager.InterceptSpec.HeaderFiltersEntry
-	nil,                                // 79: telepresence.manager.InterceptSpec.MetadataEntry
-	nil,                                // 80: telepresence.manager.InterceptInfo.EnvironmentEntry
-	nil,                                // 81: telepresence.manager.InterceptInfo.MountsEntry
-	nil,                                // 82: telepresence.manager.AgentInfoDelta.UpsertsEntry
-	nil,                                // 83: telepresence.manager.InterceptInfoDelta.UpsertsEntry
-	nil,                                // 84: telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
-	nil,                                // 85: telepresence.manager.ReviewInterceptRequest.MountsEntry
-	nil,                                // 86: telepresence.manager.AgentPodInfoDelta.UpsertsEntry
-	(*WorkloadInfo_Intercept)(nil),     // 87: telepresence.manager.WorkloadInfo.Intercept
-	(*timestamppb.Timestamp)(nil),      // 88: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),        // 89: google.protobuf.Duration
-	(*emptypb.Empty)(nil),              // 90: google.protobuf.Empty
+	(*KafkaHeader)(nil),                // 9: telepresence.manager.KafkaHeader
+	(*KafkaIntercept)(nil),             // 10: telepresence.manager.KafkaIntercept
+	(*KafkaRoute)(nil),                 // 11: telepresence.manager.KafkaRoute
+	(*InterceptSpec)(nil),              // 12: telepresence.manager.InterceptSpec
+	(*InterceptWorkload)(nil),          // 13: telepresence.manager.InterceptWorkload
+	(*InterceptInfo)(nil),              // 14: telepresence.manager.InterceptInfo
+	(*ReconnectAgentRequest)(nil),      // 15: telepresence.manager.ReconnectAgentRequest
+	(*ReconnectClientRequest)(nil),     // 16: telepresence.manager.ReconnectClientRequest
+	(*SessionInfo)(nil),                // 17: telepresence.manager.SessionInfo
+	(*AgentsRequest)(nil),              // 18: telepresence.manager.AgentsRequest
+	(*AgentInfoSnapshot)(nil),          // 19: telepresence.manager.AgentInfoSnapshot
+	(*AgentInfoDelta)(nil),             // 20: telepresence.manager.AgentInfoDelta
+	(*InterceptInfoSnapshot)(nil),      // 21: telepresence.manager.InterceptInfoSnapshot
+	(*InterceptInfoDelta)(nil),         // 22: telepresence.manager.InterceptInfoDelta
+	(*SessionEventsRequest)(nil),       // 23: telepresence.manager.SessionEventsRequest
+	(*SessionEventsDelta)(nil),         // 24: telepresence.manager.SessionEventsDelta
+	(*CreateInterceptRequest)(nil),     // 25: telepresence.manager.CreateInterceptRequest
+	(*EnsureAgentRequest)(nil),         // 26: telepresence.manager.EnsureAgentRequest
+	(*ReleaseAgentRequest)(nil),        // 27: telepresence.manager.ReleaseAgentRequest
+	(*PreparedIntercept)(nil),          // 28: telepresence.manager.PreparedIntercept
+	(*RemoveInterceptRequest2)(nil),    // 29: telepresence.manager.RemoveInterceptRequest2
+	(*GetInterceptRequest)(nil),        // 30: telepresence.manager.GetInterceptRequest
+	(*ReviewInterceptRequest)(nil),     // 31: telepresence.manager.ReviewInterceptRequest
+	(*RemainRequest)(nil),              // 32: telepresence.manager.RemainRequest
+	(*LogLevelRequest)(nil),            // 33: telepresence.manager.LogLevelRequest
+	(*StreamLogsRequest)(nil),          // 34: telepresence.manager.StreamLogsRequest
+	(*LogChunk)(nil),                   // 35: telepresence.manager.LogChunk
+	(*TelepresenceAPIInfo)(nil),        // 36: telepresence.manager.TelepresenceAPIInfo
+	(*VersionInfo2)(nil),               // 37: telepresence.manager.VersionInfo2
+	(*TunnelMessage)(nil),              // 38: telepresence.manager.TunnelMessage
+	(*QuicTunnelEndpoint)(nil),         // 39: telepresence.manager.QuicTunnelEndpoint
+	(*QuicEndpointCandidate)(nil),      // 40: telepresence.manager.QuicEndpointCandidate
+	(*SessionCredential)(nil),          // 41: telepresence.manager.SessionCredential
+	(*QuicBackend)(nil),                // 42: telepresence.manager.QuicBackend
+	(*QuicBackendSnapshot)(nil),        // 43: telepresence.manager.QuicBackendSnapshot
+	(*DialRequest)(nil),                // 44: telepresence.manager.DialRequest
+	(*QuicAgentCert)(nil),              // 45: telepresence.manager.QuicAgentCert
+	(*LookupRequest)(nil),              // 46: telepresence.manager.LookupRequest
+	(*LookupResponse)(nil),             // 47: telepresence.manager.LookupResponse
+	(*DNSRequest)(nil),                 // 48: telepresence.manager.DNSRequest
+	(*DNSResponse)(nil),                // 49: telepresence.manager.DNSResponse
+	(*ResolveServicePortRequest)(nil),  // 50: telepresence.manager.ResolveServicePortRequest
+	(*ResolveServicePortResponse)(nil), // 51: telepresence.manager.ResolveServicePortResponse
+	(*DNSAgentResponse)(nil),           // 52: telepresence.manager.DNSAgentResponse
+	(*IPNet)(nil),                      // 53: telepresence.manager.IPNet
+	(*ClusterInfo)(nil),                // 54: telepresence.manager.ClusterInfo
+	(*Routing)(nil),                    // 55: telepresence.manager.Routing
+	(*DNS)(nil),                        // 56: telepresence.manager.DNS
+	(*CLIConfig)(nil),                  // 57: telepresence.manager.CLIConfig
+	(*AgentImageFQN)(nil),              // 58: telepresence.manager.AgentImageFQN
+	(*AgentPodInfo)(nil),               // 59: telepresence.manager.AgentPodInfo
+	(*AgentPodInfoSnapshot)(nil),       // 60: telepresence.manager.AgentPodInfoSnapshot
+	(*AgentPodInfoDelta)(nil),          // 61: telepresence.manager.AgentPodInfoDelta
+	(*AgentConfigRequest)(nil),         // 62: telepresence.manager.AgentConfigRequest
+	(*AgentConfigResponse)(nil),        // 63: telepresence.manager.AgentConfigResponse
+	(*TunnelMetrics)(nil),              // 64: telepresence.manager.TunnelMetrics
+	(*KnownWorkloadKinds)(nil),         // 65: telepresence.manager.KnownWorkloadKinds
+	(*ServicePort)(nil),                // 66: telepresence.manager.ServicePort
+	(*RouteAssociation)(nil),           // 67: telepresence.manager.RouteAssociation
+	(*ServiceAssociation)(nil),         // 68: telepresence.manager.ServiceAssociation
+	(*WorkloadInfo)(nil),               // 69: telepresence.manager.WorkloadInfo
+	(*WorkloadEvent)(nil),              // 70: telepresence.manager.WorkloadEvent
+	(*WorkloadEventsDelta)(nil),        // 71: telepresence.manager.WorkloadEventsDelta
+	(*WorkloadEventsRequest)(nil),      // 72: telepresence.manager.WorkloadEventsRequest
+	(*UninstallAgentsRequest)(nil),     // 73: telepresence.manager.UninstallAgentsRequest
+	(*NamespaceList)(nil),              // 74: telepresence.manager.NamespaceList
+	(*AgentInfo_Mechanism)(nil),        // 75: telepresence.manager.AgentInfo.Mechanism
+	(*AgentInfo_ContainerInfo)(nil),    // 76: telepresence.manager.AgentInfo.ContainerInfo
+	nil,                                // 77: telepresence.manager.AgentInfo.ContainersEntry
+	(*AgentInfo_InterceptTarget)(nil),  // 78: telepresence.manager.AgentInfo.InterceptTarget
+	nil,                                // 79: telepresence.manager.AgentInfo.ContainerInfo.EnvironmentEntry
+	nil,                                // 80: telepresence.manager.AgentInfo.ContainerInfo.MountsEntry
+	nil,                                // 81: telepresence.manager.KafkaRoute.EnvironmentEntry
+	nil,                                // 82: telepresence.manager.InterceptSpec.HeaderFiltersEntry
+	nil,                                // 83: telepresence.manager.InterceptSpec.MetadataEntry
+	nil,                                // 84: telepresence.manager.InterceptInfo.EnvironmentEntry
+	nil,                                // 85: telepresence.manager.InterceptInfo.MountsEntry
+	nil,                                // 86: telepresence.manager.AgentInfoDelta.UpsertsEntry
+	nil,                                // 87: telepresence.manager.InterceptInfoDelta.UpsertsEntry
+	nil,                                // 88: telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
+	nil,                                // 89: telepresence.manager.ReviewInterceptRequest.MountsEntry
+	nil,                                // 90: telepresence.manager.AgentPodInfoDelta.UpsertsEntry
+	(*WorkloadInfo_Intercept)(nil),     // 91: telepresence.manager.WorkloadInfo.Intercept
+	(*timestamppb.Timestamp)(nil),      // 92: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 93: google.protobuf.Duration
+	(*emptypb.Empty)(nil),              // 94: google.protobuf.Empty
 }
 var file_manager_manager_proto_depIdxs = []int32{
-	72,  // 0: telepresence.manager.AgentInfo.mechanisms:type_name -> telepresence.manager.AgentInfo.Mechanism
-	74,  // 1: telepresence.manager.AgentInfo.containers:type_name -> telepresence.manager.AgentInfo.ContainersEntry
-	75,  // 2: telepresence.manager.AgentInfo.intercept_targets:type_name -> telepresence.manager.AgentInfo.InterceptTarget
-	78,  // 3: telepresence.manager.InterceptSpec.header_filters:type_name -> telepresence.manager.InterceptSpec.HeaderFiltersEntry
-	79,  // 4: telepresence.manager.InterceptSpec.metadata:type_name -> telepresence.manager.InterceptSpec.MetadataEntry
-	9,   // 5: telepresence.manager.InterceptInfo.spec:type_name -> telepresence.manager.InterceptSpec
-	14,  // 6: telepresence.manager.InterceptInfo.client_session:type_name -> telepresence.manager.SessionInfo
-	0,   // 7: telepresence.manager.InterceptInfo.disposition:type_name -> telepresence.manager.InterceptDispositionType
-	80,  // 8: telepresence.manager.InterceptInfo.environment:type_name -> telepresence.manager.InterceptInfo.EnvironmentEntry
-	81,  // 9: telepresence.manager.InterceptInfo.mounts:type_name -> telepresence.manager.InterceptInfo.MountsEntry
-	88,  // 10: telepresence.manager.InterceptInfo.modified_at:type_name -> google.protobuf.Timestamp
-	10,  // 11: telepresence.manager.InterceptInfo.service_workloads:type_name -> telepresence.manager.InterceptWorkload
-	14,  // 12: telepresence.manager.ReconnectAgentRequest.session:type_name -> telepresence.manager.SessionInfo
-	7,   // 13: telepresence.manager.ReconnectAgentRequest.agent:type_name -> telepresence.manager.AgentInfo
-	14,  // 14: telepresence.manager.ReconnectClientRequest.session:type_name -> telepresence.manager.SessionInfo
-	6,   // 15: telepresence.manager.ReconnectClientRequest.client:type_name -> telepresence.manager.ClientInfo
-	11,  // 16: telepresence.manager.ReconnectClientRequest.intercepts:type_name -> telepresence.manager.InterceptInfo
-	7,   // 17: telepresence.manager.ReconnectClientRequest.agents:type_name -> telepresence.manager.AgentInfo
-	14,  // 18: telepresence.manager.AgentsRequest.session:type_name -> telepresence.manager.SessionInfo
-	7,   // 19: telepresence.manager.AgentInfoSnapshot.agents:type_name -> telepresence.manager.AgentInfo
-	82,  // 20: telepresence.manager.AgentInfoDelta.upserts:type_name -> telepresence.manager.AgentInfoDelta.UpsertsEntry
-	11,  // 21: telepresence.manager.InterceptInfoSnapshot.intercepts:type_name -> telepresence.manager.InterceptInfo
-	83,  // 22: telepresence.manager.InterceptInfoDelta.upserts:type_name -> telepresence.manager.InterceptInfoDelta.UpsertsEntry
-	14,  // 23: telepresence.manager.SessionEventsRequest.session:type_name -> telepresence.manager.SessionInfo
-	58,  // 24: telepresence.manager.SessionEventsDelta.agent_pods:type_name -> telepresence.manager.AgentPodInfoDelta
-	19,  // 25: telepresence.manager.SessionEventsDelta.intercepts:type_name -> telepresence.manager.InterceptInfoDelta
-	14,  // 26: telepresence.manager.CreateInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
-	9,   // 27: telepresence.manager.CreateInterceptRequest.intercept_spec:type_name -> telepresence.manager.InterceptSpec
-	14,  // 28: telepresence.manager.EnsureAgentRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 29: telepresence.manager.ReleaseAgentRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 30: telepresence.manager.RemoveInterceptRequest2.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 31: telepresence.manager.GetInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 32: telepresence.manager.ReviewInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
-	0,   // 33: telepresence.manager.ReviewInterceptRequest.disposition:type_name -> telepresence.manager.InterceptDispositionType
-	84,  // 34: telepresence.manager.ReviewInterceptRequest.environment:type_name -> telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
-	85,  // 35: telepresence.manager.ReviewInterceptRequest.mounts:type_name -> telepresence.manager.ReviewInterceptRequest.MountsEntry
-	14,  // 36: telepresence.manager.RemainRequest.session:type_name -> telepresence.manager.SessionInfo
-	88,  // 37: telepresence.manager.RemainRequest.last_activity:type_name -> google.protobuf.Timestamp
-	89,  // 38: telepresence.manager.LogLevelRequest.duration:type_name -> google.protobuf.Duration
-	14,  // 39: telepresence.manager.LogLevelRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 40: telepresence.manager.StreamLogsRequest.session:type_name -> telepresence.manager.SessionInfo
-	1,   // 41: telepresence.manager.LogChunk.frame:type_name -> telepresence.manager.LogChunk.Frame
-	37,  // 42: telepresence.manager.QuicTunnelEndpoint.candidates:type_name -> telepresence.manager.QuicEndpointCandidate
-	88,  // 43: telepresence.manager.SessionCredential.expiry:type_name -> google.protobuf.Timestamp
-	39,  // 44: telepresence.manager.QuicBackendSnapshot.backends:type_name -> telepresence.manager.QuicBackend
-	14,  // 45: telepresence.manager.LookupRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 46: telepresence.manager.DNSRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 47: telepresence.manager.ResolveServicePortRequest.session:type_name -> telepresence.manager.SessionInfo
-	14,  // 48: telepresence.manager.DNSAgentResponse.session:type_name -> telepresence.manager.SessionInfo
-	45,  // 49: telepresence.manager.DNSAgentResponse.request:type_name -> telepresence.manager.DNSRequest
-	46,  // 50: telepresence.manager.DNSAgentResponse.response:type_name -> telepresence.manager.DNSResponse
-	50,  // 51: telepresence.manager.ClusterInfo.service_subnet:type_name -> telepresence.manager.IPNet
-	50,  // 52: telepresence.manager.ClusterInfo.pod_subnets:type_name -> telepresence.manager.IPNet
-	52,  // 53: telepresence.manager.ClusterInfo.routing:type_name -> telepresence.manager.Routing
-	53,  // 54: telepresence.manager.ClusterInfo.dns:type_name -> telepresence.manager.DNS
-	50,  // 55: telepresence.manager.Routing.also_proxy_subnets:type_name -> telepresence.manager.IPNet
-	50,  // 56: telepresence.manager.Routing.never_proxy_subnets:type_name -> telepresence.manager.IPNet
-	50,  // 57: telepresence.manager.Routing.allow_conflicting_subnets:type_name -> telepresence.manager.IPNet
-	56,  // 58: telepresence.manager.AgentPodInfoSnapshot.agents:type_name -> telepresence.manager.AgentPodInfo
-	86,  // 59: telepresence.manager.AgentPodInfoDelta.upserts:type_name -> telepresence.manager.AgentPodInfoDelta.UpsertsEntry
-	14,  // 60: telepresence.manager.AgentConfigRequest.session:type_name -> telepresence.manager.SessionInfo
-	2,   // 61: telepresence.manager.KnownWorkloadKinds.kinds:type_name -> telepresence.manager.WorkloadInfo.Kind
-	63,  // 62: telepresence.manager.ServiceAssociation.ports:type_name -> telepresence.manager.ServicePort
-	64,  // 63: telepresence.manager.ServiceAssociation.routes:type_name -> telepresence.manager.RouteAssociation
-	2,   // 64: telepresence.manager.WorkloadInfo.kind:type_name -> telepresence.manager.WorkloadInfo.Kind
-	65,  // 65: telepresence.manager.WorkloadInfo.services:type_name -> telepresence.manager.ServiceAssociation
-	4,   // 66: telepresence.manager.WorkloadInfo.agent_state:type_name -> telepresence.manager.WorkloadInfo.AgentState
-	87,  // 67: telepresence.manager.WorkloadInfo.intercept_clients:type_name -> telepresence.manager.WorkloadInfo.Intercept
-	3,   // 68: telepresence.manager.WorkloadInfo.state:type_name -> telepresence.manager.WorkloadInfo.State
-	5,   // 69: telepresence.manager.WorkloadEvent.type:type_name -> telepresence.manager.WorkloadEvent.Type
-	66,  // 70: telepresence.manager.WorkloadEvent.workload:type_name -> telepresence.manager.WorkloadInfo
-	88,  // 71: telepresence.manager.WorkloadEventsDelta.since:type_name -> google.protobuf.Timestamp
-	67,  // 72: telepresence.manager.WorkloadEventsDelta.events:type_name -> telepresence.manager.WorkloadEvent
-	14,  // 73: telepresence.manager.WorkloadEventsRequest.session_info:type_name -> telepresence.manager.SessionInfo
-	88,  // 74: telepresence.manager.WorkloadEventsRequest.since:type_name -> google.protobuf.Timestamp
-	14,  // 75: telepresence.manager.UninstallAgentsRequest.session_info:type_name -> telepresence.manager.SessionInfo
-	76,  // 76: telepresence.manager.AgentInfo.ContainerInfo.environment:type_name -> telepresence.manager.AgentInfo.ContainerInfo.EnvironmentEntry
-	77,  // 77: telepresence.manager.AgentInfo.ContainerInfo.mounts:type_name -> telepresence.manager.AgentInfo.ContainerInfo.MountsEntry
-	73,  // 78: telepresence.manager.AgentInfo.ContainersEntry.value:type_name -> telepresence.manager.AgentInfo.ContainerInfo
-	7,   // 79: telepresence.manager.AgentInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.AgentInfo
-	11,  // 80: telepresence.manager.InterceptInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.InterceptInfo
-	56,  // 81: telepresence.manager.AgentPodInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.AgentPodInfo
-	90,  // 82: telepresence.manager.Manager.Version:input_type -> google.protobuf.Empty
-	90,  // 83: telepresence.manager.Manager.GetAgentImageFQN:input_type -> google.protobuf.Empty
-	59,  // 84: telepresence.manager.Manager.GetAgentConfig:input_type -> telepresence.manager.AgentConfigRequest
-	90,  // 85: telepresence.manager.Manager.GetClientConfig:input_type -> google.protobuf.Empty
-	90,  // 86: telepresence.manager.Manager.GetTelepresenceAPI:input_type -> google.protobuf.Empty
-	6,   // 87: telepresence.manager.Manager.ArriveAsClient:input_type -> telepresence.manager.ClientInfo
-	12,  // 88: telepresence.manager.Manager.ReconnectAgent:input_type -> telepresence.manager.ReconnectAgentRequest
-	13,  // 89: telepresence.manager.Manager.ReconnectClient:input_type -> telepresence.manager.ReconnectClientRequest
-	7,   // 90: telepresence.manager.Manager.ArriveAsAgent:input_type -> telepresence.manager.AgentInfo
-	29,  // 91: telepresence.manager.Manager.Remain:input_type -> telepresence.manager.RemainRequest
-	14,  // 92: telepresence.manager.Manager.Depart:input_type -> telepresence.manager.SessionInfo
-	30,  // 93: telepresence.manager.Manager.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
-	31,  // 94: telepresence.manager.Manager.StreamLogs:input_type -> telepresence.manager.StreamLogsRequest
-	14,  // 95: telepresence.manager.Manager.WatchAgentPods:input_type -> telepresence.manager.SessionInfo
-	14,  // 96: telepresence.manager.Manager.WatchAgentPodsDelta:input_type -> telepresence.manager.SessionInfo
-	15,  // 97: telepresence.manager.Manager.WatchAgentPodsInNamespacesDelta:input_type -> telepresence.manager.AgentsRequest
-	14,  // 98: telepresence.manager.Manager.WatchAgents:input_type -> telepresence.manager.SessionInfo
-	14,  // 99: telepresence.manager.Manager.WatchAgentsDelta:input_type -> telepresence.manager.SessionInfo
-	14,  // 100: telepresence.manager.Manager.WatchIntercepts:input_type -> telepresence.manager.SessionInfo
-	14,  // 101: telepresence.manager.Manager.WatchInterceptsDelta:input_type -> telepresence.manager.SessionInfo
-	20,  // 102: telepresence.manager.Manager.WatchSessionEvents:input_type -> telepresence.manager.SessionEventsRequest
-	69,  // 103: telepresence.manager.Manager.WatchWorkloads:input_type -> telepresence.manager.WorkloadEventsRequest
-	14,  // 104: telepresence.manager.Manager.WatchClusterInfo:input_type -> telepresence.manager.SessionInfo
-	14,  // 105: telepresence.manager.Manager.WatchNamespaces:input_type -> telepresence.manager.SessionInfo
-	23,  // 106: telepresence.manager.Manager.EnsureAgent:input_type -> telepresence.manager.EnsureAgentRequest
-	24,  // 107: telepresence.manager.Manager.ReleaseAgent:input_type -> telepresence.manager.ReleaseAgentRequest
-	22,  // 108: telepresence.manager.Manager.PrepareIntercept:input_type -> telepresence.manager.CreateInterceptRequest
-	22,  // 109: telepresence.manager.Manager.CreateIntercept:input_type -> telepresence.manager.CreateInterceptRequest
-	26,  // 110: telepresence.manager.Manager.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
-	27,  // 111: telepresence.manager.Manager.GetIntercept:input_type -> telepresence.manager.GetInterceptRequest
-	28,  // 112: telepresence.manager.Manager.ReviewIntercept:input_type -> telepresence.manager.ReviewInterceptRequest
-	14,  // 113: telepresence.manager.Manager.GetKnownWorkloadKinds:input_type -> telepresence.manager.SessionInfo
-	43,  // 114: telepresence.manager.Manager.Lookup:input_type -> telepresence.manager.LookupRequest
-	45,  // 115: telepresence.manager.Manager.LookupDNS:input_type -> telepresence.manager.DNSRequest
-	47,  // 116: telepresence.manager.Manager.ResolveServicePort:input_type -> telepresence.manager.ResolveServicePortRequest
-	90,  // 117: telepresence.manager.Manager.WatchLogLevel:input_type -> google.protobuf.Empty
-	35,  // 118: telepresence.manager.Manager.Tunnel:input_type -> telepresence.manager.TunnelMessage
-	14,  // 119: telepresence.manager.Manager.GetQuicTunnelEndpoint:input_type -> telepresence.manager.SessionInfo
-	14,  // 120: telepresence.manager.Manager.GetSessionCredential:input_type -> telepresence.manager.SessionInfo
-	14,  // 121: telepresence.manager.Manager.GetQuicAgentCert:input_type -> telepresence.manager.SessionInfo
-	90,  // 122: telepresence.manager.Manager.WatchQuicBackends:input_type -> google.protobuf.Empty
-	61,  // 123: telepresence.manager.Manager.ReportMetrics:input_type -> telepresence.manager.TunnelMetrics
-	70,  // 124: telepresence.manager.Manager.UninstallAgents:input_type -> telepresence.manager.UninstallAgentsRequest
-	34,  // 125: telepresence.manager.Manager.Version:output_type -> telepresence.manager.VersionInfo2
-	55,  // 126: telepresence.manager.Manager.GetAgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
-	60,  // 127: telepresence.manager.Manager.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
-	54,  // 128: telepresence.manager.Manager.GetClientConfig:output_type -> telepresence.manager.CLIConfig
-	33,  // 129: telepresence.manager.Manager.GetTelepresenceAPI:output_type -> telepresence.manager.TelepresenceAPIInfo
-	14,  // 130: telepresence.manager.Manager.ArriveAsClient:output_type -> telepresence.manager.SessionInfo
-	90,  // 131: telepresence.manager.Manager.ReconnectAgent:output_type -> google.protobuf.Empty
-	90,  // 132: telepresence.manager.Manager.ReconnectClient:output_type -> google.protobuf.Empty
-	14,  // 133: telepresence.manager.Manager.ArriveAsAgent:output_type -> telepresence.manager.SessionInfo
-	90,  // 134: telepresence.manager.Manager.Remain:output_type -> google.protobuf.Empty
-	90,  // 135: telepresence.manager.Manager.Depart:output_type -> google.protobuf.Empty
-	90,  // 136: telepresence.manager.Manager.SetLogLevel:output_type -> google.protobuf.Empty
-	32,  // 137: telepresence.manager.Manager.StreamLogs:output_type -> telepresence.manager.LogChunk
-	57,  // 138: telepresence.manager.Manager.WatchAgentPods:output_type -> telepresence.manager.AgentPodInfoSnapshot
-	58,  // 139: telepresence.manager.Manager.WatchAgentPodsDelta:output_type -> telepresence.manager.AgentPodInfoDelta
-	58,  // 140: telepresence.manager.Manager.WatchAgentPodsInNamespacesDelta:output_type -> telepresence.manager.AgentPodInfoDelta
-	16,  // 141: telepresence.manager.Manager.WatchAgents:output_type -> telepresence.manager.AgentInfoSnapshot
-	17,  // 142: telepresence.manager.Manager.WatchAgentsDelta:output_type -> telepresence.manager.AgentInfoDelta
-	18,  // 143: telepresence.manager.Manager.WatchIntercepts:output_type -> telepresence.manager.InterceptInfoSnapshot
-	19,  // 144: telepresence.manager.Manager.WatchInterceptsDelta:output_type -> telepresence.manager.InterceptInfoDelta
-	21,  // 145: telepresence.manager.Manager.WatchSessionEvents:output_type -> telepresence.manager.SessionEventsDelta
-	68,  // 146: telepresence.manager.Manager.WatchWorkloads:output_type -> telepresence.manager.WorkloadEventsDelta
-	51,  // 147: telepresence.manager.Manager.WatchClusterInfo:output_type -> telepresence.manager.ClusterInfo
-	71,  // 148: telepresence.manager.Manager.WatchNamespaces:output_type -> telepresence.manager.NamespaceList
-	16,  // 149: telepresence.manager.Manager.EnsureAgent:output_type -> telepresence.manager.AgentInfoSnapshot
-	90,  // 150: telepresence.manager.Manager.ReleaseAgent:output_type -> google.protobuf.Empty
-	25,  // 151: telepresence.manager.Manager.PrepareIntercept:output_type -> telepresence.manager.PreparedIntercept
-	11,  // 152: telepresence.manager.Manager.CreateIntercept:output_type -> telepresence.manager.InterceptInfo
-	90,  // 153: telepresence.manager.Manager.RemoveIntercept:output_type -> google.protobuf.Empty
-	11,  // 154: telepresence.manager.Manager.GetIntercept:output_type -> telepresence.manager.InterceptInfo
-	90,  // 155: telepresence.manager.Manager.ReviewIntercept:output_type -> google.protobuf.Empty
-	62,  // 156: telepresence.manager.Manager.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
-	44,  // 157: telepresence.manager.Manager.Lookup:output_type -> telepresence.manager.LookupResponse
-	46,  // 158: telepresence.manager.Manager.LookupDNS:output_type -> telepresence.manager.DNSResponse
-	48,  // 159: telepresence.manager.Manager.ResolveServicePort:output_type -> telepresence.manager.ResolveServicePortResponse
-	30,  // 160: telepresence.manager.Manager.WatchLogLevel:output_type -> telepresence.manager.LogLevelRequest
-	35,  // 161: telepresence.manager.Manager.Tunnel:output_type -> telepresence.manager.TunnelMessage
-	36,  // 162: telepresence.manager.Manager.GetQuicTunnelEndpoint:output_type -> telepresence.manager.QuicTunnelEndpoint
-	38,  // 163: telepresence.manager.Manager.GetSessionCredential:output_type -> telepresence.manager.SessionCredential
-	42,  // 164: telepresence.manager.Manager.GetQuicAgentCert:output_type -> telepresence.manager.QuicAgentCert
-	40,  // 165: telepresence.manager.Manager.WatchQuicBackends:output_type -> telepresence.manager.QuicBackendSnapshot
-	90,  // 166: telepresence.manager.Manager.ReportMetrics:output_type -> google.protobuf.Empty
-	90,  // 167: telepresence.manager.Manager.UninstallAgents:output_type -> google.protobuf.Empty
-	125, // [125:168] is the sub-list for method output_type
-	82,  // [82:125] is the sub-list for method input_type
-	82,  // [82:82] is the sub-list for extension type_name
-	82,  // [82:82] is the sub-list for extension extendee
-	0,   // [0:82] is the sub-list for field type_name
+	75,  // 0: telepresence.manager.AgentInfo.mechanisms:type_name -> telepresence.manager.AgentInfo.Mechanism
+	77,  // 1: telepresence.manager.AgentInfo.containers:type_name -> telepresence.manager.AgentInfo.ContainersEntry
+	78,  // 2: telepresence.manager.AgentInfo.intercept_targets:type_name -> telepresence.manager.AgentInfo.InterceptTarget
+	9,   // 3: telepresence.manager.KafkaIntercept.headers:type_name -> telepresence.manager.KafkaHeader
+	81,  // 4: telepresence.manager.KafkaRoute.environment:type_name -> telepresence.manager.KafkaRoute.EnvironmentEntry
+	82,  // 5: telepresence.manager.InterceptSpec.header_filters:type_name -> telepresence.manager.InterceptSpec.HeaderFiltersEntry
+	83,  // 6: telepresence.manager.InterceptSpec.metadata:type_name -> telepresence.manager.InterceptSpec.MetadataEntry
+	10,  // 7: telepresence.manager.InterceptSpec.kafka:type_name -> telepresence.manager.KafkaIntercept
+	12,  // 8: telepresence.manager.InterceptInfo.spec:type_name -> telepresence.manager.InterceptSpec
+	17,  // 9: telepresence.manager.InterceptInfo.client_session:type_name -> telepresence.manager.SessionInfo
+	0,   // 10: telepresence.manager.InterceptInfo.disposition:type_name -> telepresence.manager.InterceptDispositionType
+	84,  // 11: telepresence.manager.InterceptInfo.environment:type_name -> telepresence.manager.InterceptInfo.EnvironmentEntry
+	85,  // 12: telepresence.manager.InterceptInfo.mounts:type_name -> telepresence.manager.InterceptInfo.MountsEntry
+	11,  // 13: telepresence.manager.InterceptInfo.kafka_routes:type_name -> telepresence.manager.KafkaRoute
+	92,  // 14: telepresence.manager.InterceptInfo.modified_at:type_name -> google.protobuf.Timestamp
+	13,  // 15: telepresence.manager.InterceptInfo.service_workloads:type_name -> telepresence.manager.InterceptWorkload
+	17,  // 16: telepresence.manager.ReconnectAgentRequest.session:type_name -> telepresence.manager.SessionInfo
+	7,   // 17: telepresence.manager.ReconnectAgentRequest.agent:type_name -> telepresence.manager.AgentInfo
+	17,  // 18: telepresence.manager.ReconnectClientRequest.session:type_name -> telepresence.manager.SessionInfo
+	6,   // 19: telepresence.manager.ReconnectClientRequest.client:type_name -> telepresence.manager.ClientInfo
+	14,  // 20: telepresence.manager.ReconnectClientRequest.intercepts:type_name -> telepresence.manager.InterceptInfo
+	7,   // 21: telepresence.manager.ReconnectClientRequest.agents:type_name -> telepresence.manager.AgentInfo
+	17,  // 22: telepresence.manager.AgentsRequest.session:type_name -> telepresence.manager.SessionInfo
+	7,   // 23: telepresence.manager.AgentInfoSnapshot.agents:type_name -> telepresence.manager.AgentInfo
+	86,  // 24: telepresence.manager.AgentInfoDelta.upserts:type_name -> telepresence.manager.AgentInfoDelta.UpsertsEntry
+	14,  // 25: telepresence.manager.InterceptInfoSnapshot.intercepts:type_name -> telepresence.manager.InterceptInfo
+	87,  // 26: telepresence.manager.InterceptInfoDelta.upserts:type_name -> telepresence.manager.InterceptInfoDelta.UpsertsEntry
+	17,  // 27: telepresence.manager.SessionEventsRequest.session:type_name -> telepresence.manager.SessionInfo
+	61,  // 28: telepresence.manager.SessionEventsDelta.agent_pods:type_name -> telepresence.manager.AgentPodInfoDelta
+	22,  // 29: telepresence.manager.SessionEventsDelta.intercepts:type_name -> telepresence.manager.InterceptInfoDelta
+	17,  // 30: telepresence.manager.CreateInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
+	12,  // 31: telepresence.manager.CreateInterceptRequest.intercept_spec:type_name -> telepresence.manager.InterceptSpec
+	17,  // 32: telepresence.manager.EnsureAgentRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 33: telepresence.manager.ReleaseAgentRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 34: telepresence.manager.RemoveInterceptRequest2.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 35: telepresence.manager.GetInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 36: telepresence.manager.ReviewInterceptRequest.session:type_name -> telepresence.manager.SessionInfo
+	0,   // 37: telepresence.manager.ReviewInterceptRequest.disposition:type_name -> telepresence.manager.InterceptDispositionType
+	88,  // 38: telepresence.manager.ReviewInterceptRequest.environment:type_name -> telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
+	89,  // 39: telepresence.manager.ReviewInterceptRequest.mounts:type_name -> telepresence.manager.ReviewInterceptRequest.MountsEntry
+	17,  // 40: telepresence.manager.RemainRequest.session:type_name -> telepresence.manager.SessionInfo
+	92,  // 41: telepresence.manager.RemainRequest.last_activity:type_name -> google.protobuf.Timestamp
+	93,  // 42: telepresence.manager.LogLevelRequest.duration:type_name -> google.protobuf.Duration
+	17,  // 43: telepresence.manager.LogLevelRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 44: telepresence.manager.StreamLogsRequest.session:type_name -> telepresence.manager.SessionInfo
+	1,   // 45: telepresence.manager.LogChunk.frame:type_name -> telepresence.manager.LogChunk.Frame
+	40,  // 46: telepresence.manager.QuicTunnelEndpoint.candidates:type_name -> telepresence.manager.QuicEndpointCandidate
+	92,  // 47: telepresence.manager.SessionCredential.expiry:type_name -> google.protobuf.Timestamp
+	42,  // 48: telepresence.manager.QuicBackendSnapshot.backends:type_name -> telepresence.manager.QuicBackend
+	17,  // 49: telepresence.manager.LookupRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 50: telepresence.manager.DNSRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 51: telepresence.manager.ResolveServicePortRequest.session:type_name -> telepresence.manager.SessionInfo
+	17,  // 52: telepresence.manager.DNSAgentResponse.session:type_name -> telepresence.manager.SessionInfo
+	48,  // 53: telepresence.manager.DNSAgentResponse.request:type_name -> telepresence.manager.DNSRequest
+	49,  // 54: telepresence.manager.DNSAgentResponse.response:type_name -> telepresence.manager.DNSResponse
+	53,  // 55: telepresence.manager.ClusterInfo.service_subnet:type_name -> telepresence.manager.IPNet
+	53,  // 56: telepresence.manager.ClusterInfo.pod_subnets:type_name -> telepresence.manager.IPNet
+	55,  // 57: telepresence.manager.ClusterInfo.routing:type_name -> telepresence.manager.Routing
+	56,  // 58: telepresence.manager.ClusterInfo.dns:type_name -> telepresence.manager.DNS
+	53,  // 59: telepresence.manager.Routing.also_proxy_subnets:type_name -> telepresence.manager.IPNet
+	53,  // 60: telepresence.manager.Routing.never_proxy_subnets:type_name -> telepresence.manager.IPNet
+	53,  // 61: telepresence.manager.Routing.allow_conflicting_subnets:type_name -> telepresence.manager.IPNet
+	59,  // 62: telepresence.manager.AgentPodInfoSnapshot.agents:type_name -> telepresence.manager.AgentPodInfo
+	90,  // 63: telepresence.manager.AgentPodInfoDelta.upserts:type_name -> telepresence.manager.AgentPodInfoDelta.UpsertsEntry
+	17,  // 64: telepresence.manager.AgentConfigRequest.session:type_name -> telepresence.manager.SessionInfo
+	2,   // 65: telepresence.manager.KnownWorkloadKinds.kinds:type_name -> telepresence.manager.WorkloadInfo.Kind
+	66,  // 66: telepresence.manager.ServiceAssociation.ports:type_name -> telepresence.manager.ServicePort
+	67,  // 67: telepresence.manager.ServiceAssociation.routes:type_name -> telepresence.manager.RouteAssociation
+	2,   // 68: telepresence.manager.WorkloadInfo.kind:type_name -> telepresence.manager.WorkloadInfo.Kind
+	68,  // 69: telepresence.manager.WorkloadInfo.services:type_name -> telepresence.manager.ServiceAssociation
+	4,   // 70: telepresence.manager.WorkloadInfo.agent_state:type_name -> telepresence.manager.WorkloadInfo.AgentState
+	91,  // 71: telepresence.manager.WorkloadInfo.intercept_clients:type_name -> telepresence.manager.WorkloadInfo.Intercept
+	3,   // 72: telepresence.manager.WorkloadInfo.state:type_name -> telepresence.manager.WorkloadInfo.State
+	5,   // 73: telepresence.manager.WorkloadEvent.type:type_name -> telepresence.manager.WorkloadEvent.Type
+	69,  // 74: telepresence.manager.WorkloadEvent.workload:type_name -> telepresence.manager.WorkloadInfo
+	92,  // 75: telepresence.manager.WorkloadEventsDelta.since:type_name -> google.protobuf.Timestamp
+	70,  // 76: telepresence.manager.WorkloadEventsDelta.events:type_name -> telepresence.manager.WorkloadEvent
+	17,  // 77: telepresence.manager.WorkloadEventsRequest.session_info:type_name -> telepresence.manager.SessionInfo
+	92,  // 78: telepresence.manager.WorkloadEventsRequest.since:type_name -> google.protobuf.Timestamp
+	17,  // 79: telepresence.manager.UninstallAgentsRequest.session_info:type_name -> telepresence.manager.SessionInfo
+	79,  // 80: telepresence.manager.AgentInfo.ContainerInfo.environment:type_name -> telepresence.manager.AgentInfo.ContainerInfo.EnvironmentEntry
+	80,  // 81: telepresence.manager.AgentInfo.ContainerInfo.mounts:type_name -> telepresence.manager.AgentInfo.ContainerInfo.MountsEntry
+	76,  // 82: telepresence.manager.AgentInfo.ContainersEntry.value:type_name -> telepresence.manager.AgentInfo.ContainerInfo
+	7,   // 83: telepresence.manager.AgentInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.AgentInfo
+	14,  // 84: telepresence.manager.InterceptInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.InterceptInfo
+	59,  // 85: telepresence.manager.AgentPodInfoDelta.UpsertsEntry.value:type_name -> telepresence.manager.AgentPodInfo
+	94,  // 86: telepresence.manager.Manager.Version:input_type -> google.protobuf.Empty
+	94,  // 87: telepresence.manager.Manager.GetAgentImageFQN:input_type -> google.protobuf.Empty
+	62,  // 88: telepresence.manager.Manager.GetAgentConfig:input_type -> telepresence.manager.AgentConfigRequest
+	94,  // 89: telepresence.manager.Manager.GetClientConfig:input_type -> google.protobuf.Empty
+	94,  // 90: telepresence.manager.Manager.GetTelepresenceAPI:input_type -> google.protobuf.Empty
+	6,   // 91: telepresence.manager.Manager.ArriveAsClient:input_type -> telepresence.manager.ClientInfo
+	15,  // 92: telepresence.manager.Manager.ReconnectAgent:input_type -> telepresence.manager.ReconnectAgentRequest
+	16,  // 93: telepresence.manager.Manager.ReconnectClient:input_type -> telepresence.manager.ReconnectClientRequest
+	7,   // 94: telepresence.manager.Manager.ArriveAsAgent:input_type -> telepresence.manager.AgentInfo
+	32,  // 95: telepresence.manager.Manager.Remain:input_type -> telepresence.manager.RemainRequest
+	17,  // 96: telepresence.manager.Manager.Depart:input_type -> telepresence.manager.SessionInfo
+	33,  // 97: telepresence.manager.Manager.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
+	34,  // 98: telepresence.manager.Manager.StreamLogs:input_type -> telepresence.manager.StreamLogsRequest
+	17,  // 99: telepresence.manager.Manager.WatchAgentPods:input_type -> telepresence.manager.SessionInfo
+	17,  // 100: telepresence.manager.Manager.WatchAgentPodsDelta:input_type -> telepresence.manager.SessionInfo
+	18,  // 101: telepresence.manager.Manager.WatchAgentPodsInNamespacesDelta:input_type -> telepresence.manager.AgentsRequest
+	17,  // 102: telepresence.manager.Manager.WatchAgents:input_type -> telepresence.manager.SessionInfo
+	17,  // 103: telepresence.manager.Manager.WatchAgentsDelta:input_type -> telepresence.manager.SessionInfo
+	17,  // 104: telepresence.manager.Manager.WatchIntercepts:input_type -> telepresence.manager.SessionInfo
+	17,  // 105: telepresence.manager.Manager.WatchInterceptsDelta:input_type -> telepresence.manager.SessionInfo
+	23,  // 106: telepresence.manager.Manager.WatchSessionEvents:input_type -> telepresence.manager.SessionEventsRequest
+	72,  // 107: telepresence.manager.Manager.WatchWorkloads:input_type -> telepresence.manager.WorkloadEventsRequest
+	17,  // 108: telepresence.manager.Manager.WatchClusterInfo:input_type -> telepresence.manager.SessionInfo
+	17,  // 109: telepresence.manager.Manager.WatchNamespaces:input_type -> telepresence.manager.SessionInfo
+	26,  // 110: telepresence.manager.Manager.EnsureAgent:input_type -> telepresence.manager.EnsureAgentRequest
+	27,  // 111: telepresence.manager.Manager.ReleaseAgent:input_type -> telepresence.manager.ReleaseAgentRequest
+	25,  // 112: telepresence.manager.Manager.PrepareIntercept:input_type -> telepresence.manager.CreateInterceptRequest
+	25,  // 113: telepresence.manager.Manager.CreateIntercept:input_type -> telepresence.manager.CreateInterceptRequest
+	29,  // 114: telepresence.manager.Manager.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
+	30,  // 115: telepresence.manager.Manager.GetIntercept:input_type -> telepresence.manager.GetInterceptRequest
+	31,  // 116: telepresence.manager.Manager.ReviewIntercept:input_type -> telepresence.manager.ReviewInterceptRequest
+	17,  // 117: telepresence.manager.Manager.GetKnownWorkloadKinds:input_type -> telepresence.manager.SessionInfo
+	46,  // 118: telepresence.manager.Manager.Lookup:input_type -> telepresence.manager.LookupRequest
+	48,  // 119: telepresence.manager.Manager.LookupDNS:input_type -> telepresence.manager.DNSRequest
+	50,  // 120: telepresence.manager.Manager.ResolveServicePort:input_type -> telepresence.manager.ResolveServicePortRequest
+	94,  // 121: telepresence.manager.Manager.WatchLogLevel:input_type -> google.protobuf.Empty
+	38,  // 122: telepresence.manager.Manager.Tunnel:input_type -> telepresence.manager.TunnelMessage
+	17,  // 123: telepresence.manager.Manager.GetQuicTunnelEndpoint:input_type -> telepresence.manager.SessionInfo
+	17,  // 124: telepresence.manager.Manager.GetSessionCredential:input_type -> telepresence.manager.SessionInfo
+	17,  // 125: telepresence.manager.Manager.GetQuicAgentCert:input_type -> telepresence.manager.SessionInfo
+	94,  // 126: telepresence.manager.Manager.WatchQuicBackends:input_type -> google.protobuf.Empty
+	64,  // 127: telepresence.manager.Manager.ReportMetrics:input_type -> telepresence.manager.TunnelMetrics
+	73,  // 128: telepresence.manager.Manager.UninstallAgents:input_type -> telepresence.manager.UninstallAgentsRequest
+	37,  // 129: telepresence.manager.Manager.Version:output_type -> telepresence.manager.VersionInfo2
+	58,  // 130: telepresence.manager.Manager.GetAgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
+	63,  // 131: telepresence.manager.Manager.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
+	57,  // 132: telepresence.manager.Manager.GetClientConfig:output_type -> telepresence.manager.CLIConfig
+	36,  // 133: telepresence.manager.Manager.GetTelepresenceAPI:output_type -> telepresence.manager.TelepresenceAPIInfo
+	17,  // 134: telepresence.manager.Manager.ArriveAsClient:output_type -> telepresence.manager.SessionInfo
+	94,  // 135: telepresence.manager.Manager.ReconnectAgent:output_type -> google.protobuf.Empty
+	94,  // 136: telepresence.manager.Manager.ReconnectClient:output_type -> google.protobuf.Empty
+	17,  // 137: telepresence.manager.Manager.ArriveAsAgent:output_type -> telepresence.manager.SessionInfo
+	94,  // 138: telepresence.manager.Manager.Remain:output_type -> google.protobuf.Empty
+	94,  // 139: telepresence.manager.Manager.Depart:output_type -> google.protobuf.Empty
+	94,  // 140: telepresence.manager.Manager.SetLogLevel:output_type -> google.protobuf.Empty
+	35,  // 141: telepresence.manager.Manager.StreamLogs:output_type -> telepresence.manager.LogChunk
+	60,  // 142: telepresence.manager.Manager.WatchAgentPods:output_type -> telepresence.manager.AgentPodInfoSnapshot
+	61,  // 143: telepresence.manager.Manager.WatchAgentPodsDelta:output_type -> telepresence.manager.AgentPodInfoDelta
+	61,  // 144: telepresence.manager.Manager.WatchAgentPodsInNamespacesDelta:output_type -> telepresence.manager.AgentPodInfoDelta
+	19,  // 145: telepresence.manager.Manager.WatchAgents:output_type -> telepresence.manager.AgentInfoSnapshot
+	20,  // 146: telepresence.manager.Manager.WatchAgentsDelta:output_type -> telepresence.manager.AgentInfoDelta
+	21,  // 147: telepresence.manager.Manager.WatchIntercepts:output_type -> telepresence.manager.InterceptInfoSnapshot
+	22,  // 148: telepresence.manager.Manager.WatchInterceptsDelta:output_type -> telepresence.manager.InterceptInfoDelta
+	24,  // 149: telepresence.manager.Manager.WatchSessionEvents:output_type -> telepresence.manager.SessionEventsDelta
+	71,  // 150: telepresence.manager.Manager.WatchWorkloads:output_type -> telepresence.manager.WorkloadEventsDelta
+	54,  // 151: telepresence.manager.Manager.WatchClusterInfo:output_type -> telepresence.manager.ClusterInfo
+	74,  // 152: telepresence.manager.Manager.WatchNamespaces:output_type -> telepresence.manager.NamespaceList
+	19,  // 153: telepresence.manager.Manager.EnsureAgent:output_type -> telepresence.manager.AgentInfoSnapshot
+	94,  // 154: telepresence.manager.Manager.ReleaseAgent:output_type -> google.protobuf.Empty
+	28,  // 155: telepresence.manager.Manager.PrepareIntercept:output_type -> telepresence.manager.PreparedIntercept
+	14,  // 156: telepresence.manager.Manager.CreateIntercept:output_type -> telepresence.manager.InterceptInfo
+	94,  // 157: telepresence.manager.Manager.RemoveIntercept:output_type -> google.protobuf.Empty
+	14,  // 158: telepresence.manager.Manager.GetIntercept:output_type -> telepresence.manager.InterceptInfo
+	94,  // 159: telepresence.manager.Manager.ReviewIntercept:output_type -> google.protobuf.Empty
+	65,  // 160: telepresence.manager.Manager.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
+	47,  // 161: telepresence.manager.Manager.Lookup:output_type -> telepresence.manager.LookupResponse
+	49,  // 162: telepresence.manager.Manager.LookupDNS:output_type -> telepresence.manager.DNSResponse
+	51,  // 163: telepresence.manager.Manager.ResolveServicePort:output_type -> telepresence.manager.ResolveServicePortResponse
+	33,  // 164: telepresence.manager.Manager.WatchLogLevel:output_type -> telepresence.manager.LogLevelRequest
+	38,  // 165: telepresence.manager.Manager.Tunnel:output_type -> telepresence.manager.TunnelMessage
+	39,  // 166: telepresence.manager.Manager.GetQuicTunnelEndpoint:output_type -> telepresence.manager.QuicTunnelEndpoint
+	41,  // 167: telepresence.manager.Manager.GetSessionCredential:output_type -> telepresence.manager.SessionCredential
+	45,  // 168: telepresence.manager.Manager.GetQuicAgentCert:output_type -> telepresence.manager.QuicAgentCert
+	43,  // 169: telepresence.manager.Manager.WatchQuicBackends:output_type -> telepresence.manager.QuicBackendSnapshot
+	94,  // 170: telepresence.manager.Manager.ReportMetrics:output_type -> google.protobuf.Empty
+	94,  // 171: telepresence.manager.Manager.UninstallAgents:output_type -> google.protobuf.Empty
+	129, // [129:172] is the sub-list for method output_type
+	86,  // [86:129] is the sub-list for method input_type
+	86,  // [86:86] is the sub-list for extension type_name
+	86,  // [86:86] is the sub-list for extension extendee
+	0,   // [0:86] is the sub-list for field type_name
 }
 
 func init() { file_manager_manager_proto_init() }
@@ -6468,8 +6706,8 @@ func file_manager_manager_proto_init() {
 	if File_manager_manager_proto != nil {
 		return
 	}
-	file_manager_manager_proto_msgTypes[8].OneofWrappers = []any{}
-	file_manager_manager_proto_msgTypes[26].OneofWrappers = []any{
+	file_manager_manager_proto_msgTypes[11].OneofWrappers = []any{}
+	file_manager_manager_proto_msgTypes[29].OneofWrappers = []any{
 		(*LogChunk_Data)(nil),
 		(*LogChunk_Error)(nil),
 		(*LogChunk_PodYaml)(nil),
@@ -6480,7 +6718,7 @@ func file_manager_manager_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_manager_manager_proto_rawDesc), len(file_manager_manager_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   82,
+			NumMessages:   86,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

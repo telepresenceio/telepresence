@@ -541,6 +541,15 @@ func applyReview(intercept *Intercept, review *rpc.ReviewInterceptRequest) {
 	intercept.MountPoint = review.MountPoint
 	intercept.MechanismArgsDesc = review.MechanismArgsDesc
 	intercept.Environment = review.Environment
+	if len(intercept.KafkaRoutes) > 0 {
+		intercept.Environment = maps.Clone(review.Environment)
+		if intercept.Environment == nil {
+			intercept.Environment = make(map[string]string)
+		}
+		for _, route := range intercept.KafkaRoutes {
+			maps.Copy(intercept.Environment, route.Environment)
+		}
+	}
 	intercept.Mounts = review.Mounts
 }
 

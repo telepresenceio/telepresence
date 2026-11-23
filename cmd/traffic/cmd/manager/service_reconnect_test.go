@@ -2,7 +2,10 @@ package manager
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	authv1 "k8s.io/api/authorization/v1"
@@ -208,4 +211,68 @@ func TestReconnectClient_UnavailableReview_Fails(t *testing.T) {
 		}},
 	})
 	req.Error(err)
+}
+
+// TestReconnectClient_KafkaAttachFailure_SkipsOnlyThatIntercept: of two
+// restored intercepts, the one whose Kafka route attach fails is dropped
+// while the other and the session are still restored, and the RPC succeeds.
+func TestReconnectClient_KafkaAttachFailure_SkipsOnlyThatIntercept(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+	// Any request to this server fails, so matchingSplits always returns an
+	// ordinary (non-404/403) error and attach fails unconditionally.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	svc, ok := mgr.(*service)
+	req.True(ok)
+	svc.kafka = newKafkaAPI(testRESTClient(t, server), time.Minute)
+
+	testClients := testdata.GetTestClients(t)
+	alice := testClients["alice"]
+
+	const lostSessionID = "lost-session-kafka"
+	kafkaIntercept := &rpc.InterceptInfo{
+		Id: lostSessionID + ":ic-kafka",
+		Spec: &rpc.InterceptSpec{
+			Name:      "ic-kafka",
+			Client:    alice.Name,
+			Agent:     "test-agent",
+			Namespace: "default",
+			Mechanism: "tcp",
+			Kafka:     &rpc.KafkaIntercept{},
+		},
+		Disposition:   rpc.InterceptDispositionType_WAITING,
+		ClientSession: &rpc.SessionInfo{SessionId: lostSessionID},
+	}
+	plainIntercept := &rpc.InterceptInfo{
+		Id: lostSessionID + ":ic-plain",
+		Spec: &rpc.InterceptSpec{
+			Name:      "ic-plain",
+			Client:    alice.Name,
+			Agent:     "test-agent-2",
+			Namespace: "default",
+			Mechanism: "tcp",
+		},
+		Disposition:   rpc.InterceptDispositionType_WAITING,
+		ClientSession: &rpc.SessionInfo{SessionId: lostSessionID},
+	}
+
+	_, err := mgr.ReconnectClient(sctx, &rpc.ReconnectClientRequest{
+		Session:    &rpc.SessionInfo{SessionId: lostSessionID},
+		Client:     alice,
+		Intercepts: []*rpc.InterceptInfo{kafkaIntercept, plainIntercept},
+	})
+	req.NoError(err, "a failed Kafka route attach must not fail the whole reconnect")
+
+	_, ok = mgr.State().GetIntercept(lostSessionID + ":ic-kafka")
+	req.False(ok, "the intercept whose Kafka route attach failed must be skipped")
+	_, ok = mgr.State().GetIntercept(lostSessionID + ":ic-plain")
+	req.True(ok, "the other intercept must still be restored")
 }

@@ -11,10 +11,14 @@ import (
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/eventwatch"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+// kafkaDeploymentName is the chart's fixed tp-kafka provider Deployment name.
+const kafkaDeploymentName = "tp-kafka"
 
 // managerStatefulSetName is the chart's fixed traffic-manager StatefulSet name; older
 // chart versions run the traffic-manager as a Deployment of the same name instead.
@@ -42,6 +46,7 @@ type HealthFacts struct {
 	Quic              *Finding `json:"quic,omitempty"`
 	X509ClientAuth    *Finding `json:"x509ClientAuth,omitempty"`
 	ExternalEndpoint  *Finding `json:"externalEndpoint,omitempty"`
+	Kafka             *Finding `json:"kafka,omitempty"`
 	VersionSkew       Finding  `json:"versionSkew"`
 }
 
@@ -75,6 +80,10 @@ func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth Client
 	if deref(rel.Values.ExternalEndpoint.Enabled) {
 		ext := p.healthExternalEndpoint(ctx)
 		h.ExternalEndpoint = &ext
+	}
+	if deref(rel.Values.Kafka.Enabled) {
+		kf := kafkaProviderFinding(ctx, p.KubeClient, p.ManagerNamespace)
+		h.Kafka = &kf
 	}
 	return h
 }
@@ -144,6 +153,13 @@ func (p *Prober) managerReadyFinding(ctx context.Context, mw managerWorkloadResu
 // is unready, attaches the Warning events the API server still retains for
 // the release.
 func (p *Prober) workloadReadiness(ctx context.Context, kind string, desired, ready int32) Finding {
+	return workloadReadinessFinding(ctx, p.KubeClient, p.ManagerNamespace, managerStatefulSetName, kind, desired, ready)
+}
+
+// workloadReadinessFinding classifies a workload's replica readiness and,
+// when it is unready, attaches the Warning events the API server still
+// retains for eventName.
+func workloadReadinessFinding(ctx context.Context, ki kubernetes.Interface, ns, eventName, kind string, desired, ready int32) Finding {
 	if desired == 0 {
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the %s is scaled to zero replicas", kind)}}
 	}
@@ -151,7 +167,7 @@ func (p *Prober) workloadReadiness(ctx context.Context, kind string, desired, re
 		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}}
 	}
 	evidence := []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}
-	if es, err := eventwatch.ListWarnings(ctx, p.KubeClient, p.ManagerNamespace, managerStatefulSetName); err == nil {
+	if es, err := eventwatch.ListWarnings(ctx, ki, ns, eventName); err == nil {
 		for _, e := range es {
 			evidence = append(evidence, fmt.Sprintf("%s: %s", e.Reason, e.Note))
 			if len(evidence) > healthEventMax {
@@ -160,6 +176,21 @@ func (p *Prober) workloadReadiness(ctx context.Context, kind string, desired, re
 		}
 	}
 	return Finding{Verdict: VerdictNo, Evidence: evidence}
+}
+
+// kafkaProviderFinding classifies the tp-kafka Deployment's readiness; free
+// of Prober state so verify_kafka.go can reuse it after apply.
+func kafkaProviderFinding(ctx context.Context, ki kubernetes.Interface, ns string) Finding {
+	dep, err := ki.AppsV1().Deployments(ns).Get(ctx, kafkaDeploymentName, meta.GetOptions{})
+	switch {
+	case apierrors.IsNotFound(err):
+		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
+			"the %s Deployment was not found although the release enables the Kafka provider", kafkaDeploymentName)}}
+	case err != nil:
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{fmt.Sprintf(
+			"the %s deployment could not be read: %v", kafkaDeploymentName, err)}}
+	}
+	return workloadReadinessFinding(ctx, ki, ns, kafkaDeploymentName, "tp-kafka deployment", replicaCount(dep.Spec.Replicas), dep.Status.ReadyReplicas)
 }
 
 // healthExternalEndpoint reports whether the external control endpoint's
