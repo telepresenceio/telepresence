@@ -373,9 +373,6 @@ already TLS 1.3 end-to-end, and the port-forward path is already TLS on its
 client-to-manager leg, so an SFTP-level TLS wrap would double-encrypt the
 bulkiest data path telepresence carries for no real confidentiality gain.
 
-An SFTP mount needs the pod's address to be routed through Telepresence. A
-pod in a subnet that is listed in `neverProxySubnets` gets no SFTP mount.
-
 ### Version skew
 
 An old client presents no credential at all and is served normally by
