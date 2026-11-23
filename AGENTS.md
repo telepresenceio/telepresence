@@ -98,6 +98,27 @@ accessors, Mutate discipline, spec declarations), the RTEST_* environment,
 the manager/workload catalogs, labels and platform constraints, coverage,
 and compat runs.
 
+### What counts as tested
+
+A change is tested only when a regression test in `regression_test/`
+exercises it against a real cluster. A unit test shows that a function
+behaves in isolation; it does not show that the behavior holds for the
+real binaries on a real cluster, which is what a user gets. Prefer a
+regression test, and do not report a change as verified on the strength of
+a unit test alone.
+
+Keep unit tests few. Add one only where a regression test cannot reach the
+behavior — intricate pure logic, parsing and encoding edge cases, error
+paths that a cluster cannot be made to take reliably — and say in the test
+why the cluster path does not cover it. Unit tests that duplicate what a
+regression test already covers are clutter; leave them out.
+
+For a security fix, the regression test performs the attack from the
+least-privileged position the vulnerability allows, and asserts the
+outcome an attacker would observe (the gRPC status, an unchanged restart
+count, a secret that is absent). It must fail on a build without the fix.
+A test that passes with and without the fix proves nothing.
+
 ## Linting
 
 ```bash
