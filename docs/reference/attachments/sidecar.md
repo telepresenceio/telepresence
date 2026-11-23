@@ -69,6 +69,8 @@ The following are the Helm chart values to disable the workload types:
 - `workloads.replicaSets.enabled=false` for `ReplicaSets`,
 - `workloads.statefulSets.enabled=false` for `StatefulSets`.
 
+When `workloads.replicaSets.enabled=false` and `Deployments` or `ArgoRollouts` are enabled, the traffic-manager is still granted read-only `get` access to `ReplicaSets`, so that it can map a pod to its owning `Deployment` or `Rollout`.
+
 ### Enable ArgoRollouts
 
 In order to use `ArgoRollouts`, you must pass the Helm chart value `workloads.argoRollouts.enabled=true` when installing the traffic-manager.
