@@ -162,7 +162,8 @@ it. An `enforcing` traffic-manager refuses:
 - kubeconfigs that authenticate with a client certificate the traffic-manager cannot verify.
 
 To keep the previous mode while you prepare, add `--set security.authentication.mode=permissive` to the upgrade
-command. See [Moving an existing installation to `enforcing`](../reference/authentication.md#moving-an-existing-installation-to-enforcing)
+command, together with the values that you set earlier. See
+[Moving an existing installation to `enforcing`](../reference/authentication.md#moving-an-existing-installation-to-enforcing)
 for the details.
 
 

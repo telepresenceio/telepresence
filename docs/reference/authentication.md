@@ -272,11 +272,15 @@ one of the grants above, and check that each kubeconfig can produce a bearer
 token or a verifiable client certificate. Clients and agents at 2.31 or later
 send a token whenever their credentials can produce one.
 
-To stay on `permissive` for a while, set the mode when upgrading:
+To stay on `permissive` for a while, set the mode when upgrading. An upgrade
+with value flags uses only the values given on that command line, so repeat
+the values that you set earlier, for example from your values file:
 
 ```console
-$ telepresence helm upgrade --set security.authentication.mode=permissive
+$ telepresence helm upgrade -f my-values.yaml --set security.authentication.mode=permissive
 ```
+
+Later upgrades without value flags keep the mode.
 
 In `permissive` mode, the traffic-manager logs its authentication and
 authorization decisions for audit.
