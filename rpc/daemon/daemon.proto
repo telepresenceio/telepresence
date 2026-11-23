@@ -62,6 +62,12 @@ service Daemon {
   // Each call replaces the previously declared set.
   rpc SetInterceptShortcuts(SetInterceptShortcutsRequest) returns (google.protobuf.Empty);
 
+  // SetInterceptTargets declares the local destinations that the session's intercepts
+  // deliver cluster traffic to. The root daemon dials a destination requested by a
+  // traffic-agent only if it is one of these. Each call replaces the previously
+  // declared set.
+  rpc SetInterceptTargets(SetInterceptTargetsRequest) returns (google.protobuf.Empty);
+
   rpc ActivityWatcher(google.protobuf.Empty) returns (stream Activity);
 
   // WatchAgentPods is called by the user daemon to push the agent-pod
@@ -328,6 +334,27 @@ message InterceptShortcut {
 
   // The local intercept handler, in netip.AddrPort binary form.
   bytes target = 6;
+}
+
+// InterceptTarget is a local destination that the traffic-agents of a workload may
+// ask the root daemon to dial.
+message InterceptTarget {
+  // The namespace of the intercepted workload.
+  string namespace = 1;
+
+  // The name of the intercepted workload.
+  string workload = 2;
+
+  // The protocol, "TCP" or "UDP".
+  string protocol = 3;
+
+  // The destination in netip.AddrPort binary form. The address may be a synthetic IP
+  // that stands in for a host name.
+  bytes target = 4;
+}
+
+message SetInterceptTargetsRequest {
+  repeated InterceptTarget targets = 1;
 }
 
 message SetInterceptShortcutsRequest {

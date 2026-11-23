@@ -273,6 +273,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 	}
 	pat.cancelUnwanted(s, nil)
 	s.pushInterceptShortcuts(intercepts)
+	s.pushInterceptTargets(intercepts)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does

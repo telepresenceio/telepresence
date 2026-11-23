@@ -65,6 +65,19 @@ func NewZeroID() ConnID {
 	return ConnID(make([]byte, 13))
 }
 
+// Valid returns true if the ConnID has the length of an IPv4 (13) or IPv6 (37) ConnID and
+// a known protocol. The accessors return zero values for an invalid ConnID.
+func (id ConnID) Valid() bool {
+	if len(id) != 13 && len(id) != 37 {
+		return false
+	}
+	switch types.Proto(id[len(id)-1]) {
+	case types.ProtoTCP, types.ProtoUDP:
+		return true
+	}
+	return false
+}
+
 // areBothIPv4 returns true if the source and destination of this ConnID are both IPv4.
 func (id ConnID) areBothIPv4() bool {
 	return len(id) == 13
@@ -72,7 +85,7 @@ func (id ConnID) areBothIPv4() bool {
 
 // IsSourceIPv4 returns true if the source of this ConnID is IPv4.
 func (id ConnID) IsSourceIPv4() bool {
-	return id.areBothIPv4() || len(id) > 16 && net.IP(id[0:16]).To4() != nil
+	return id.areBothIPv4() || len(id) == 37 && net.IP(id[0:16]).To4() != nil
 }
 
 // IsDestinationIPv4 returns true if the destination of this ConnID is IPv4.
@@ -88,6 +101,9 @@ func (id ConnID) Source() netip.AddrPort {
 // SourceAddr returns the source IP.
 func (id ConnID) SourceAddr() netip.Addr {
 	b := []byte(id)
+	if len(b) != 13 && len(b) != 37 {
+		return netip.Addr{}
+	}
 	if id.areBothIPv4() {
 		return netip.AddrFrom4(*(*[4]byte)(b[0:4]))
 	}
@@ -96,6 +112,9 @@ func (id ConnID) SourceAddr() netip.Addr {
 
 // SourcePort returns the source port.
 func (id ConnID) SourcePort() uint16 {
+	if len(id) != 13 && len(id) != 37 {
+		return 0
+	}
 	if id.areBothIPv4() {
 		return binary.BigEndian.Uint16([]byte(id)[4:])
 	}
@@ -110,6 +129,9 @@ func (id ConnID) Destination() netip.AddrPort {
 // DestinationAddr returns the destination IP.
 func (id ConnID) DestinationAddr() netip.Addr {
 	b := []byte(id)
+	if len(b) != 13 && len(b) != 37 {
+		return netip.Addr{}
+	}
 	if id.areBothIPv4() {
 		return netip.AddrFrom4(*(*[4]byte)(b[6:10]))
 	}
@@ -118,6 +140,9 @@ func (id ConnID) DestinationAddr() netip.Addr {
 
 // DestinationPort returns the destination port.
 func (id ConnID) DestinationPort() uint16 {
+	if len(id) != 13 && len(id) != 37 {
+		return 0
+	}
 	if id.areBothIPv4() {
 		return binary.BigEndian.Uint16([]byte(id)[10:])
 	}
@@ -126,6 +151,9 @@ func (id ConnID) DestinationPort() uint16 {
 
 // Protocol returns the protocol, e.g. ipproto.TCP.
 func (id ConnID) Protocol() types.Proto {
+	if len(id) == 0 {
+		return 0
+	}
 	return types.Proto(id[len(id)-1])
 }
 
@@ -191,6 +219,9 @@ func (id ConnID) DestinationNetwork() string {
 
 // Reply returns a copy of this ConnID with swapped source and destination properties.
 func (id ConnID) Reply() ConnID {
+	if !id.Valid() {
+		return id
+	}
 	return NewConnID(id.Protocol(), id.Destination(), id.Source())
 }
 
@@ -202,8 +233,8 @@ func (id ConnID) ReplyString() string {
 
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort.
 func (id ConnID) String() string {
-	if len(id) < 13 {
-		return "bogus ConnID"
+	if !id.Valid() {
+		return fmt.Sprintf("bogus ConnID (%d bytes)", len(id))
 	}
 	return fmt.Sprintf("%s %s -> %s",
 		id.Protocol(), id.Source(), id.Destination())

@@ -7,6 +7,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -116,4 +117,57 @@ func (s *session) shortcutTarget(p types.Proto, dst netip.AddrPort) (netip.AddrP
 		podWorkload = s.agentClients.WorkloadForIP
 	}
 	return t.target(p, dst, podWorkload)
+}
+
+// interceptTargetKey identifies a local destination of an intercepted workload.
+type interceptTargetKey struct {
+	namespace string
+	workload  string
+	proto     types.Proto
+	dst       netip.AddrPort
+}
+
+// interceptTargets is the set of local destinations that traffic-agents may ask this
+// daemon to dial.
+type interceptTargets map[interceptTargetKey]struct{}
+
+func newInterceptTargets(ctx context.Context, targets []*rpc.InterceptTarget) interceptTargets {
+	t := make(interceptTargets, len(targets))
+	for _, it := range targets {
+		proto, err := types.ParseProto(it.Protocol)
+		if err == nil {
+			var dst netip.AddrPort
+			if dst, err = validAddrPort(it.Target); err == nil {
+				t[interceptTargetKey{
+					namespace: it.Namespace,
+					workload:  it.Workload,
+					proto:     proto,
+					dst:       netip.AddrPortFrom(dst.Addr().Unmap(), dst.Port()),
+				}] = struct{}{}
+			}
+		}
+		if err != nil {
+			clog.Warnf(ctx, "ignoring invalid intercept target for workload %s.%s: %v", it.Workload, it.Namespace, err)
+		}
+	}
+	return t
+}
+
+// allows returns true if the given workload's traffic-agents may ask for id to be dialed.
+func (t interceptTargets) allows(namespace, workload string, id tunnel.ConnID) bool {
+	_, ok := t[interceptTargetKey{namespace: namespace, workload: workload, proto: id.Protocol(), dst: id.Destination()}]
+	return ok
+}
+
+// SetInterceptTargets replaces the set of destinations that traffic-agents may ask this
+// daemon to dial.
+func (s *session) SetInterceptTargets(ctx context.Context, targets []*rpc.InterceptTarget) {
+	t := newInterceptTargets(ctx, targets)
+	s.interceptTargets.Store(&t)
+}
+
+// dialAllowed implements agentpf.DialPolicy.
+func (s *session) dialAllowed(namespace, workload string, id tunnel.ConnID) bool {
+	t := s.interceptTargets.Load()
+	return t != nil && t.allows(namespace, workload, id)
 }
