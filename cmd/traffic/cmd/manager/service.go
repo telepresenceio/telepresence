@@ -339,7 +339,7 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	ctx = managerutil.WithSessionInfo(ctx, info.Session)
 	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
 	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "a session id is required")
+		return nil, status.Error(codes.InvalidArgument, "Session ID is required")
 	}
 	if state.IsAgentSessionID(sessionID) {
 		return nil, status.Error(codes.InvalidArgument, "not a client session id")
@@ -2581,6 +2581,9 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 func (s *service) ownedClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
 	ctx = managerutil.WithSessionInfo(ctx, sessionInfo)
 	sessionID := tunnel.SessionID(sessionInfo.GetSessionId())
+	if sessionID == "" {
+		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
 	session := s.state.GetClient(sessionID)
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
