@@ -53,7 +53,7 @@ The traffic-manager does not replace a pod when only the traffic-agent image cha
 <Note>
 	<Title type="security">Callers without a grant are shown less</Title>
 	<Body>
-<code>telepresence gather-logs</code> now leaves out, without a note, the logs of traffic-agents in namespaces where the caller holds no <code>get</code> grant on <code>logs.telepresence.io</code>. An intercept can now be read by its name only by the session that owns it.
+In enforcing mode, <code>telepresence gather-logs</code> now leaves out, without a note, the logs of traffic-agents in namespaces where the caller holds no <code>get</code> grant on <code>logs.telepresence.io</code>. An intercept can now be read by its name only by the session that owns it.
   </Body>
 </Note>
 <Note>

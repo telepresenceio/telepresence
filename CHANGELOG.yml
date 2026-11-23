@@ -101,9 +101,9 @@ items:
       - type: security
         title: Callers without a grant are shown less
         body: >-
-          <code>telepresence gather-logs</code> now leaves out, without a
-          note, the logs of traffic-agents in namespaces where the caller
-          holds no <code>get</code> grant on
+          In enforcing mode, <code>telepresence gather-logs</code> now
+          leaves out, without a note, the logs of traffic-agents in
+          namespaces where the caller holds no <code>get</code> grant on
           <code>logs.telepresence.io</code>. An intercept can now be read
           by its name only by the session that owns it.
       - type: security

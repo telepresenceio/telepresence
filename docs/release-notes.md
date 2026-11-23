@@ -47,7 +47,7 @@ The traffic-manager does not replace a pod when only the traffic-agent image cha
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Callers without a grant are shown less</div></div>
 <div style="margin-left: 15px">
 
-<code>telepresence gather-logs</code> now leaves out, without a note, the logs of traffic-agents in namespaces where the caller holds no <code>get</code> grant on <code>logs.telepresence.io</code>. An intercept can now be read by its name only by the session that owns it.
+In enforcing mode, <code>telepresence gather-logs</code> now leaves out, without a note, the logs of traffic-agents in namespaces where the caller holds no <code>get</code> grant on <code>logs.telepresence.io</code>. An intercept can now be read by its name only by the session that owns it.
 </div>
 
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Malformed and excessive input is handled safely</div></div>
