@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -590,6 +591,9 @@ func nodeAgentTargets(ctx context.Context, wl k8sapi.Workload) ([]nodeAgentPodTa
 	var checkErr error
 	for i := range pods.Items {
 		pod := &pods.Items[i]
+		if !mutator.PodControlledBy(ctx, pod, wl) {
+			continue
+		}
 		if !podRunningAndReady(pod) {
 			continue
 		}

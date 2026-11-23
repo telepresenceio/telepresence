@@ -14,6 +14,7 @@ import (
 	core "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
@@ -203,25 +204,37 @@ func ownedAgentConfig(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) *a
 	return sc
 }
 
-// PodControlledBy reports whether the pod's controller owner references lead to wl, directly or
-// through a ReplicaSet, by kind, name, and UID. The workload labels of the pod are not consulted.
+// PodControlledBy reports whether the pod's controller owner references lead to wl by kind, name,
+// and UID, and whether the pod's labels match the selector of wl. A ReplicaSet or a StatefulSet
+// owns its pods directly. A Deployment or a Rollout owns them through a ReplicaSet that it
+// controls.
 func PodControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) bool {
 	ref := controllerRef(pod.OwnerReferences)
 	if ref == nil {
 		return false
 	}
-	if refersTo(ref, wl) {
-		return true
-	}
-	if ref.Kind != string(k8sapi.ReplicaSetKind) {
+	switch wl.GetKind() {
+	case k8sapi.ReplicaSetKind, k8sapi.StatefulSetKind:
+		if !refersTo(ref, wl) {
+			return false
+		}
+	case k8sapi.DeploymentKind, k8sapi.RolloutKind:
+		if ref.Kind != string(k8sapi.ReplicaSetKind) {
+			return false
+		}
+		rs, err := agentmap.GetWorkload(ctx, ref.Name, pod.Namespace, k8sapi.ReplicaSetKind)
+		if err != nil || rs.GetUID() != ref.UID {
+			return false
+		}
+		rsRef := controllerRef(rs.GetOwnerReferences())
+		if rsRef == nil || !refersTo(rsRef, wl) {
+			return false
+		}
+	default:
 		return false
 	}
-	rs, err := agentmap.GetWorkload(ctx, ref.Name, pod.Namespace, k8sapi.ReplicaSetKind)
-	if err != nil || rs.GetUID() != ref.UID {
-		return false
-	}
-	rsRef := controllerRef(rs.GetOwnerReferences())
-	return rsRef != nil && refersTo(rsRef, wl)
+	selector, err := wl.Selector()
+	return err == nil && selector.Matches(labels.Set(pod.Labels))
 }
 
 func controllerRef(refs []meta.OwnerReference) *meta.OwnerReference {
