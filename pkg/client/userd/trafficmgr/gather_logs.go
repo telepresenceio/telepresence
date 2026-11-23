@@ -290,20 +290,6 @@ type podLogAssembly struct {
 	errText string
 }
 
-// recordSkippedNote saves a pod-less error frame, the manager's note that some
-// logs were skipped, as a file and a result entry.
-func recordSkippedNote(ctx context.Context, exportDir string, chunk *manager.LogChunk, result map[string]string) {
-	e := chunk.GetError()
-	if e == "" {
-		return
-	}
-	const skippedFile = "skipped-agent-logs.txt"
-	if err := os.WriteFile(filepath.Join(exportDir, skippedFile), []byte(e+"\n"), 0o666); err != nil {
-		clog.Error(ctx, err)
-	}
-	result[skippedFile] = e
-}
-
 // validLogSource reports whether the pod name and namespace of chunk are valid Kubernetes names.
 // The first chunk from an invalid source is logged and noted in result.
 func validLogSource(ctx context.Context, chunk *manager.LogChunk, ignored map[string]bool, result map[string]string) bool {
@@ -343,10 +329,6 @@ func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkRecei
 			return result, err
 		}
 
-		if chunk.PodName == "" && chunk.PodNamespace == "" {
-			recordSkippedNote(ctx, exportDir, chunk, result)
-			continue
-		}
 		if !validLogSource(ctx, chunk, ignored, result) {
 			continue
 		}
