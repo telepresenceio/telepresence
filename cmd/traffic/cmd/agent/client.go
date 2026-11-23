@@ -154,6 +154,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	snapshots := make(chan []*rpc.InterceptInfo)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
 		return interceptWatchLoop(ctx, manager, session, info, snapshots, retryInterval, func() {
+			state.ResetSessionAuthorizer()
 			select {
 			case refreshQuicCert <- struct{}{}:
 			default:

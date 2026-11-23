@@ -36,6 +36,9 @@ type State interface {
 	SetFileSharingPorts(ftp uint16, sftp uint16)
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
 
+	// ResetSessionAuthorizer replaces the session authorizer with an empty one for the current manager session.
+	ResetSessionAuthorizer()
+
 	// SetGRPCServer records the agent's gRPC server so that RefreshQuicAgentListener
 	// can serve it over the QUIC listener as well as the plain TCP one.
 	SetGRPCServer(svc *grpc.Server)
@@ -236,6 +239,10 @@ func (s *state) SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClie
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version
 	s.fileShareAuth.authorizer.Store(newSessionAuthorizer(manager, sessionInfo))
+}
+
+func (s *state) ResetSessionAuthorizer() {
+	s.fileShareAuth.authorizer.Store(newSessionAuthorizer(s.manager, s.sessionInfo))
 }
 
 func (s *state) SetGRPCServer(svc *grpc.Server) {
