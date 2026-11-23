@@ -69,11 +69,30 @@ to the dedicated `traffic-manager` audience. Because the token's audience is
 not the Kubernetes API server, it is useless against the API server even if
 leaked, unlike the pod's ordinary ServiceAccount token.
 
-A `TokenReview` of a bound token also returns the pod's binding claims (its
-pod name and UID). The traffic-manager checks those claims against the pod
-identity the agent presents on arrival, so a pod cannot register as a
-traffic-agent for a workload it does not run, even though its own
-ServiceAccount token would otherwise pass authentication.
+In `enforcing` mode the traffic-manager accepts an agent only when all of
+these hold:
+
+- **The token carries the `traffic-manager` audience.** A token that
+  passes review with only the API server's audience, such as the pod's
+  ordinary ServiceAccount token, is rejected with `PermissionDenied` on
+  every call an agent makes, not only when it registers.
+- **The pod exists and matches the token.** A `TokenReview` of a bound
+  token returns the pod's name and UID. The pod must exist with that UID,
+  and the pod IP that the agent reports must be one of the pod's
+  addresses.
+- **The pod is a traffic-agent pod of the workload it claims.** The pod
+  must have a `traffic-agent` container. The workload that its owner
+  references lead to, checked by UID at each step, must have the kind and
+  name that the agent reports.
+- **A node-agent's pod belongs to its Job.** For an agent running in
+  [node-agent mode](node-agent.md), the pod must be controlled by a Job
+  (matched by UID) that the traffic-manager created for the reported
+  workload and namespace.
+
+A rejected agent gets `PermissionDenied`, and the traffic-manager logs the
+reason. If the traffic-manager can't look up the pod or its owners because
+the API server is unreachable, it reports `Unavailable`, and the agent
+retries.
 
 Only a traffic-agent can register an agent session. The traffic-manager
 ignores traffic-agents that a client lists when it reconnects after a
@@ -206,11 +225,11 @@ traffic: it also runs an FTP and an SFTP server for remote file mounts, and
 its gRPC surface accepts tunnel and dial-watcher calls from the client's root
 daemon. All three ports are reachable by anything with network access to the
 agent's pod — the same "any pod in the cluster" reachability described
-above — and none of them used to check who was calling: a caller that could
-merely reach the pod could drive another client's tunnel, register as its
-dial watcher, or read and write its mounted files. The traffic-manager and
-agent close that gap the same way the manager's own gRPC surface does: every
-caller presents a session credential, and the agent verifies it.
+above. The traffic-manager and agent protect them the same way the manager's
+own gRPC surface is protected: every caller presents a session credential,
+and the agent verifies it. In `enforcing` mode the agent also asks the
+traffic-manager what the credential's session may do (see
+[Access levels](#access-levels)).
 
 ### The session credential
 
@@ -248,7 +267,33 @@ reconnect:
 | Mode | Behavior |
 |------|----------|
 | `disabled` / `permissive` | A credential is verified when presented and a failure is logged; a connection or call without one is still served. |
-| `enforcing` | No valid session credential, no file access and no tunnel or dial-watcher call. |
+| `enforcing` | No valid session credential, no file access and no tunnel or dial-watcher call. A valid credential is not enough: the session must also hold the [access level](#access-levels) that the call needs. |
+
+### Access levels
+
+In `enforcing` mode a traffic-agent asks the traffic-manager what a client
+session may do through it, and the traffic-manager answers with one of three
+levels. Each level includes the ones below it.
+
+| Level | What the session may do through the agent | What the client needs |
+|-------|-------------------------------------------|-----------------------|
+| none | Nothing. Tunnel, dial-watcher, FTP and SFTP requests are refused with `PermissionDenied`. | No access to the agent's namespace or workload, a namespace that the traffic-manager doesn't manage, or a session that no longer exists. |
+| network | Tunnels to anything except the agent's own file servers and loopback, and the dial watcher. | The ability to read the agent's namespace or the agent's workload, as described in [Authorization of namespace content](#authorization-of-namespace-content). |
+| files | Everything in network, plus the FTP and SFTP servers, and tunnels to loopback or to the pod's own addresses on the file ports. | The network level, and the `create` or `get` grant on `attachments.telepresence.io` for the workload (by name or for the whole namespace), as described for [individual workloads](#authorization-of-namespace-content). |
+
+The traffic-manager reviews the grants for the client's own Kubernetes
+identity, never the agent's. An intercepting or ingesting client holds `create` or `get` on the
+workload's attachment, so it gets the files level. A client that can read
+the namespace but holds neither grant on that workload reaches the agent's
+network side only.
+
+The agent remembers each answer for five minutes per client session and
+credential, except a `none` answer, which it remembers for fifteen
+seconds. A grant that is revoked therefore stops working on an
+agent within five minutes, not at once. A grant that is added takes effect
+within fifteen seconds for a session that was refused. A failed call to
+the traffic-manager counts as `none` for that request and is not
+remembered.
 
 ### FTP
 
@@ -308,10 +353,29 @@ credential — the old agent has no verification code path, so its ports stay
 exactly as open as before — but nothing breaks. Talking through a manager
 that predates session credentials, a new agent never receives credential
 material to verify against. The manager tells it so, and the agent then
-accepts every connection and call unauthenticated, the same as before this
-feature existed. An agent that has not yet heard from its manager refuses
-every FTP login, SFTP connection, `WatchDial` and `Tunnel` call until it
-has: the gRPC calls report `Unavailable`, which a client can retry.
+accepts every connection and call unauthenticated. An agent that has not yet
+heard from its manager refuses every FTP login, SFTP connection, `WatchDial`
+and `Tunnel` call until it has: the gRPC calls report `Unavailable`, which a
+client can retry.
+
+The [access levels](#access-levels) add two more cases:
+
+- **An agent of version 2.34 or later with an older traffic-manager.** The
+  traffic-manager answers the access call with `Unimplemented`. The agent
+  then treats every session that presents a valid credential as having the
+  files level, which is how agents before 2.34 behave. It stays in that
+  state until the agent restarts, so the agent doesn't pick up the access
+  levels after the traffic-manager is upgraded.
+- **An agent older than 2.34 with a current traffic-manager.** The agent
+  never asks for access levels and checks the session credential only. The
+  traffic-manager does not replace a pod when only the agent image changes,
+  so such an agent keeps this behaviour until its pod is restarted (for
+  example with `kubectl rollout restart`), which injects the current agent
+  image.
+
+The checks on the agent's identity depend only on the traffic-manager, so
+they apply to agents of every version that sends the `traffic-manager`
+audience token.
 
 ## Requirements under enforcement
 
@@ -329,8 +393,10 @@ With `security.authentication.mode: enforcing`:
   permission described in [RBAC](rbac.md). A grant scoped with `resourceNames`
   is honored as long as the workload's pods exist at the time the intercept is
   created (see [Authorization of intercepts](#authorization-of-intercepts)).
-- Agents must be running this release or later, since only they present the
-  audience-bound projected token that authentication requires.
+- Agents must be running version 2.31 or later, since only they present the
+  audience-bound projected token that authentication requires. Agents older
+  than 2.34 don't ask for [access levels](#access-levels); see
+  [Version skew](#version-skew).
 
 ## Caveats
 
