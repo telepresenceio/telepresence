@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -118,7 +119,7 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (*Princi
 		}
 		if ok {
 			p := principalFromInfo(resp.User)
-			p.ManagerAudience = true
+			p.ManagerAudience = slices.Contains(resp.Audiences, agentconfig.ManagerTokenAudience)
 			return p, nil
 		}
 	}
