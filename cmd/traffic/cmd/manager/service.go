@@ -1779,7 +1779,8 @@ func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptReq
 		return nil, err
 	}
 	interceptID := string(managerutil.GetSessionID(ctx)) + ":" + request.GetName()
-	if intercept, ok := s.state.GetIntercept(interceptID); ok {
+	if intercept, ok := s.state.GetIntercept(interceptID); ok &&
+		intercept.GetClientSession().GetSessionId() == string(managerutil.GetSessionID(ctx)) {
 		return intercept.InterceptInfo, nil
 	}
 	return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", request.Name)
