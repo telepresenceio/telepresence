@@ -115,7 +115,8 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			if a.unimplemented.CompareAndSwap(false, true) {
-				clog.Errorf(ctx, "the traffic-manager doesn't implement AuthorizeSessionAccess; this traffic-agent requires traffic-manager 2.34.0 or later, and refuses session access until then")
+				clog.Errorf(ctx, "the traffic-manager doesn't implement AuthorizeSessionAccess; "+
+					"this traffic-agent requires traffic-manager 2.34.0 or later, and refuses session access until then")
 			}
 			return accessNone
 		}
