@@ -60,7 +60,6 @@ type Service interface {
 	rpc.ManagerServer
 	ID() string
 	InstallID() string
-	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
 	State() *state.State
 	ClusterInfo() cluster.Info
@@ -300,6 +299,12 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClientRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, info.Session)
 	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "a session id is required")
+	}
+	if state.IsAgentSessionID(sessionID) {
+		return nil, status.Error(codes.InvalidArgument, "not a client session id")
+	}
 	if session := s.state.GetClient(sessionID); session != nil {
 		if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
 			return nil, err
@@ -330,7 +335,13 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	}
 
 	now := time.Now()
-	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
+	if existing := st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now); existing != nil {
+		// A concurrent reconnect stored the session first.
+		if err := state.ClientOwnershipError(ctx, sessionID, existing); err != nil {
+			return nil, err
+		}
+		return &empty.Empty{}, nil
+	}
 
 	intercepts, err := s.reviewRestoredIntercepts(ctx, info, now)
 	if err == nil {
@@ -387,7 +398,7 @@ func (s *service) reviewRestoredIntercepts(
 			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
 			Spec:          spec,
 			Disposition:   rpc.InterceptDispositionType_WAITING,
-			ClientSession: info.Session,
+			ClientSession: &rpc.SessionInfo{SessionId: string(sessionID)},
 			ModifiedAt:    timestamppb.New(now),
 		})
 	}
@@ -397,12 +408,8 @@ func (s *service) reviewRestoredIntercepts(
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
 	clog.Debugf(ctx, "Name %s, IP %s", agent.PodName, agent.PodIp)
-	if val := validateAgent(agent); val != "" {
-		return nil, status.Error(codes.InvalidArgument, val)
-	}
-
-	for _, cn := range agent.Containers {
-		s.removeExcludedEnvVars(cn.Environment)
+	if err := s.acceptAgentInfo(agent); err != nil {
+		return nil, err
 	}
 
 	principal, mismatch := verifiedAgentPrincipal(ctx, agent)
@@ -430,7 +437,7 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 	}
 	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
 	sessionID := tunnel.SessionID(rq.Session.SessionId)
-	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
+	if err := s.acceptAgentInfo(rq.Agent); err != nil {
 		return nil, err
 	}
 	principal, mismatch := verifiedAgentPrincipal(ctx, rq.Agent)
@@ -438,8 +445,26 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 		return nil, errors.Errorf(codes.PermissionDenied,
 			"bound token does not match the presented agent identity %s.%s", rq.Agent.PodName, rq.Agent.Namespace)
 	}
+	if sessionID != state.AgentSessionID(rq.Agent.PodUid) {
+		return nil, errors.Errorf(codes.PermissionDenied, "session %q does not belong to agent %s.%s", sessionID, rq.Agent.PodName, rq.Agent.Namespace)
+	}
+	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
+		return nil, err
+	}
 	_, err := s.state.RestoreAgent(ctx, sessionID, rq.Agent, principal, time.Now())
 	return &empty.Empty{}, err
+}
+
+// acceptAgentInfo validates agent and removes the environment variables that
+// the manager is configured to exclude.
+func (s *service) acceptAgentInfo(agent *rpc.AgentInfo) error {
+	if val := validateAgent(agent); val != "" {
+		return status.Error(codes.InvalidArgument, val)
+	}
+	for _, cn := range agent.Containers {
+		s.removeExcludedEnvVars(cn.Environment)
+	}
+	return nil
 }
 
 // verifiedAgentPrincipal returns the caller's principal when its bound-token pod
@@ -500,7 +525,11 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	sessionID := managerutil.GetSessionID(ctx)
-	if agent := s.state.GetAgent(sessionID); agent != nil {
+	if state.IsAgentSessionID(sessionID) {
+		agent := s.state.GetAgent(sessionID)
+		if agent == nil {
+			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+		}
 		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
 			return nil, err
 		}
@@ -549,9 +578,11 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 
 	sessionID := tunnel.SessionID(session.GetSessionId())
-	if agent := s.state.GetAgent(sessionID); agent != nil {
-		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
-			return nil, err
+	if state.IsAgentSessionID(sessionID) {
+		if agent := s.state.GetAgent(sessionID); agent != nil {
+			if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+				return nil, err
+			}
 		}
 	} else if client := s.state.GetClient(sessionID); client != nil {
 		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
@@ -1726,28 +1757,6 @@ func workloadPodNames(ctx context.Context, name, namespace string) ([]string, er
 	return names, nil
 }
 
-func (s *service) MakeInterceptID(ctx context.Context, sessionID string, name string) (string, error) {
-	// When something without a session ID (e.g. System A) calls this function,
-	// it is sending the intercept ID as the name, so we use that.
-	//
-	// TODO: Look at cmd/traffic/cmd/manager/internal/state API and see if it makes
-	// sense to make more / all functions use intercept ID instead of session ID + name.
-	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
-	// use in requests.
-	if sessionID == "" {
-		return name, nil
-	}
-	sid := tunnel.SessionID(sessionID)
-	client := s.state.GetClient(sid)
-	if client == nil {
-		return "", errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-	}
-	if err := state.ClientOwnershipError(ctx, sid, client); err != nil {
-		return "", err
-	}
-	return sessionID + ":" + name, nil
-}
-
 // RemoveIntercept lets a client remove an intercept.
 func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	name := riReq.Name
@@ -1765,10 +1774,11 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // GetIntercept gets an intercept info from intercept name.
 func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
-	interceptID, err := s.MakeInterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
+	ctx, _, err := s.ownedClientSession(ctx, request.GetSession())
 	if err != nil {
 		return nil, err
 	}
+	interceptID := string(managerutil.GetSessionID(ctx)) + ":" + request.GetName()
 	if intercept, ok := s.state.GetIntercept(interceptID); ok {
 		return intercept.InterceptInfo, nil
 	}
@@ -2195,10 +2205,10 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
 	name := request.Name
 	// Name must be at least one character long and end with a dot.
-	nl := len(name)
-	if nl < 2 || name[nl-1] != '.' {
-		return nil, status.Errorf(codes.InvalidArgument, "empty name")
+	if err = validateDNSName(name); err != nil {
+		return nil, err
 	}
+	nl := len(name)
 	nDots := 0
 	for _, c := range name {
 		if c == '.' {
@@ -2233,7 +2243,18 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	return response, nil
 }
 
+// validateDNSName requires at least one character before a trailing dot.
+func validateDNSName(name string) error {
+	if len(name) < 2 || name[len(name)-1] != '.' {
+		return status.Errorf(codes.InvalidArgument, "name must be at least one character long and end with a dot")
+	}
+	return nil
+}
+
 func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (response *rpc.DNSResponse, err error) {
+	if err = validateDNSName(request.Name); err != nil {
+		return nil, err
+	}
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	qType := uint16(request.Type)
 	qtn := dns2.TypeToString[qType]

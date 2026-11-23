@@ -448,7 +448,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 			Time:    env.ClientConnectionTTL,
 			Timeout: 20 * time.Second,
 		}))...)
-	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
+	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens), auth.WithReviewAdmission()), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)
 	clog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)

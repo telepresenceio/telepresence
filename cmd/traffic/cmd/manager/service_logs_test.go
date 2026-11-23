@@ -206,18 +206,47 @@ func TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams(t *testing.T) {
 		req.Empty(f.GetError(), "the authorized namespace's pod must not carry an error frame")
 	}
 
-	denied := framesFor(frames, "other")
-	req.NotEmpty(denied)
-	req.Equal(rpc.LogChunk_BEGIN, denied[0].Frame)
-	req.Equal(rpc.LogChunk_END, denied[len(denied)-1].Frame)
-	var gotDenialError bool
-	for _, f := range denied {
-		if e := f.GetError(); e != "" {
-			gotDenialError = true
-			req.Contains(e, "not permitted")
+	for _, f := range frames {
+		req.NotEqual("other", f.PodNamespace, "nothing about a denied namespace may be sent")
+		req.NotEqual("agent-other", f.PodName, "no pod of a denied namespace may be named")
+	}
+	var noted bool
+	for _, f := range frames {
+		if f.PodName == "" && f.GetError() != "" {
+			noted = true
+			req.NotContains(f.GetError(), "other")
 		}
 	}
-	req.True(gotDenialError, "the denied namespace's pod must carry an error frame instead of data")
+	req.True(noted, "a generic pod-less note must say that some logs were skipped")
+}
+
+// TestStreamLogs_ConnectOnly_NamesNoAgentPods: a caller without any logs
+// grant gets no frame that names an agent pod.
+func TestStreamLogs_ConnectOnly_NamesNoAgentPods(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "agent-secret", Namespace: "other"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: agentconfig.ContainerName}}},
+	}
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{pod},
+		func(e *managerutil.Env) { e.AuthenticationMode = auth.ModePermissive })
+	cs, ok := k8sapi.GetK8sInterface(sctx).(*fake.Clientset)
+	req.True(ok)
+	k8sapi.InstallFakeSubjectAccessReviews(cs, func(string, *authv1.ResourceAttributes) bool { return false })
+
+	pctx := auth.WithPrincipal(sctx, &auth.Principal{Username: "alice", UID: "alice-uid"})
+	sess, err := mgr.ArriveAsClient(pctx, testdata.GetTestClients(t)["alice"])
+	req.NoError(err)
+
+	stream := newFakeServerStream[rpc.LogChunk](pctx)
+	frames := drainLogStream(t, mgr, &rpc.StreamLogsRequest{Session: sess, Agents: "all"}, stream)
+	for _, f := range frames {
+		req.Empty(f.PodName)
+		req.Empty(f.PodNamespace)
+	}
 }
 
 // TestStreamLogs_NilPrincipal_RefusedEvenInPermissiveMode: a session

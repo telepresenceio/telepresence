@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -288,4 +289,30 @@ func writeTestCert(t *testing.T, dir, commonName string) {
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tls.crt"), certPEM, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "tls.key"), keyPEM, 0o600))
+}
+
+// TestReviewAdmission_UnknownTokenFlood: with admission, distinct unknown
+// tokens are reviewed only up to the budget and the rest fail fast with
+// ResourceExhausted, whichever interceptor sits in front of the Authenticator.
+func TestReviewAdmission_UnknownTokenFlood(t *testing.T) {
+	ci := fake.NewClientset()
+	var reviews atomic.Int32
+	k8sapi.InstallFakeTokenReviews(ci, func(string, []string) *authnv1.TokenReviewStatus {
+		reviews.Add(1)
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+	a := NewAuthenticator(ci, WithReviewAdmission())
+	a.reviewer.limiter = rate.NewLimiter(0, 10)
+	i := NewInterceptor(a, ModeEnforcing)
+
+	var limited int
+	for n := 0; n < 100; n++ {
+		_, err := i.authenticate(externalCtxWithBearer(fmt.Sprintf("random-%d", n)), "/m")
+		require.Error(t, err)
+		if status.Code(err) == codes.ResourceExhausted {
+			limited++
+		}
+	}
+	assert.LessOrEqual(t, int(reviews.Load()), 10)
+	assert.GreaterOrEqual(t, limited, 90)
 }

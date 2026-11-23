@@ -74,7 +74,9 @@ func WithMetrics(m *Metrics) Option {
 
 // WithReviewAdmission bounds the rate and concurrency of TokenReviews -- the
 // expensive, API-server-bound step -- with the external admission constants.
-// Cached tokens never enter admission; only a review pays it.
+// Cached tokens never enter admission; only a review pays it. Each
+// Authenticator gets its own limiter, so the internal and external listeners
+// cannot exhaust each other's budget.
 func WithReviewAdmission() Option {
 	return func(a *Authenticator) {
 		a.reviewer.limiter = rate.NewLimiter(rate.Limit(externalAuthQPS), externalAuthBurst)

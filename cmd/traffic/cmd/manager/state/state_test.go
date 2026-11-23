@@ -330,3 +330,38 @@ func TestUpdateInterceptMissingReturnsNil(t *testing.T) {
 func TestSuiteState(testing *testing.T) {
 	suite.Run(testing, new(suiteState))
 }
+
+func (s *suiteState) TestRestoreAgentRefusesClientSessionID() {
+	s.state.backgroundCtx = mutator.WithMap(s.ctx, mutator.NewWatcher())
+	agent := testdata.GetTestAgents(s.T())["hello"]
+	clientID := s.state.AddClient(&manager.ClientInfo{Name: "c", InstallId: "1", Product: "p", Version: "2.14.2"}, nil, time.Now())
+
+	_, err := s.state.RestoreAgent(s.ctx, clientID, agent, nil, time.Now())
+	require.Error(s.T(), err)
+	assert.Equal(s.T(), 0, s.state.CountAgents())
+	assert.NotNil(s.T(), s.state.GetClient(clientID))
+}
+
+func (s *suiteState) TestRemoveSessionFollowsIDForm() {
+	id := tunnel.SessionID(AgentSessionIDPrefix + "x")
+	require.Nil(s.T(), s.state.addClient(id, &manager.ClientInfo{Name: "c"}, nil, time.Now()))
+
+	s.state.RemoveSession(s.ctx, id)
+	assert.NotNil(s.T(), s.state.GetClient(id), "an agent-form ID must not remove a client session")
+}
+
+func (s *suiteState) TestRestoreClientReturnsExisting() {
+	id := tunnel.SessionID("c1")
+	assert.Nil(s.T(), s.state.RestoreClient(id, &manager.ClientInfo{Name: "a"}, nil, time.Now()))
+	assert.NotNil(s.T(), s.state.RestoreClient(id, &manager.ClientInfo{Name: "b"}, nil, time.Now()))
+	assert.Equal(s.T(), 1, s.state.CountClients())
+}
+
+func (s *suiteState) TestRestoreInterceptsSkipsMissingClientSession() {
+	err := s.state.RestoreIntercepts(s.ctx, []*manager.InterceptInfo{{
+		Id:   ":web",
+		Spec: &manager.InterceptSpec{Name: "web", Namespace: "default", Agent: "web"},
+	}}, time.Now())
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), 0, s.state.CountIntercepts())
+}
