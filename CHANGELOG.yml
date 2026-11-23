@@ -94,16 +94,11 @@ items:
           directly as its controller is not accepted as that Deployment's
           traffic-agent. The traffic-manager follows owner references up
           to eight levels, so objects that own each other no longer make
-          it exit. See the authentication reference.
+          it exit. See the authentication reference. When authentication
+          is enforced, a 2.34 traffic-agent requires a traffic-manager of
+          version 2.34 or later, and refuses session access until the
+          traffic-manager has been upgraded.
         docs: reference/authentication
-      - type: change
-        title: Agent-side protections need a pod restart
-        body: >-
-          The traffic-manager does not replace a pod when only the
-          traffic-agent image changes. The protections that run in the
-          traffic-agent take effect for a workload when its pods are
-          restarted after the upgrade, for example with
-          <code>kubectl rollout restart</code>.
       - type: security
         title: Callers without a grant are shown less
         body: >-
@@ -222,15 +217,13 @@ items:
           Tokens that were accepted before have a review budget of their
           own, so a flood of unknown tokens can no longer get known
           clients and traffic-agents refused. A review that was throttled
-          is not cached as a failure. In permissive mode, a call whose
-          token review was throttled is served as unauthenticated and is
-          not answered with <code>ResourceExhausted</code>. The external
-          listener of the traffic-manager asks for a client certificate
-          only when the cluster's client CA is loaded and x509
-          authentication is enabled, and it never checks a certificate
-          against the public CA bundle of the image. It does not accept
-          client certificates when x509 authentication is switched off or
-          when the client CA cannot be read.
+          is not cached as a failure. The external listener of the
+          traffic-manager asks for a client certificate only when the
+          cluster's client CA is loaded and x509 authentication is
+          enabled, and it never checks a certificate against the public
+          CA bundle of the image. It does not accept client certificates
+          when x509 authentication is switched off or when the client CA
+          cannot be read.
         docs: reference/authentication
       - type: security
         title: The injector acts only on the pods that it should
