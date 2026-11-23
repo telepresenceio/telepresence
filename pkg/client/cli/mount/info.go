@@ -75,7 +75,7 @@ func safeMounts(ctx context.Context, mounts types.MountPolicies) types.MountPoli
 					}
 				}
 			}
-			clog.Warnf(ctx, "Ignoring mount path %q: it must be absolute, clean, and free of commas, quotes, colons and control characters", p)
+			clog.Warnf(ctx, "Ignoring mount path %q: it must be absolute, clean, and free of commas, quotes, colons, backslashes and control characters", p)
 		}
 	}
 	if safe == nil {
@@ -90,6 +90,6 @@ func isSafeMountPath(p string) bool {
 		return false
 	}
 	return strings.IndexFunc(p, func(r rune) bool {
-		return r == ',' || r == '"' || r == ':' || unicode.IsControl(r)
+		return r == ',' || r == '"' || r == ':' || r == '\\' || unicode.IsControl(r)
 	}) < 0
 }

@@ -20,6 +20,8 @@ func TestSafeMounts(t *testing.T) {
 		"relative":           types.MountPolicyRemote,
 		"/a:b":               types.MountPolicyRemote,
 		"/a\"b":              types.MountPolicyRemote,
+		"/a\\b":              types.MountPolicyRemote,
+		"/a\\..\\..\\b":      types.MountPolicyRemote,
 		"/a\nb":              types.MountPolicyRemote,
 		"/a//b":              types.MountPolicyRemote,
 		"/data/":             types.MountPolicyRemote,
