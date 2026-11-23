@@ -23,6 +23,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
@@ -98,9 +99,20 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, nil
 	}
 
+	// The managed namespaces are nil when the scope is cluster-wide.
+	if nss := namespaces.Get(ctx); nss != nil && !slices.Contains(nss, req.Namespace) {
+		clog.Debugf(ctx, "Skipping webhook for %s.%s because the namespace is not managed", req.Name, req.Namespace)
+		return nil, nil
+	}
+
 	pod, err := getPod(req, isDelete)
 	if err != nil {
 		return nil, err
+	}
+
+	if pod.Namespace != req.Namespace {
+		clog.Debugf(ctx, "Skipping webhook for %s: pod namespace %q differs from request namespace %q", pod.Name, pod.Namespace, req.Namespace)
+		return nil, nil
 	}
 
 	if isDelete {
