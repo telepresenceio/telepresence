@@ -514,6 +514,8 @@ func agentPrincipal(agent *rpc.AgentInfo) *auth.Principal {
 		Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
 		PodName:  agent.PodName,
 		PodUID:   agent.PodUid,
+
+		ManagerAudience: true,
 	}
 }
 
@@ -931,7 +933,7 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 	agentInfo.Name = "test-agent"
 	agentInfo.Namespace = ns
 	agentInfo.NodeAgent = true
-	_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+	_, err = mgr.State().AddAgent(sctx, agentInfo, nil, time.Now())
 	req.NoError(err)
 
 	_, err = mgr.CreateIntercept(auth.WithPrincipal(sctx, alice), &rpc.CreateInterceptRequest{

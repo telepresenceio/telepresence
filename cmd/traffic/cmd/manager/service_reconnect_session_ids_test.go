@@ -9,18 +9,53 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	core "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 var reconnectModes = []auth.Mode{auth.ModeEnforcing, auth.ModePermissive, auth.ModeDisabled}
 
+// seedAgentPod creates the pod that the agent's verified identity refers to, owned by
+// the Deployment that the agent claims.
+func seedAgentPod(e *readEnv, agent *rpc.AgentInfo) {
+	if agent.Kind == "" {
+		agent.Kind = "Deployment"
+	}
+	if agent.PodIp == "" {
+		agent.PodIp = "10.1.2.9"
+	}
+	pod := &core.Pod{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      agent.PodName,
+			Namespace: agent.Namespace,
+			UID:       types.UID(agent.PodUid),
+			Labels: map[string]string{
+				agentconfig.WorkloadNameLabel: agent.Name,
+				agentconfig.WorkloadKindLabel: agent.Kind,
+			},
+		},
+		Spec:   core.PodSpec{Containers: []core.Container{{Name: agentconfig.ContainerName}}},
+		Status: core.PodStatus{PodIP: agent.PodIp},
+	}
+	_, err := k8sapi.GetK8sInterface(e.sctx).CoreV1().Pods(agent.Namespace).Create(e.sctx, pod, meta.CreateOptions{})
+	if !k8sErrors.IsAlreadyExists(err) {
+		require.NoError(e.t, err)
+	}
+}
+
 func agentReconnect(e *readEnv, agent *rpc.AgentInfo, sessionID string) (context.Context, *rpc.ReconnectAgentRequest) {
+	seedAgentPod(e, agent)
 	return auth.WithPrincipal(e.sctx, agentPrincipal(agent)), &rpc.ReconnectAgentRequest{
 		Session: &rpc.SessionInfo{SessionId: sessionID},
 		Agent:   agent,
