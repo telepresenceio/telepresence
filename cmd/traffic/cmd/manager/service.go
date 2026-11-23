@@ -299,6 +299,12 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClientRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, info.Session)
 	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "a session id is required")
+	}
+	if state.IsAgentSessionID(sessionID) {
+		return nil, status.Error(codes.InvalidArgument, "not a client session id")
+	}
 	if session := s.state.GetClient(sessionID); session != nil {
 		if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
 			return nil, err
@@ -329,7 +335,13 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	}
 
 	now := time.Now()
-	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
+	if existing := st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now); existing != nil {
+		// A concurrent reconnect stored the session first.
+		if err := state.ClientOwnershipError(ctx, sessionID, existing); err != nil {
+			return nil, err
+		}
+		return &empty.Empty{}, nil
+	}
 
 	intercepts, err := s.reviewRestoredIntercepts(ctx, info, now)
 	if err == nil {
@@ -386,7 +398,7 @@ func (s *service) reviewRestoredIntercepts(
 			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
 			Spec:          spec,
 			Disposition:   rpc.InterceptDispositionType_WAITING,
-			ClientSession: info.Session,
+			ClientSession: &rpc.SessionInfo{SessionId: string(sessionID)},
 			ModifiedAt:    timestamppb.New(now),
 		})
 	}
@@ -396,12 +408,8 @@ func (s *service) reviewRestoredIntercepts(
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
 	clog.Debugf(ctx, "Name %s, IP %s", agent.PodName, agent.PodIp)
-	if val := validateAgent(agent); val != "" {
-		return nil, status.Error(codes.InvalidArgument, val)
-	}
-
-	for _, cn := range agent.Containers {
-		s.removeExcludedEnvVars(cn.Environment)
+	if err := s.acceptAgentInfo(agent); err != nil {
+		return nil, err
 	}
 
 	principal, mismatch := verifiedAgentPrincipal(ctx, agent)
@@ -429,7 +437,7 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 	}
 	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
 	sessionID := tunnel.SessionID(rq.Session.SessionId)
-	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
+	if err := s.acceptAgentInfo(rq.Agent); err != nil {
 		return nil, err
 	}
 	principal, mismatch := verifiedAgentPrincipal(ctx, rq.Agent)
@@ -437,8 +445,26 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 		return nil, errors.Errorf(codes.PermissionDenied,
 			"bound token does not match the presented agent identity %s.%s", rq.Agent.PodName, rq.Agent.Namespace)
 	}
+	if sessionID != state.AgentSessionID(rq.Agent.PodUid) {
+		return nil, errors.Errorf(codes.PermissionDenied, "session %q does not belong to agent %s.%s", sessionID, rq.Agent.PodName, rq.Agent.Namespace)
+	}
+	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
+		return nil, err
+	}
 	_, err := s.state.RestoreAgent(ctx, sessionID, rq.Agent, principal, time.Now())
 	return &empty.Empty{}, err
+}
+
+// acceptAgentInfo validates agent and removes the environment variables that
+// the manager is configured to exclude.
+func (s *service) acceptAgentInfo(agent *rpc.AgentInfo) error {
+	if val := validateAgent(agent); val != "" {
+		return status.Error(codes.InvalidArgument, val)
+	}
+	for _, cn := range agent.Containers {
+		s.removeExcludedEnvVars(cn.Environment)
+	}
+	return nil
 }
 
 // verifiedAgentPrincipal returns the caller's principal when its bound-token pod
@@ -499,7 +525,11 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	sessionID := managerutil.GetSessionID(ctx)
-	if agent := s.state.GetAgent(sessionID); agent != nil {
+	if state.IsAgentSessionID(sessionID) {
+		agent := s.state.GetAgent(sessionID)
+		if agent == nil {
+			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+		}
 		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
 			return nil, err
 		}
@@ -548,9 +578,11 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 
 	sessionID := tunnel.SessionID(session.GetSessionId())
-	if agent := s.state.GetAgent(sessionID); agent != nil {
-		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
-			return nil, err
+	if state.IsAgentSessionID(sessionID) {
+		if agent := s.state.GetAgent(sessionID); agent != nil {
+			if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+				return nil, err
+			}
 		}
 	} else if client := s.state.GetClient(sessionID); client != nil {
 		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
