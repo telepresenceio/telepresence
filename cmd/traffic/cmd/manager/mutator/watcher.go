@@ -222,7 +222,7 @@ func PodControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) boo
 		if ref.Kind != string(k8sapi.ReplicaSetKind) {
 			return false
 		}
-		rs, err := agentmap.GetWorkload(ctx, ref.Name, pod.Namespace, k8sapi.ReplicaSetKind)
+		rs, err := getReplicaSet(ctx, ref.Name, pod.Namespace)
 		if err != nil || rs.GetUID() != ref.UID {
 			return false
 		}
@@ -235,6 +235,15 @@ func PodControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) boo
 	}
 	selector, err := wl.Selector()
 	return err == nil && selector.Matches(labels.Set(pod.Labels))
+}
+
+// getReplicaSet reads a ReplicaSet from the informer cache when ReplicaSets are an enabled
+// workload kind, and with a direct API call otherwise, because no informer can sync then.
+func getReplicaSet(ctx context.Context, name, namespace string) (k8sapi.Workload, error) {
+	if managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(k8sapi.ReplicaSetKind) {
+		return agentmap.GetWorkload(ctx, name, namespace, k8sapi.ReplicaSetKind)
+	}
+	return k8sapi.GetWorkload(ctx, name, namespace, k8sapi.ReplicaSetKind)
 }
 
 func controllerRef(refs []meta.OwnerReference) *meta.OwnerReference {

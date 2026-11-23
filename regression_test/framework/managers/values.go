@@ -33,6 +33,10 @@ type Values struct {
 	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
 	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
 	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// MaxNamespaceSpecificWatchers is the number of managed namespaces up to
+	// which the manager runs one informer set per namespace. 0 selects
+	// cluster-wide informers.
+	MaxNamespaceSpecificWatchers *int `json:"maxNamespaceSpecificWatchers,omitempty"`
 	// Resources is the chart's top-level resources shape: the
 	// traffic-manager container's requests/limits.
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -418,6 +422,9 @@ func Merge(base, over Values) Values {
 	}
 	if over.NodeAgent.Enabled {
 		m.NodeAgent.Enabled = true
+	}
+	if over.MaxNamespaceSpecificWatchers != nil {
+		m.MaxNamespaceSpecificWatchers = over.MaxNamespaceSpecificWatchers
 	}
 	m.Client = mergeClient(m.Client, over.Client)
 	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
