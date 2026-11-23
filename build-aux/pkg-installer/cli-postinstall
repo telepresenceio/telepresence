@@ -10,8 +10,14 @@ set -e
 CONFIG_DIR="/Library/Application Support/telepresence"
 MARKER_FILE="$CONFIG_DIR/usage-opt-out"
 
+# The client trusts the machine-wide config only when the directory and
+# everything in it belongs to root and is closed to other users.
+if [ -L "$CONFIG_DIR" ]; then
+    rm -f "$CONFIG_DIR"
+fi
 mkdir -p "$CONFIG_DIR"
-chown root:wheel "$CONFIG_DIR"
+chown -R -P root:wheel "$CONFIG_DIR"
+chmod -R -P u=rwX,go=rX "$CONFIG_DIR"
 chmod 755 "$CONFIG_DIR"
 
 rm -f "$MARKER_FILE"
