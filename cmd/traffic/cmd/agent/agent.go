@@ -2,9 +2,7 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -158,13 +156,12 @@ func isUnder(p string, dirs []string) bool {
 	return false
 }
 
-// sftpServer creates a listener on the next available port, writes that port on the
-// given channel, and then starts accepting connections on that port. Each connection is
-// served by srv, unless auth is enforcing, in which case it is closed.
-func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, srv *sftpserver.Server) error {
+// reserveSftpPort binds a listener on the next available port and writes that port on the
+// given channel. The port is announced to clients, which reach the SFTP server through
+// the tunnel (see state.openSftpConn). The listener closes every connection it accepts.
+func reserveSftpPort(ctx context.Context, sftpPortCh chan<- uint16) error {
 	defer close(sftpPortCh)
 
-	// start an sftp-server for remote sshfs mounts
 	lc := net.ListenConfig{}
 	l, err := lc.Listen(ctx, "tcp", ":0")
 	if err != nil {
@@ -193,7 +190,8 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 			}
 			return nil
 		}
-		go serveSftpConn(ctx, conn, srv, auth)
+		clog.Debugf(ctx, "sftp: closing direct connection from %s", conn.RemoteAddr())
+		_ = conn.Close()
 	}
 }
 
@@ -216,27 +214,6 @@ func (h noDebugHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 
 func (h noDebugHandler) WithGroup(name string) slog.Handler {
 	return noDebugHandler{h.Handler.WithGroup(name)}
-}
-
-// serveSftpConn serves a direct TCP connection to the SFTP port. Once auth is enforcing,
-// the port accepts no connections; clients reach the server through the tunnel, see
-// state.openSftpConn. Every connection is refused until auth holds credential material.
-func serveSftpConn(ctx context.Context, conn net.Conn, srv *sftpserver.Server, auth *fileShareAuth) {
-	defer conn.Close()
-	clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
-
-	if !auth.ready() {
-		clog.Warnf(ctx, "sftp: closing connection from %s; the agent has no session credential material yet", conn.RemoteAddr())
-		return
-	}
-	if auth.enforcing() {
-		clog.Warnf(ctx, "sftp: closing connection from %s; the SFTP port accepts no direct connections in enforcing mode",
-			conn.RemoteAddr())
-		return
-	}
-	if err := srv.Serve(ctx, conn); err != nil && !errors.Is(err, io.EOF) {
-		clog.Errorf(ctx, "sftp server completed with error %v", err)
-	}
 }
 
 func Main(ctx context.Context, _ ...string) error {
@@ -408,8 +385,8 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			return nil, err
 		}
 		srv.SetSftpServer(sftpSrv)
-		g.Go("sftp-server", func(ctx context.Context) error {
-			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), sftpSrv)
+		g.Go("sftp-port", func(ctx context.Context) error {
+			return reserveSftpPort(ctx, sftpPortCh)
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
 			publicHost := ""

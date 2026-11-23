@@ -1,7 +1,7 @@
 package agent
 
 // This file lives in package agent (not agent_test, unlike most of this directory's
-// tests) because fileShareAuth, its snapshot, and serveSftpConn are all unexported: the
+// tests) because fileShareAuth and its snapshot are both unexported: the
 // behavior under test -- what a connection sees, and what ends up in the snapshot -- has
 // no exported surface to observe it through from outside the package.
 
@@ -13,15 +13,12 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/blang/semver/v4"
-	"github.com/pkg/sftp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -33,7 +30,6 @@ import (
 	"github.com/telepresenceio/clog/testutil"
 	agentrpc "github.com/telepresenceio/telepresence/rpc/v2/agent"
 	mgrrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/sftpserver"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -240,110 +236,6 @@ func TestFileShareAuth_VerifySession_NilSnapshot(t *testing.T) {
 	verified, err = a.verifySession(ctx, tunnel.SessionID("session-1"))
 	require.NoError(t, err)
 	require.False(t, verified)
-}
-
-// sftpGateFixture is the tree and confined server shared by the serveSftpConn tests
-// below. It can be shared read-only across subtests; only the fileShareAuth snapshot
-// differs per test.
-type sftpGateFixture struct {
-	srv *sftpserver.Server
-}
-
-func newSftpGateFixture(t *testing.T) *sftpGateFixture {
-	t.Helper()
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644))
-	srv, err := sftpserver.New(dir, []string{t.TempDir()}, nil)
-	require.NoError(t, err)
-	return &sftpGateFixture{srv: srv}
-}
-
-// listen starts a real TCP listener whose accept loop runs every connection through
-// serveSftpConn -- exactly as agent.go's sftpServer wires the production listener -- and
-// returns its address, so a test can dial it as a real client would.
-func (f *sftpGateFixture) listen(t *testing.T, ctx context.Context, auth *fileShareAuth) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go serveSftpConn(ctx, conn, f.srv, auth)
-		}
-	}()
-	return ln.Addr().String()
-}
-
-// requireListsFixture dials addr as an SFTP client and asserts that it can list the
-// fixture's hello.txt.
-func requireListsFixture(t *testing.T, addr string) {
-	t.Helper()
-	conn, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	client, err := sftp.NewClientPipe(conn, conn)
-	require.NoError(t, err)
-	defer client.Close()
-
-	entries, err := client.ReadDir("/")
-	require.NoError(t, err)
-	names := make([]string, len(entries))
-	for i, e := range entries {
-		names[i] = e.Name()
-	}
-	require.Contains(t, names, "hello.txt")
-}
-
-// TestServeSftpConn_EnforcingCloses asserts that no direct connection is served once the
-// snapshot's mode is enforcing.
-func TestServeSftpConn_EnforcingCloses(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	f := newSftpGateFixture(t)
-	auth := &fileShareAuth{}
-	auth.set(nil, "enforcing")
-	addr := f.listen(t, ctx, auth)
-
-	conn, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	_, err = sftp.NewClientPipe(conn, conn)
-	require.Error(t, err, "expected the connection to be closed before completing the SFTP version exchange")
-}
-
-// TestServeSftpConn_NilSnapshotCloses asserts that every connection is closed while the
-// agent holds no credential material, and served once it does.
-func TestServeSftpConn_NilSnapshotCloses(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	f := newSftpGateFixture(t)
-	auth := &fileShareAuth{}
-	addr := f.listen(t, ctx, auth)
-
-	conn, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	_, err = sftp.NewClientPipe(conn, conn)
-	require.Error(t, err)
-	conn.Close()
-
-	auth.set(nil, "permissive")
-	requireListsFixture(t, addr)
-}
-
-// TestServeSftpConn_PermissiveServes asserts that a direct connection is served when the
-// snapshot's mode is permissive.
-func TestServeSftpConn_PermissiveServes(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	f := newSftpGateFixture(t)
-	auth := &fileShareAuth{}
-	auth.set(nil, "permissive")
-	addr := f.listen(t, ctx, auth)
-
-	requireListsFixture(t, addr)
 }
 
 // TestIsOwnSftpDestination covers the address classification that decides whether a
