@@ -39,6 +39,7 @@ func (s *MgrapiReviewBudget) Test_KnownTokenServedDuringUnknownTokenFlood() {
 		workers    = 16
 		knownEvery = 2 * time.Second
 		budgetQS   = 50
+		cacheTTL   = 2*time.Minute + 10*time.Second // past the success cache TTL
 		burst      = 100
 	)
 	t := s.T()
@@ -78,6 +79,7 @@ func (s *MgrapiReviewBudget) Test_KnownTokenServedDuringUnknownTokenFlood() {
 		mu          sync.Mutex
 		unknown     = map[codes.Code]int{}
 		knownCounts = map[codes.Code]int{}
+		knownLate   = map[codes.Code]int{}
 		wg          sync.WaitGroup
 	)
 	start := time.Now()
@@ -132,6 +134,9 @@ func (s *MgrapiReviewBudget) Test_KnownTokenServedDuringUnknownTokenFlood() {
 				}
 				mu.Lock()
 				knownCounts[status.Code(err)]++
+				if time.Since(start) > cacheTTL {
+					knownLate[status.Code(err)]++
+				}
 				mu.Unlock()
 			}
 		}
@@ -141,6 +146,7 @@ func (s *MgrapiReviewBudget) Test_KnownTokenServedDuringUnknownTokenFlood() {
 
 	s.Zero(knownCounts[codes.ResourceExhausted], "the known caller must not be throttled: %v", knownCounts)
 	s.Positive(knownCounts[codes.OK], "the known caller must have been served: %v", knownCounts)
+	s.Positive(knownLate[codes.OK], "the known caller must be served after its cached verdict expired: %v", knownLate)
 	s.Zero(unknown[codes.OK], "no unknown token may be admitted: %v", unknown)
 
 	total := 0

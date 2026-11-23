@@ -70,7 +70,7 @@ func (s *ExternalEndpointX509Disabled) Test_ExternalEndpointRequestsNoClientCert
 	defer cancel()
 	conn, err := grpcClient.DialGRPC(dialCtx, target, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	s.Require().NoError(err, "dialing the external endpoint")
-	defer conn.Close()
+	t.Cleanup(func() { conn.Close() })
 	mc := manager.NewManagerClient(conn)
 
 	// Version forces the TLS handshake.
