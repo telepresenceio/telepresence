@@ -261,3 +261,89 @@ spec:
 		return err == nil && !slices.Equal(uids, before)
 	}, 45*time.Second, injhardPoll, "the agent pods of %s should stay", wl.Name)
 }
+
+// Test_OwnerReferenceCycleKeepsManagerRunning creates two StatefulSets whose
+// controller owner references name each other, then starts a pod of one of
+// them. The traffic-manager resolves the pod's owner without crashing, does
+// not restart, and still serves a connection.
+func (s *injhardConfig) Test_OwnerReferenceCycleKeepsManagerRunning() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	rt.Mutate(t, rt.ManagerFixture(managers.Default))
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	injhardRestoreManagerOnFailure(t, env)
+
+	const nameA, nameB = "injhard-cycle-a", "injhard-cycle-b"
+	manifest := func(name string) string {
+		return fmt.Sprintf(`apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: %[2]s
+  namespace: %[1]s
+spec:
+  replicas: 0
+  serviceName: %[2]s
+  selector:
+    matchLabels:
+      app: %[2]s
+  template:
+    metadata:
+      labels:
+        app: %[2]s
+    spec:
+      containers:
+        - name: echo
+          image: ghcr.io/telepresenceio/echo-server:0.3.1
+          ports:
+            - name: http
+              containerPort: 8080
+`, ns, name)
+	}
+	t.Cleanup(func() {
+		for _, name := range []string{nameA, nameB} {
+			_, _ = r.Kubectl(ctx, ns, "patch", "statefulset", name, "--type=merge", "-p", `{"metadata":{"ownerReferences":null}}`)
+		}
+		_, _ = r.Kubectl(ctx, ns, "delete", "statefulset", nameA, nameB, "--ignore-not-found", "--wait=false")
+	})
+	s.Require().NoError(injhardApply(ctx, r, ns, nameA, manifest(nameA)))
+	s.Require().NoError(injhardApply(ctx, r, ns, nameB, manifest(nameB)))
+
+	uid := func(name string) string {
+		out, err := r.Kubectl(ctx, ns, "get", "statefulset", name, "-o", "jsonpath={.metadata.uid}")
+		s.Require().NoError(err)
+		return strings.TrimSpace(out)
+	}
+	ownedBy := func(owner, ownerUID string) string {
+		return fmt.Sprintf(`{"metadata":{"ownerReferences":[{"apiVersion":"apps/v1","kind":"StatefulSet","name":%q,"uid":%q,"controller":true}]}}`,
+			owner, ownerUID)
+	}
+	_, err := r.Kubectl(ctx, ns, "patch", "statefulset", nameA, "--type=merge", "-p", ownedBy(nameB, uid(nameB)))
+	s.Require().NoError(err)
+	_, err = r.Kubectl(ctx, ns, "patch", "statefulset", nameB, "--type=merge", "-p", ownedBy(nameA, uid(nameA)))
+	s.Require().NoError(err)
+
+	managerRestarts := func() string {
+		out, err := r.Kubectl(ctx, managers.ManagerNamespace, "get", "pod", "-l", "app=traffic-manager", "-o",
+			`jsonpath={range .items[*]}{.metadata.uid}|{.status.containerStatuses[*].restartCount}{"\n"}{end}`)
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return strings.TrimSpace(out)
+	}
+	before := managerRestarts()
+
+	_, err = r.Kubectl(ctx, ns, "scale", "statefulset", nameA, "--replicas=1")
+	s.Require().NoError(err)
+	s.Require().Eventually(func() bool {
+		out, err := r.Kubectl(ctx, ns, "get", "pod", nameA+"-0", "-o", "jsonpath={.metadata.name}")
+		return err == nil && strings.TrimSpace(out) != ""
+	}, injhardWait, injhardPoll, "the pod of %s should be created", nameA)
+
+	s.Never(func() bool {
+		return managerRestarts() != before
+	}, 30*time.Second, injhardPoll, "the traffic-manager should keep running with the same restart count")
+
+	s.Connect()
+}
