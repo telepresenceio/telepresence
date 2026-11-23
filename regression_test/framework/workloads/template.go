@@ -61,6 +61,14 @@ type Template struct {
 	// the app container. Set by EchoWithConfigVolume; zero value renders no
 	// ConfigMap and no extra volume.
 	ConfigVolume ConfigVolume
+	// DataVolume adds a writable emptyDir mounted at DataVolumeMountPath in
+	// the app container, seeded by an init container with the file
+	// DataVolumeSeedFile. Rendered for the Deployment and ReplicaSet kinds.
+	DataVolume bool
+	// NestedVolume, when non-zero, adds a ConfigMap mounted read-only at its
+	// MountPath, which is meant to lie inside another volume's mount path.
+	// Rendered for the Deployment and ReplicaSet kinds.
+	NestedVolume ConfigVolume
 	// UDP marks the primary port ("http" by default) as UDP instead of TCP.
 	// Set by UDPEcho; ExtraPorts stay TCP-only, since no template currently
 	// needs a mixed-protocol workload.
@@ -146,6 +154,33 @@ const (
 	// content is exactly this string.
 	ConfigVolumeContent = "rtest-config-volume-marker"
 )
+
+const (
+	// DataVolumeMountPath is the directory the writable emptyDir of
+	// Template.DataVolume is mounted at.
+	DataVolumeMountPath = "/rtest-data"
+	// DataVolumeSeedFile is the name of the file the init container writes
+	// into the DataVolume, and DataVolumeSeedContent is its content.
+	DataVolumeSeedFile    = "seed.txt"
+	DataVolumeSeedContent = "rtest-data-seed-marker"
+	// DataVolumeK8sName and NestedVolumeK8sName are the Kubernetes volume
+	// names, which the mount-policy annotations match on.
+	DataVolumeK8sName   = "rtest-data"
+	NestedVolumeK8sName = "rtest-nested"
+	// NestedVolumeFileName and NestedVolumeContent describe the file in the
+	// ConfigMap of EchoWithNestedVolume.
+	NestedVolumeFileName = "nested.conf"
+	NestedVolumeContent  = "rtest-nested-volume-marker"
+)
+
+// DataVolumeMountPath is the mount path, for use by templates.
+func (t Template) DataVolumeMountPath() string { return DataVolumeMountPath }
+
+// DataSeedPath is the path of the seeded file as the init container sees it.
+func (t Template) DataSeedPath() string { return DataVolumeMountPath + "/" + DataVolumeSeedFile }
+
+// DataSeedContent is the content of the seeded file.
+func (t Template) DataSeedContent() string { return DataVolumeSeedContent }
 
 // ExtraContainer is an additional container in a Deployment/ReplicaSet pod,
 // alongside the app container: the same echo image, listening on Port (via
@@ -299,6 +334,28 @@ func EchoWithConfigVolume(name string) Template {
 		Key:       ConfigVolumeFileName,
 		Content:   ConfigVolumeContent,
 		MountPath: ConfigVolumeMountPath,
+	}
+	return t
+}
+
+// EchoWithDataVolume is Echo with a writable emptyDir at DataVolumeMountPath
+// holding the file DataVolumeSeedFile.
+func EchoWithDataVolume(name string) Template {
+	t := Echo(name)
+	t.DataVolume = true
+	return t
+}
+
+// EchoWithNestedVolume is EchoWithDataVolume with a ConfigMap volume
+// (named name+"-nested", volume NestedVolumeK8sName) mounted below the data
+// volume, at DataVolumeMountPath/nested, holding NestedVolumeFileName.
+func EchoWithNestedVolume(name string) Template {
+	t := EchoWithDataVolume(name)
+	t.NestedVolume = ConfigVolume{
+		Name:      name + "-nested",
+		Key:       NestedVolumeFileName,
+		Content:   NestedVolumeContent,
+		MountPath: DataVolumeMountPath + "/nested",
 	}
 	return t
 }

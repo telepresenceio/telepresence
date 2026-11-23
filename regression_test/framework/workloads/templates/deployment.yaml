@@ -8,6 +8,16 @@ data:
   {{ .ConfigVolume.Key }}: {{ printf "%q" .ConfigVolume.Content }}
 ---
 {{- end }}
+{{- if not .NestedVolume.IsZero }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .NestedVolume.Name }}
+  namespace: {{ .Namespace }}
+data:
+  {{ .NestedVolume.Key }}: {{ printf "%q" .NestedVolume.Content }}
+---
+{{- end }}
 {{- range .ExtraContainers }}
 {{- if not .ConfigVolume.IsZero }}
 apiVersion: v1
@@ -89,19 +99,30 @@ spec:
 {{- if .Annotations }}
       annotations:
 {{- range $k, $v := .Annotations }}
-        {{ $k }}: "{{ $v }}"
+        {{ $k }}: {{ $v | printf "%q" }}
 {{- end }}
 {{- end }}
     spec:
 {{- if .ReadyDelaySeconds }}
       terminationGracePeriodSeconds: 1
 {{- end }}
-{{- if .InitDelaySeconds }}
+{{- if or .InitDelaySeconds .DataVolume }}
       initContainers:
+{{- if .InitDelaySeconds }}
         - name: slow-init
           image: {{ .SlowReadyImage }}
           imagePullPolicy: IfNotPresent
           command: [sh, -c, 'sleep {{ .InitDelaySeconds }}']
+{{- end }}
+{{- if .DataVolume }}
+        - name: seed-data
+          image: {{ .SlowReadyImage }}
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, 'printf %s {{ .DataSeedContent }} > {{ .DataSeedPath }}']
+          volumeMounts:
+            - name: rtest-data
+              mountPath: {{ .DataVolumeMountPath }}
+{{- end }}
 {{- end }}
       containers:
 {{- if .ReadyDelaySeconds }}
@@ -138,11 +159,22 @@ spec:
               value: {{ $v | printf "%q" }}
 {{- end }}
 {{- end }}
-{{- if not .ConfigVolume.IsZero }}
+{{- if or (not .ConfigVolume.IsZero) .DataVolume }}
           volumeMounts:
+{{- if not .ConfigVolume.IsZero }}
             - name: rtest-config
               mountPath: {{ .ConfigVolume.MountPath }}
               readOnly: true
+{{- end }}
+{{- if .DataVolume }}
+            - name: rtest-data
+              mountPath: {{ .DataVolumeMountPath }}
+{{- end }}
+{{- if not .NestedVolume.IsZero }}
+            - name: rtest-nested
+              mountPath: {{ .NestedVolume.MountPath }}
+              readOnly: true
+{{- end }}
 {{- end }}
 {{- if not .Resources.IsZero }}
           resources:
@@ -185,12 +217,21 @@ spec:
               readOnly: true
 {{- end }}
 {{- end }}
-{{- if or (not .ConfigVolume.IsZero) .HasExtraConfigVolumes }}
+{{- if or (not .ConfigVolume.IsZero) .HasExtraConfigVolumes .DataVolume }}
       volumes:
 {{- if not .ConfigVolume.IsZero }}
         - name: rtest-config
           configMap:
             name: {{ .ConfigVolume.Name }}
+{{- end }}
+{{- if .DataVolume }}
+        - name: rtest-data
+          emptyDir: {}
+{{- end }}
+{{- if not .NestedVolume.IsZero }}
+        - name: rtest-nested
+          configMap:
+            name: {{ .NestedVolume.Name }}
 {{- end }}
 {{- range .ExtraContainers }}
 {{- if not .ConfigVolume.IsZero }}

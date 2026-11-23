@@ -82,18 +82,16 @@ func agentLinks(exportsDir string) map[string]string {
 	return links
 }
 
-// ExportedTargets returns the targets of the absolute symlinks currently under exportsDir that
-// lie within one of bases.
-func ExportedTargets(exportsDir string, bases []string) []string {
-	var targets []string
-	seen := map[string]bool{}
-	for _, target := range agentLinks(exportsDir) {
-		if _, _, ok := matchBase(bases, target); ok && !seen[target] {
-			seen[target] = true
-			targets = append(targets, target)
+// ExportedLinks returns the absolute symlinks currently under exportsDir whose target lies
+// within one of bases, as slash-separated paths relative to exportsDir mapped to their targets.
+func ExportedLinks(exportsDir string, bases []string) map[string]string {
+	links := map[string]string{}
+	for link, target := range agentLinks(exportsDir) {
+		if _, _, ok := matchBase(bases, target); ok {
+			links[link] = target
 		}
 	}
-	return targets
+	return links
 }
 
 // New opens exportsDir as an os.Root and returns a Server that confines every request to the
