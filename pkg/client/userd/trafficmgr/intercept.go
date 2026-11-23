@@ -102,6 +102,10 @@ type interceptResult struct {
 // awaitIntercept is what the traffic-manager is using to notify the watchInterceptsLoop
 // about an expected intercept arrival.
 type awaitIntercept struct {
+	// id is the intercept ID that the traffic-manager assigns to this request: the session ID
+	// and the intercept name.
+	id string
+
 	// mountPoint is the mount point assigned to the InterceptInfo's ClientMountPoint when
 	// it arrives from the traffic-manager.
 	mountPoint string
@@ -211,7 +215,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 			s.currentInterceptsLock.Unlock()
 			continue
 		}
-		aw := s.interceptWaiters[ii.Spec.Name]
+		aw := s.pendingWaiter(ii)
 		if aw != nil {
 			delete(s.interceptWaiters, ii.Spec.Name)
 		}
@@ -317,11 +321,20 @@ func (s *session) ownedIntercepts(iis []*manager.InterceptInfo) []*manager.Inter
 			if ic.local {
 				owned = append(owned, ii)
 			}
-		} else if _, ok := s.interceptWaiters[ii.Spec.Name]; ok {
+		} else if s.pendingWaiter(ii) != nil {
 			owned = append(owned, ii)
 		}
 	}
 	return owned
+}
+
+// pendingWaiter returns the waiter of a pending AddIntercept that expects ii, or nil. The caller
+// must hold currentInterceptsLock.
+func (s *session) pendingWaiter(ii *manager.InterceptInfo) *awaitIntercept {
+	if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok && aw.id == ii.Id {
+		return aw
+	}
+	return nil
 }
 
 func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
@@ -340,7 +353,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 			ic.ctx, ic.cancel = context.WithCancel(s)
 			clog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
 			ic.ClientMountPoint = ""
-			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
+			if aw := s.pendingWaiter(ii); aw != nil {
 				ic.local = true
 				ic.localPorts = aw.localPorts
 				ic.ClientMountPoint = aw.mountPoint
@@ -416,6 +429,20 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) erro
 	for _, iCept := range s.currentIntercepts {
 		if iCept.Spec.Name == spec.Name {
 			return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", spec.Name)
+		}
+	}
+	return nil
+}
+
+// reserveInterceptNameLocked fails when an intercept with the name exists or is being created. The
+// caller must hold currentInterceptsLock.
+func (s *session) reserveInterceptNameLocked(name string) error {
+	if _, ok := s.interceptWaiters[name]; ok {
+		return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", name)
+	}
+	for _, iCept := range s.currentIntercepts {
+		if iCept.Spec.Name == name {
+			return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", name)
 		}
 	}
 	return nil
@@ -807,9 +834,14 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	if allPorts {
 		destPodPorts = spec.PodPorts
 	}
+	// The name is reserved for this call until it returns.
 	s.currentInterceptsLock.Lock()
-	s.localDestinations[spec.Name] = newDestinationSet(spec.TargetHost, spec.TargetPort, spec.Protocol, destPodPorts)
-	s.interceptWaiters[spec.Name] = &awaitIntercept{
+	if err := s.reserveInterceptNameLocked(spec.Name); err != nil {
+		s.currentInterceptsLock.Unlock()
+		return nil, err
+	}
+	aw := &awaitIntercept{
+		id:             s.SessionInfo().SessionId + ":" + spec.Name,
 		mountPoint:     ir.MountPoint,
 		mountPort:      ir.LocalMountPort,
 		localPorts:     slices.Clone(spec.LocalPorts),
@@ -817,14 +849,17 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		readOnly:       ir.MountReadOnly,
 		waitCh:         waitCh,
 	}
+	s.interceptWaiters[spec.Name] = aw
+	s.localDestinations[spec.Name] = newDestinationSet(spec.TargetHost, spec.TargetPort, spec.Protocol, destPodPorts)
 	s.currentInterceptsLock.Unlock()
 	success := false
 	defer func() {
 		s.currentInterceptsLock.Lock()
-		if !success {
+		cur, reserved := s.interceptWaiters[spec.Name]
+		if !success && (!reserved || cur == aw) {
 			delete(s.localDestinations, spec.Name)
 		}
-		if _, ok := s.interceptWaiters[spec.Name]; ok {
+		if reserved && cur == aw {
 			delete(s.interceptWaiters, spec.Name)
 			close(waitCh)
 		}

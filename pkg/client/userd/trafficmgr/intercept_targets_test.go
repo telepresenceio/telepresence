@@ -141,7 +141,20 @@ func TestForeignInterceptDoesNothingLocal(t *testing.T) {
 	assert.Empty(t, s.interceptShortcuts(s.ownedIntercepts([]*manager.InterceptInfo{foreign}), true))
 
 	// An entry that matches a pending local request is owned.
-	s.interceptWaiters["mine"] = &awaitIntercept{}
-	mine := &manager.InterceptInfo{Id: "z", Spec: &manager.InterceptSpec{Name: "mine"}}
+	s.interceptWaiters["mine"] = &awaitIntercept{id: "sess:mine"}
+	mine := &manager.InterceptInfo{Id: "sess:mine", Spec: &manager.InterceptSpec{Name: "mine"}}
 	assert.Len(t, s.ownedIntercepts([]*manager.InterceptInfo{mine}), 1)
+
+	// An entry with the same name but another ID is not.
+	other := &manager.InterceptInfo{Id: "evil:mine", Spec: &manager.InterceptSpec{Name: "mine"}}
+	assert.Empty(t, s.ownedIntercepts([]*manager.InterceptInfo{other}))
+	s.setCurrentIntercepts([]*manager.InterceptInfo{other, mine})
+	assert.False(t, s.currentIntercepts["evil:mine"].local)
+	assert.True(t, s.currentIntercepts["sess:mine"].local)
+
+	// A pending name cannot be reserved twice.
+	s.currentInterceptsLock.Lock()
+	assert.Error(t, s.reserveInterceptNameLocked("mine"))
+	assert.NoError(t, s.reserveInterceptNameLocked("free"))
+	s.currentInterceptsLock.Unlock()
 }
