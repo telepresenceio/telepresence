@@ -27,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -105,10 +104,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	}
 
 	if isDelete {
-		// Only a pod that the informer knows can be inactivated; the request itself is not trusted.
-		if podIsKnown(ctx, pod) {
-			a.agentConfigs.Inactivate(pod.UID)
-		}
+		// A delete review doesn't show that the deletion happens; the pod informer reports it.
 		return nil, nil
 	}
 
@@ -184,14 +180,6 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 }
 
 // podIsKnown returns true if the pod informer holds a pod with the same namespace, name, and UID.
-func podIsKnown(ctx context.Context, pod *core.Pod) bool {
-	if pod.UID == "" {
-		return false
-	}
-	known, err := informer.GetK8sFactory(ctx, pod.Namespace).Core().V1().Pods().Lister().Pods(pod.Namespace).Get(pod.Name)
-	return err == nil && known.UID == pod.UID
-}
-
 // configFor returns the agent config for a pod that claims to be injected. A config is stored only
 // when the workload's own pod template asks for the agent; otherwise it is generated for this
 // request and discarded.

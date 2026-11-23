@@ -339,6 +339,7 @@ func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInfor
 			defer recoverHandlerPanic(ctx, "pod")
 			oldPod, oldOK := oldObj.(*core.Pod)
 			newPod, newOK := newObj.(*core.Pod)
+			c.inactivateTerminating(newObj, false)
 			if oldOK && newOK &&
 				podIsReady(oldPod) == podIsReady(newPod) &&
 				oldPod.Status.Phase == newPod.Status.Phase &&
@@ -349,9 +350,20 @@ func (c *configWatcher) watchPods(ctx context.Context, ix cache.SharedIndexInfor
 		},
 		DeleteFunc: func(obj any) {
 			defer recoverHandlerPanic(ctx, "pod")
+			c.inactivateTerminating(obj, true)
 			c.podChanged(ctx, obj)
 		},
 	})
+}
+
+// inactivateTerminating hides the agent of a pod that is being deleted or, when deleted is set, is gone.
+func (c *configWatcher) inactivateTerminating(obj any, deleted bool) {
+	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		obj = tombstone.Obj
+	}
+	if pod, ok := obj.(*core.Pod); ok && pod.UID != "" && (deleted || pod.DeletionTimestamp != nil) {
+		c.Inactivate(pod.UID)
+	}
 }
 
 func (c *configWatcher) podChanged(ctx context.Context, obj any) {
