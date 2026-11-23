@@ -92,10 +92,10 @@ func coalesceValues(ctx context.Context, req *Request) (*Values, error) {
 	if provided != nil {
 		return MergeValues(provided, GetValuesFunc(ctx, req)), nil
 	}
-	// No values were provided. This means that an upgrade should retain existing values unless
-	// reset-values is true.
-	if req.Type == Upgrade && !req.ResetValues {
-		req.ReuseValues = true
+	// No values were provided. An upgrade then keeps the values that the user supplied earlier, on top
+	// of the new chart's defaults, unless the user asked for reset-values or reuse-values.
+	if req.Type == Upgrade && !req.ResetValues && !req.ReuseValues {
+		req.ResetThenReuseValues = true
 	}
 	return GetValuesFunc(ctx, req), nil
 }
