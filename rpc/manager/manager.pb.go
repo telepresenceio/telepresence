@@ -117,28 +117,30 @@ func (InterceptDispositionType) EnumDescriptor() ([]byte, []int) {
 	return file_manager_manager_proto_rawDescGZIP(), []int{0}
 }
 
+// Level is the extent of access to the agent. A higher level includes the
+// lower ones.
 type AuthorizeSessionAccessResponse_Level int32
 
 const (
 	// The session may not use the agent.
-	AuthorizeSessionAccessResponse_LEVEL_NONE AuthorizeSessionAccessResponse_Level = 0
+	AuthorizeSessionAccessResponse_NONE_UNSPECIFIED AuthorizeSessionAccessResponse_Level = 0
 	// The session may open tunnels and register as dial watcher.
-	AuthorizeSessionAccessResponse_LEVEL_NETWORK AuthorizeSessionAccessResponse_Level = 1
+	AuthorizeSessionAccessResponse_NETWORK AuthorizeSessionAccessResponse_Level = 1
 	// The session may also reach the agent's file servers.
-	AuthorizeSessionAccessResponse_LEVEL_FILES AuthorizeSessionAccessResponse_Level = 2
+	AuthorizeSessionAccessResponse_FILES AuthorizeSessionAccessResponse_Level = 2
 )
 
 // Enum value maps for AuthorizeSessionAccessResponse_Level.
 var (
 	AuthorizeSessionAccessResponse_Level_name = map[int32]string{
-		0: "LEVEL_NONE",
-		1: "LEVEL_NETWORK",
-		2: "LEVEL_FILES",
+		0: "NONE_UNSPECIFIED",
+		1: "NETWORK",
+		2: "FILES",
 	}
 	AuthorizeSessionAccessResponse_Level_value = map[string]int32{
-		"LEVEL_NONE":    0,
-		"LEVEL_NETWORK": 1,
-		"LEVEL_FILES":   2,
+		"NONE_UNSPECIFIED": 0,
+		"NETWORK":          1,
+		"FILES":            2,
 	}
 )
 
@@ -2402,8 +2404,11 @@ func (x *AuthorizeSessionAccessRequest) GetClientSessionId() string {
 	return ""
 }
 
+// AuthorizeSessionAccessResponse tells an agent what a client session may do
+// through it.
 type AuthorizeSessionAccessResponse struct {
-	state         protoimpl.MessageState               `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The access level of the client session.
 	Level         AuthorizeSessionAccessResponse_Level `protobuf:"varint,1,opt,name=level,proto3,enum=telepresence.manager.AuthorizeSessionAccessResponse_Level" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2443,7 +2448,7 @@ func (x *AuthorizeSessionAccessResponse) GetLevel() AuthorizeSessionAccessRespon
 	if x != nil {
 		return x.Level
 	}
-	return AuthorizeSessionAccessResponse_LEVEL_NONE
+	return AuthorizeSessionAccessResponse_NONE_UNSPECIFIED
 }
 
 type ReviewInterceptRequest struct {
@@ -6018,14 +6023,13 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x88\x01\n" +
 	"\x1dAuthorizeSessionAccessRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12*\n" +
-	"\x11client_session_id\x18\x02 \x01(\tR\x0fclientSessionId\"\xaf\x01\n" +
+	"\x11client_session_id\x18\x02 \x01(\tR\x0fclientSessionId\"\xa9\x01\n" +
 	"\x1eAuthorizeSessionAccessResponse\x12P\n" +
-	"\x05level\x18\x01 \x01(\x0e2:.telepresence.manager.AuthorizeSessionAccessResponse.LevelR\x05level\";\n" +
-	"\x05Level\x12\x0e\n" +
-	"\n" +
-	"LEVEL_NONE\x10\x00\x12\x11\n" +
-	"\rLEVEL_NETWORK\x10\x01\x12\x0f\n" +
-	"\vLEVEL_FILES\x10\x02\"\xab\x05\n" +
+	"\x05level\x18\x01 \x01(\x0e2:.telepresence.manager.AuthorizeSessionAccessResponse.LevelR\x05level\"5\n" +
+	"\x05Level\x12\x14\n" +
+	"\x10NONE_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aNETWORK\x10\x01\x12\t\n" +
+	"\x05FILES\x10\x02\"\xab\x05\n" +
 	"\x16ReviewInterceptRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12P\n" +

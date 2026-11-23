@@ -179,7 +179,7 @@ type ManagerClient interface {
 	// AuthorizeSessionAccess lets an agent ask what a client session may do
 	// through that agent. The caller's session must be an agent session. The
 	// answer is computed for the workload of the agent session and is
-	// LEVEL_NONE for an unknown client session.
+	// NONE_UNSPECIFIED for an unknown client session.
 	AuthorizeSessionAccess(ctx context.Context, in *AuthorizeSessionAccessRequest, opts ...grpc.CallOption) (*AuthorizeSessionAccessResponse, error)
 	// GetKnownWorkloadKinds returns the known workload kinds
 	// that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)
@@ -919,7 +919,7 @@ type ManagerServer interface {
 	// AuthorizeSessionAccess lets an agent ask what a client session may do
 	// through that agent. The caller's session must be an agent session. The
 	// answer is computed for the workload of the agent session and is
-	// LEVEL_NONE for an unknown client session.
+	// NONE_UNSPECIFIED for an unknown client session.
 	AuthorizeSessionAccess(context.Context, *AuthorizeSessionAccessRequest) (*AuthorizeSessionAccessResponse, error)
 	// GetKnownWorkloadKinds returns the known workload kinds
 	// that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)

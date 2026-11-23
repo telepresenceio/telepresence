@@ -1978,7 +1978,7 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 
 // AuthorizeSessionAccess tells an agent what a client session may do through
 // it. The workload comes from the agent session; the request supplies only the
-// client session ID. LEVEL_FILES requires "create" or "get" on the attachment.
+// client session ID. FILES requires "create" or "get" on the attachment.
 func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeSessionAccessRequest) (*rpc.AuthorizeSessionAccessResponse, error) {
 	agentSessionID := tunnel.SessionID(rq.GetSession().GetSessionId())
 	if !state.IsAgentSessionID(agentSessionID) {
@@ -1988,7 +1988,7 @@ func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeS
 	if err != nil {
 		return nil, err
 	}
-	none := &rpc.AuthorizeSessionAccessResponse{Level: rpc.AuthorizeSessionAccessResponse_LEVEL_NONE}
+	none := &rpc.AuthorizeSessionAccessResponse{Level: rpc.AuthorizeSessionAccessResponse_NONE_UNSPECIFIED}
 	clientID := tunnel.SessionID(rq.GetClientSessionId())
 	if state.IsAgentSessionID(clientID) {
 		return none, nil
@@ -2006,11 +2006,11 @@ func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeS
 	if !mayRead {
 		return none, nil
 	}
-	level := rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK
+	level := rpc.AuthorizeSessionAccessResponse_NETWORK
 	err = s.authorizeFileAccess(clientCtx, client.Principal(), agent.Namespace, agent.Name)
 	switch {
 	case err == nil:
-		level = rpc.AuthorizeSessionAccessResponse_LEVEL_FILES
+		level = rpc.AuthorizeSessionAccessResponse_FILES
 	case status.Code(err) == codes.Unavailable:
 		return nil, err
 	}

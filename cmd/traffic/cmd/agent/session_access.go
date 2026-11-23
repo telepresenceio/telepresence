@@ -19,7 +19,7 @@ const (
 	// sessionAccessTTL is how long an answer from the traffic-manager is reused.
 	sessionAccessTTL = 5 * time.Minute
 
-	// sessionAccessNoneTTL is how long a LEVEL_NONE answer is reused.
+	// sessionAccessNoneTTL is how long a none answer is reused.
 	sessionAccessNoneTTL = 15 * time.Second
 
 	// sessionAccessTimeout bounds one AuthorizeSessionAccess call.
@@ -29,7 +29,27 @@ const (
 	sessionAccessPruneAt = 256
 )
 
-type accessLevel = rpc.AuthorizeSessionAccessResponse_Level
+// accessLevel is ordered; a higher level includes the lower ones.
+type accessLevel int
+
+const (
+	accessNone accessLevel = iota
+	accessNetwork
+	accessFiles
+)
+
+// accessLevelFrom maps a level received from the traffic-manager. Anything that
+// this agent does not know means no access.
+func accessLevelFrom(l rpc.AuthorizeSessionAccessResponse_Level) accessLevel {
+	switch l {
+	case rpc.AuthorizeSessionAccessResponse_NETWORK:
+		return accessNetwork
+	case rpc.AuthorizeSessionAccessResponse_FILES:
+		return accessFiles
+	default:
+		return accessNone
+	}
+}
 
 type accessEntry struct {
 	level   accessLevel
@@ -57,7 +77,7 @@ func newSessionAuthorizer(manager rpc.ManagerClient, session *rpc.SessionInfo) *
 }
 
 // level returns the access level of the client session. A failed call counts as
-// rpc.AuthorizeSessionAccessResponse_LEVEL_NONE and is not cached.
+// accessNone and is not cached.
 func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.SessionID) accessLevel {
 	now := a.now()
 	a.mu.Lock()
@@ -75,9 +95,9 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 	})
 	if err != nil {
 		clog.Warnf(ctx, "unable to authorize access for session %s: %v", clientSession, err)
-		return rpc.AuthorizeSessionAccessResponse_LEVEL_NONE
+		return accessNone
 	}
-	level := resp.GetLevel()
+	level := accessLevelFrom(resp.GetLevel())
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -89,7 +109,7 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 		}
 	}
 	ttl := sessionAccessTTL
-	if level == rpc.AuthorizeSessionAccessResponse_LEVEL_NONE {
+	if level == accessNone {
 		ttl = sessionAccessNoneTTL
 	}
 	a.cache[clientSession] = accessEntry{level: level, expires: now.Add(ttl)}
@@ -109,10 +129,10 @@ func (a *fileShareAuth) requireAccess(ctx context.Context, clientSession tunnel.
 	return nil
 }
 
-// needsFileAccess reports whether a dial to dst requires LEVEL_FILES: loopback and
+// needsFileAccess reports whether a dial to dst requires accessFiles: loopback and
 // unspecified addresses on any port, and the pod's own addresses (podIPs or a
 // local interface address) on the sftp or ftp port. Everything else needs only
-// LEVEL_NETWORK. When the interface addresses cannot be read, an address is
+// accessNetwork. When the interface addresses cannot be read, an address is
 // treated as the pod's own.
 func needsFileAccess(dst netip.AddrPort, sftpPort, ftpPort uint16, podIPs ...netip.Addr) bool {
 	ip := dst.Addr().Unmap()

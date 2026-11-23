@@ -496,17 +496,23 @@ message AuthorizeSessionAccessRequest {
   string client_session_id = 2;
 }
 
+// AuthorizeSessionAccessResponse tells an agent what a client session may do
+// through it.
 message AuthorizeSessionAccessResponse {
+  // Level is the extent of access to the agent. A higher level includes the
+  // lower ones.
   enum Level {
     // The session may not use the agent.
-    LEVEL_NONE = 0;
+    NONE_UNSPECIFIED = 0;
 
     // The session may open tunnels and register as dial watcher.
-    LEVEL_NETWORK = 1;
+    NETWORK = 1;
 
     // The session may also reach the agent's file servers.
-    LEVEL_FILES = 2;
+    FILES = 2;
   }
+
+  // The access level of the client session.
   Level level = 1;
 }
 
@@ -1250,7 +1256,7 @@ service Manager {
   // AuthorizeSessionAccess lets an agent ask what a client session may do
   // through that agent. The caller's session must be an agent session. The
   // answer is computed for the workload of the agent session and is
-  // LEVEL_NONE for an unknown client session.
+  // NONE_UNSPECIFIED for an unknown client session.
   rpc AuthorizeSessionAccess(AuthorizeSessionAccessRequest) returns (AuthorizeSessionAccessResponse);
 
   // GetKnownWorkloadKinds returns the known workload kinds

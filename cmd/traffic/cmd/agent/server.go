@@ -86,7 +86,7 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 	if _, err := s.fileShareAuth.verifySession(ctx, stream.SessionID()); err != nil {
 		return err
 	}
-	if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK); err != nil {
+	if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), accessNetwork); err != nil {
 		return err
 	}
 	if awc, ok := s.awaitingForwards.Load(stream.SessionID()); ok {
@@ -97,7 +97,7 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 		}
 	}
 	if s.fileShareAuth.enforcing() && needsFileAccess(stream.ID().Destination(), s.SftpPort(), s.FtpPort(), s.PodIP(), s.AppPodIP()) {
-		if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), rpc.AuthorizeSessionAccessResponse_LEVEL_FILES); err != nil {
+		if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), accessFiles); err != nil {
 			return err
 		}
 	}
@@ -129,7 +129,7 @@ func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDial
 	if err != nil {
 		return err
 	}
-	if err := s.fileShareAuth.requireAccess(ctx, sid, rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK); err != nil {
+	if err := s.fileShareAuth.requireAccess(ctx, sid, accessNetwork); err != nil {
 		return err
 	}
 	started := time.Now()

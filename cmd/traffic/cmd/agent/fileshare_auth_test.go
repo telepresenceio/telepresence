@@ -832,5 +832,5 @@ type filesAccess struct {
 }
 
 func (filesAccess) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
-	return &mgrrpc.AuthorizeSessionAccessResponse{Level: mgrrpc.AuthorizeSessionAccessResponse_LEVEL_FILES}, nil
+	return &mgrrpc.AuthorizeSessionAccessResponse{Level: mgrrpc.AuthorizeSessionAccessResponse_FILES}, nil
 }

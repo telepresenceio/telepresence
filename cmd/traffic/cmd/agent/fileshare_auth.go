@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -85,7 +84,7 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 	sessionID, err := sessiontoken.Verify(s.pub, password, time.Now())
 	if err == nil {
 		if s.mode == "enforcing" {
-			return a.requireAccess(ctx, tunnel.SessionID(sessionID), rpc.AuthorizeSessionAccessResponse_LEVEL_FILES)
+			return a.requireAccess(ctx, tunnel.SessionID(sessionID), accessFiles)
 		}
 		return nil
 	}
