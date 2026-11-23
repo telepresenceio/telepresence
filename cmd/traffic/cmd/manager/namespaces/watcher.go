@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	listersCore "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -38,7 +39,7 @@ func (h *namesspacesHandle) set(namespaces []string) {
 	sort.Strings(namespaces)
 	var ips map[uuid.UUID]chan<- struct{}
 	h.Lock()
-	if !slices.Equal(namespaces, h.namespaces) {
+	if !slices.Equal(namespaces, h.namespaces) || (namespaces == nil) != (h.namespaces == nil) {
 		h.namespaces = namespaces
 		ips = h.interestedParties
 	}
@@ -251,7 +252,55 @@ func InitContext(ctx context.Context, selectorChan <-chan *labels.Selector) (nsC
 	return nsCtx, nil
 }
 
-// Get will return the currently mapped namespaces or nil if the scope is cluster global.
+// Manages returns true if the namespace is managed. It consults the current list first. When the
+// list says no and the namespaces are watched, the namespace is read and matched against the selector,
+// because the list is refreshed with a delay after a namespace is created or labelled.
+func Manages(ctx context.Context, ns string) bool {
+	h, ok := ctx.Value(nsKey{}).(*namesspacesHandle)
+	if !ok {
+		return true
+	}
+	nss := h.get()
+	if nss == nil || slices.Contains(nss, ns) {
+		return true
+	}
+	return h.confirm(ctx, ns)
+}
+
+func (h *namesspacesHandle) confirm(ctx context.Context, ns string) bool {
+	h.Lock()
+	lister := h.lister
+	sel := h.selector
+	h.Unlock()
+	if lister == nil || sel == nil {
+		return false
+	}
+	ls, err := sel.LabelsSelector()
+	if err != nil {
+		clog.Errorf(ctx, "unable to evaluate namespace selector: %v", err)
+		return false
+	}
+	obj, err := lister.Get(ns)
+	if err != nil {
+		obj, err = k8sapi.GetK8sInterface(ctx).CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				clog.Warnf(ctx, "unable to read namespace %s: %v", ns, err)
+			}
+			return false
+		}
+	}
+	if !ls.Matches(k8slabels.Set(obj.Labels)) {
+		return false
+	}
+	if err = h.updateSelection(); err != nil {
+		clog.Error(ctx, err)
+	}
+	return true
+}
+
+// Get will return the currently mapped namespaces or nil if the scope is cluster global. An empty,
+// non-nil slice means that no namespace matches.
 func Get(ctx context.Context) []string {
 	if h, ok := ctx.Value(nsKey{}).(*namesspacesHandle); ok {
 		return h.get()

@@ -99,8 +99,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, nil
 	}
 
-	// The managed namespaces are nil when the scope is cluster-wide.
-	if nss := namespaces.Get(ctx); nss != nil && !slices.Contains(nss, req.Namespace) {
+	if !namespaces.Manages(ctx, req.Namespace) {
 		clog.Debugf(ctx, "Skipping webhook for %s.%s because the namespace is not managed", req.Name, req.Namespace)
 		return nil, nil
 	}
