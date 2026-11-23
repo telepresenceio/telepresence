@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"net"
 	"net/netip"
 	"sync"
@@ -52,13 +53,20 @@ func accessLevelFrom(l rpc.AuthorizeSessionAccessResponse_Level) accessLevel {
 	}
 }
 
+// accessKey identifies a cached answer: the client session and a fingerprint of
+// the credential that it was presented with.
+type accessKey struct {
+	session    tunnel.SessionID
+	credential [sha256.Size]byte
+}
+
 type accessEntry struct {
 	level   accessLevel
 	expires time.Time
 }
 
 // sessionAuthorizer asks the traffic-manager what a client session may do
-// through this agent, and caches the answer per client session.
+// through this agent, and caches the answer per client session and credential.
 type sessionAuthorizer struct {
 	manager rpc.ManagerClient
 	session *rpc.SessionInfo
@@ -69,7 +77,7 @@ type sessionAuthorizer struct {
 	unimplemented atomic.Bool
 
 	mu    sync.Mutex
-	cache map[tunnel.SessionID]accessEntry
+	cache map[accessKey]accessEntry
 }
 
 func newSessionAuthorizer(manager rpc.ManagerClient, session *rpc.SessionInfo) *sessionAuthorizer {
@@ -77,21 +85,22 @@ func newSessionAuthorizer(manager rpc.ManagerClient, session *rpc.SessionInfo) *
 		manager: manager,
 		session: session,
 		now:     time.Now,
-		cache:   make(map[tunnel.SessionID]accessEntry),
+		cache:   make(map[accessKey]accessEntry),
 	}
 }
 
-// level returns the access level of the client session. A failed call counts as
-// accessNone and is not cached. When the traffic-manager doesn't implement the
-// call, the session credential check alone decides, so every session gets
-// accessFiles.
-func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.SessionID) accessLevel {
+// level returns the access level of the client session that presented credential.
+// A failed call counts as accessNone and is not cached. When the traffic-manager
+// doesn't implement the call, the session credential check alone decides, so
+// every session gets accessFiles.
+func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.SessionID, credential string) accessLevel {
 	if a.unimplemented.Load() {
 		return accessFiles
 	}
 	now := a.now()
+	key := accessKey{session: clientSession, credential: sha256.Sum256([]byte(credential))}
 	a.mu.Lock()
-	e, ok := a.cache[clientSession]
+	e, ok := a.cache[key]
 	a.mu.Unlock()
 	if ok && now.Before(e.expires) {
 		return e.level
@@ -118,9 +127,9 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if len(a.cache) >= sessionAccessPruneAt {
-		for id, e := range a.cache {
+		for k, e := range a.cache {
 			if !now.Before(e.expires) {
-				delete(a.cache, id)
+				delete(a.cache, k)
 			}
 		}
 	}
@@ -128,18 +137,19 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 	if level == accessNone {
 		ttl = sessionAccessNoneTTL
 	}
-	a.cache[clientSession] = accessEntry{level: level, expires: now.Add(ttl)}
+	a.cache[key] = accessEntry{level: level, expires: now.Add(ttl)}
 	return level
 }
 
-// requireAccess returns PermissionDenied when the client session has a lower access
-// level than need. It never rejects unless the traffic-manager enforces authentication.
-func (a *fileShareAuth) requireAccess(ctx context.Context, clientSession tunnel.SessionID, need accessLevel) error {
+// requireAccess returns PermissionDenied when the client session, presenting
+// credential, has a lower access level than need. It never rejects unless the
+// traffic-manager enforces authentication.
+func (a *fileShareAuth) requireAccess(ctx context.Context, clientSession tunnel.SessionID, credential string, need accessLevel) error {
 	if !a.enforcing() {
 		return nil
 	}
 	sa := a.authorizer.Load()
-	if sa == nil || sa.level(ctx, clientSession) < need {
+	if sa == nil || sa.level(ctx, clientSession, credential) < need {
 		return status.Errorf(codes.PermissionDenied, "session %q is not authorized to use this agent", clientSession)
 	}
 	return nil

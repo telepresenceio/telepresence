@@ -84,7 +84,7 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 	sessionID, err := sessiontoken.Verify(s.pub, password, time.Now())
 	if err == nil {
 		if s.mode == "enforcing" {
-			return a.requireAccess(ctx, tunnel.SessionID(sessionID), accessFiles)
+			return a.requireAccess(ctx, tunnel.SessionID(sessionID), password, accessFiles)
 		}
 		return nil
 	}
@@ -123,13 +123,7 @@ func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.Sessi
 	if s.pub == nil {
 		return false, nil
 	}
-	var token string
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if vs := md.Get(sessiontoken.MetadataKey); len(vs) > 0 {
-			token = vs[0]
-		}
-	}
-	if token != "" {
+	if token := sessionTokenFrom(ctx); token != "" {
 		sessionID, vErr := sessiontoken.Verify(s.pub, token, time.Now())
 		if vErr == nil {
 			if sessionID != string(declared) {
@@ -151,6 +145,17 @@ func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.Sessi
 			declared, s.mode, err)
 	}
 	return false, nil
+}
+
+// sessionTokenFrom returns the session token carried in ctx's incoming gRPC
+// metadata, or "" when there is none.
+func sessionTokenFrom(ctx context.Context) string {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vs := md.Get(sessiontoken.MetadataKey); len(vs) > 0 {
+			return vs[0]
+		}
+	}
+	return ""
 }
 
 // fromOwnPod reports whether remote is a connection delivered through the tunnel:
