@@ -179,19 +179,28 @@ func (s *AuthEnforcing) Test_SharedServiceInterceptDoesNotJoinUngrantedWorkload(
 		return len(after) > 0 && !slices.ContainsFunc(after, func(uid string) bool { return slices.Contains(before, uid) })
 	}, namespaceReadTimeout, namespaceReadPoll, "%s should get a new pod with a traffic-agent", nameB)
 
+	var reads int
 	s.Never(func() bool {
-		return interceptListsWorkload(mctx, mc, si, spec.Name, nameB)
+		listed, err := interceptListsWorkload(mctx, mc, si, spec.Name, nameB)
+		if err != nil {
+			t.Errorf("reading intercept %s: %v", spec.Name, err)
+			return true
+		}
+		reads++
+		return listed
 	}, sharedPartQuiet, sharedPartPoll, "the intercept must not list %s", nameB)
+	s.Positive(reads, "the intercept must have been read successfully")
 }
 
 // interceptListsWorkload reports whether the manager's answer for the
-// intercept lists a participating workload named name.
-func interceptListsWorkload(ctx context.Context, mc manager.ManagerClient, si *manager.SessionInfo, intercept, name string) bool {
+// intercept lists a participating workload named name. A failed read is
+// returned as an error.
+func interceptListsWorkload(ctx context.Context, mc manager.ManagerClient, si *manager.SessionInfo, intercept, name string) (bool, error) {
 	ii, err := mc.GetIntercept(ctx, &manager.GetInterceptRequest{Session: si, Name: intercept})
 	if err != nil {
-		return false
+		return false, err
 	}
 	return slices.ContainsFunc(ii.ServiceWorkloads, func(w *manager.InterceptWorkload) bool {
 		return w.WorkloadName == name
-	})
+	}), nil
 }

@@ -157,6 +157,7 @@ func (s *WshardKubeAuth) Test_TokenIsNotOnACommandLine() {
 		t.Logf("quit before connect: %v", err)
 	}
 
+	connectStart := time.Now()
 	w := wshardWatchStubs()
 	args := []string{
 		"connect", "--docker", "--name", wshardKubeAuthConn,
@@ -178,7 +179,19 @@ func (s *WshardKubeAuth) Test_TokenIsNotOnACommandLine() {
 		s.NotContains(argv, "--token", "the stub (pid %d) is started with a token flag: %v", pid, argv)
 	}
 
-	data, err := os.ReadFile(filepath.Join(r.UserCacheDir(), "kubeauthd.port"))
+	// The daemon names its port file after the kubeconfig list and context, so
+	// the file this test's daemon wrote is the only kubeauthd-*.port file
+	// written since the connect started.
+	portFiles, err := filepath.Glob(filepath.Join(r.UserCacheDir(), "kubeauthd-*.port"))
+	s.Require().NoError(err)
+	var fresh []string
+	for _, pf := range portFiles {
+		if fi, err := os.Stat(pf); err == nil && !fi.ModTime().Before(connectStart) {
+			fresh = append(fresh, pf)
+		}
+	}
+	s.Require().Len(fresh, 1, "expected exactly one kubeauth port file written since the connect: %v", fresh)
+	data, err := os.ReadFile(fresh[0])
 	s.Require().NoError(err, "the kubeauth port file")
 	var pf struct {
 		Token string `json:"token"`
