@@ -122,24 +122,41 @@ func readOnlyExports(sc *agentconfig.Sidecar) []string {
 }
 
 // ftpRoots returns the directories that the symlinks under agentconfig.ExportsMountPoint
-// lead to, as far as they lie within bases. A mount that is a file is represented by its
-// directory.
-func ftpRoots(bases []string) []string {
-	var roots []string
+// lead to, as far as they lie within bases. The FTP server can neither refuse writes nor serve
+// a single file, so the exports that are read-only (paths relative to the exports root) or that
+// are not directories are left out and returned as skipped, sorted.
+func ftpRoots(bases, readOnly []string) (roots, skipped []string) {
 	seen := map[string]bool{}
-	for _, target := range sftpserver.ExportedTargets(agentconfig.ExportsMountPoint, bases) {
-		dir := target
+	for link, target := range sftpserver.ExportedLinks(agentconfig.ExportsMountPoint, bases) {
 		if fi, err := os.Stat(target); err != nil {
 			continue
 		} else if !fi.IsDir() {
-			dir = path.Dir(target)
+			skipped = append(skipped, link+" (single file)")
+			continue
 		}
-		if !seen[dir] {
-			seen[dir] = true
-			roots = append(roots, dir)
+		if isUnder(link, readOnly) {
+			skipped = append(skipped, link+" (read-only)")
+			continue
+		}
+		if !seen[target] {
+			seen[target] = true
+			roots = append(roots, target)
 		}
 	}
-	return roots
+	sort.Strings(roots)
+	sort.Strings(skipped)
+	return roots, skipped
+}
+
+// isUnder reports whether p equals one of dirs or lies below it.
+func isUnder(p string, dirs []string) bool {
+	for _, d := range dirs {
+		d = path.Clean(d)
+		if p == d || strings.HasPrefix(p, d+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // sftpServer creates a listener on the next available port, writes that port on the
@@ -408,8 +425,13 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			// Debug output stays off: it would echo the password (a session token).
 			// The FTP server follows only the mount directories the exports symlinks
 			// lead to; see addAppMounts and exportProcMounts, which create them.
+			roots, skipped := ftpRoots(config.SymlinkRoots(), readOnlyExports(ac))
+			if len(skipped) > 0 {
+				clog.Infof(ctx, "Not offering %s over FTP, which cannot enforce read-only mounts or serve single files; they remain available over SFTP",
+					strings.Join(skipped, ", "))
+			}
 			return ftp.StartWithValidator(withoutDebugLogging(ctx), publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
-				srv.FileShareAuth().validatePassword, ftpRoots(config.SymlinkRoots())...)
+				srv.FileShareAuth().validatePassword, roots...)
 		})
 	} else {
 		close(sftpPortCh)
