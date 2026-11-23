@@ -4,7 +4,9 @@ package connect
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -44,23 +46,33 @@ func wshardSudo(ctx context.Context, args ...string) error {
 
 // wshardPlantFile creates path, owned by the current user, in directories that
 // the administrator owns, and removes it and any directory it had to create
-// when the test ends. The test is skipped if path already exists, because the
-// file then belongs to a real installation.
+// when the test ends. The test is skipped if path exists, and fails if its
+// absence cannot be confirmed. The file is created exclusively, and removal is
+// registered only for what this call created.
 func wshardPlantFile(t *testing.T, path, content string) {
 	t.Helper()
-	if _, err := os.Lstat(path); err == nil {
+	_, err := os.Lstat(path)
+	if err == nil {
 		t.Skipf("%s exists: it belongs to an installation that this test must not touch", path)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("cannot confirm that %s is absent: %v", path, err)
 	}
 	ctx := context.Background()
 	var created []string
 	for d := filepath.Dir(path); ; d = filepath.Dir(d) {
-		if _, err := os.Lstat(d); err == nil {
+		_, err := os.Lstat(d)
+		if err == nil {
 			break
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("cannot inspect %s: %v", d, err)
 		}
 		created = append(created, d)
 	}
+	// Directories are removed only if empty, so a directory that appeared
+	// meanwhile and holds files survives.
 	t.Cleanup(func() {
-		_ = wshardSudo(ctx, "rm", "-f", path)
 		for _, d := range created {
 			_ = wshardSudo(ctx, "rmdir", d)
 		}
@@ -68,7 +80,17 @@ func wshardPlantFile(t *testing.T, path, content string) {
 	if err := wshardSudo(ctx, "mkdir", "-p", filepath.Dir(path)); err != nil {
 		t.Fatal(err)
 	}
-	if err := wshardSudo(ctx, "install", "-o", strconv.Itoa(os.Getuid()), "-m", "0644", "/dev/null", path); err != nil {
+	// noclobber makes the redirection fail if path exists.
+	if err := wshardSudo(ctx, "sh", "-c", `set -C; : > "$1"`, "sh", path); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = wshardSudo(ctx, "rm", "-f", path)
+	})
+	if err := wshardSudo(ctx, "chown", strconv.Itoa(os.Getuid()), path); err != nil {
+		t.Fatal(err)
+	}
+	if err := wshardSudo(ctx, "chmod", "0644", path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
