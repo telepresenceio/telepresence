@@ -73,7 +73,7 @@ type sessionAuthorizer struct {
 	now     func() time.Time
 
 	// unimplemented is set once the traffic-manager has answered that it doesn't
-	// implement AuthorizeSessionAccess.
+	// implement AuthorizeSessionAccess; every request is then refused.
 	unimplemented atomic.Bool
 
 	mu    sync.Mutex
@@ -90,12 +90,12 @@ func newSessionAuthorizer(manager rpc.ManagerClient, session *rpc.SessionInfo) *
 }
 
 // level returns the access level of the client session that presented credential.
-// A failed call counts as accessNone and is not cached. When the traffic-manager
-// doesn't implement the call, the session credential check alone decides, so
-// every session gets accessFiles.
+// A failed call counts as accessNone and is not cached. A traffic-manager that
+// doesn't implement the call is too old for this agent, so every session gets
+// accessNone.
 func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.SessionID, credential string) accessLevel {
 	if a.unimplemented.Load() {
-		return accessFiles
+		return accessNone
 	}
 	now := a.now()
 	key := accessKey{session: clientSession, credential: sha256.Sum256([]byte(credential))}
@@ -115,9 +115,9 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			if a.unimplemented.CompareAndSwap(false, true) {
-				clog.Infof(ctx, "the traffic-manager doesn't implement AuthorizeSessionAccess; session access is decided by the session credential alone")
+				clog.Errorf(ctx, "the traffic-manager doesn't implement AuthorizeSessionAccess; this traffic-agent requires traffic-manager 2.34.0 or later, and refuses session access until then")
 			}
-			return accessFiles
+			return accessNone
 		}
 		clog.Warnf(ctx, "unable to authorize access for session %s: %v", clientSession, err)
 		return accessNone

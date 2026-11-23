@@ -390,11 +390,11 @@ client can retry.
 The [access levels](#access-levels) add two more cases:
 
 - **An agent of version 2.34 or later with an older traffic-manager.** The
-  traffic-manager answers the access call with `Unimplemented`. The agent
-  then treats every session that presents a valid credential as having the
-  files level, which is how agents before 2.34 behave. The agent asks
-  again after it reconnects to a traffic-manager, so it uses the access
-  levels once the traffic-manager has been upgraded.
+  agent requires a traffic-manager of version 2.34 or later when
+  authentication is enforced. The traffic-manager answers the access call
+  with `Unimplemented`, and the agent refuses every session, logging an
+  error, until the traffic-manager has been upgraded. Upgrade the
+  traffic-manager before the agents are restarted.
 - **An agent older than 2.34 with a current traffic-manager.** The agent
   never asks for access levels and checks the session credential only. The
   traffic-manager does not replace a pod when only the agent image changes,
