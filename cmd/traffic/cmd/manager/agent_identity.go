@@ -54,7 +54,10 @@ func (s *service) verifyAgentPod(ctx context.Context, p *auth.Principal, agent *
 		return errors.Errorf(codes.PermissionDenied, "agent token does not belong to a service account")
 	}
 	podNamespace, _, _ := strings.Cut(rest, ":")
-	pod, err := lookupPod(ctx, podNamespace, p.PodName)
+	pod, cached, err := lookupPod(ctx, podNamespace, p.PodName)
+	if err == nil && cached && !hasPodAddress(pod) {
+		pod, err = readPod(ctx, podNamespace, p.PodName)
+	}
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			return agentIdentityDenied(ctx, agent, "pod %s.%s does not exist", p.PodName, podNamespace)
@@ -63,6 +66,9 @@ func (s *service) verifyAgentPod(ctx context.Context, p *auth.Principal, agent *
 	}
 	if string(pod.UID) != p.PodUID {
 		return agentIdentityDenied(ctx, agent, "pod %s.%s has a different UID", p.PodName, podNamespace)
+	}
+	if !hasPodAddress(pod) {
+		return errors.Errorf(codes.Unavailable, "pod %s.%s has no address yet", p.PodName, podNamespace)
 	}
 	if !slices.ContainsFunc(pod.Status.PodIPs, func(ip core.PodIP) bool { return ip.IP == agent.PodIp }) && pod.Status.PodIP != agent.PodIp {
 		return agentIdentityDenied(ctx, agent, "pod IP %s is not an address of pod %s.%s", agent.PodIp, p.PodName, podNamespace)
@@ -132,17 +138,29 @@ func agentIdentityDenied(ctx context.Context, agent *rpc.AgentInfo, format strin
 	return errors.Errorf(codes.PermissionDenied, "agent identity %s.%s does not match the cluster", agent.PodName, agent.Namespace)
 }
 
+// hasPodAddress reports whether the pod status carries a pod IP.
+func hasPodAddress(pod *core.Pod) bool {
+	return pod.Status.PodIP != "" || len(pod.Status.PodIPs) > 0
+}
+
 // lookupPod reads the pod from the informer cache and falls back to the API
-// server when the cache has not seen it.
-func lookupPod(ctx context.Context, namespace, name string) (*core.Pod, error) {
+// server when the cache has not seen it. The result tells whether the pod
+// came from the cache.
+func lookupPod(ctx context.Context, namespace, name string) (*core.Pod, bool, error) {
 	if f := informer.GetK8sFactory(ctx, namespace); f != nil {
 		pod, err := f.Core().V1().Pods().Lister().Pods(namespace).Get(name)
 		if err == nil {
-			return pod, nil
+			return pod, true, nil
 		}
 		if !k8sErrors.IsNotFound(err) {
-			return nil, err
+			return nil, false, err
 		}
 	}
+	pod, err := readPod(ctx, namespace, name)
+	return pod, false, err
+}
+
+// readPod reads the pod from the API server.
+func readPod(ctx context.Context, namespace, name string) (*core.Pod, error) {
 	return k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).Get(ctx, name, meta.GetOptions{})
 }
