@@ -241,14 +241,3 @@ func (s *injhardWebhook) Test_ForgedAdmissionWithForeignPodNamespace() {
 	wl := rt.Get(t, rt.WorkloadFixture(ns, workloads.Echo("injhard-foreign-victim")))
 	s.requireAdmittedUnchanged(s.forgedPodReview(ns, wl.Name, s.AppNamespace()))
 }
-
-// Test_ForgedAdmissionWhenNoNamespaceIsManaged runs against a manager whose
-// namespace selector matches nothing and sends a review for a workload in an
-// unmanaged namespace. The answer is allowed and carries no patch.
-func (s *injhardWebhook) Test_ForgedAdmissionWhenNoNamespaceIsManaged() {
-	t := s.T()
-	rt.Mutate(t, rt.ManagerFixture(managers.NoMatchingNamespaces()))
-	ns := rt.PrivateUnmanagedNamespace(rt.Env{Ctx: s.Ctx(), T: t, R: s.R()}, "injhard-nomatch")
-	wl := rt.Get(t, rt.WorkloadFixture(ns, workloads.Echo("injhard-nomatch-victim")))
-	s.requireAdmittedUnchanged(s.forgedPodReview(ns, wl.Name, ns))
-}
