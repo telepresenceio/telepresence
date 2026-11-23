@@ -1980,6 +1980,9 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 // it. The workload comes from the agent session; the request supplies only the
 // client session ID. FILES requires "create" or "get" on the attachment.
 func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeSessionAccessRequest) (*rpc.AuthorizeSessionAccessResponse, error) {
+	if err := checkCompat(ctx, "AuthorizeSessionAccess", "2.34.0"); err != nil {
+		return nil, err
+	}
 	agentSessionID := tunnel.SessionID(rq.GetSession().GetSessionId())
 	if !state.IsAgentSessionID(agentSessionID) {
 		return nil, errors.Errorf(codes.PermissionDenied, "not an agent session")

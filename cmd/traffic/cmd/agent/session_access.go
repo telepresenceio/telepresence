@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -63,6 +64,10 @@ type sessionAuthorizer struct {
 	session *rpc.SessionInfo
 	now     func() time.Time
 
+	// unimplemented is set once the traffic-manager has answered that it doesn't
+	// implement AuthorizeSessionAccess.
+	unimplemented atomic.Bool
+
 	mu    sync.Mutex
 	cache map[tunnel.SessionID]accessEntry
 }
@@ -77,8 +82,13 @@ func newSessionAuthorizer(manager rpc.ManagerClient, session *rpc.SessionInfo) *
 }
 
 // level returns the access level of the client session. A failed call counts as
-// accessNone and is not cached.
+// accessNone and is not cached. When the traffic-manager doesn't implement the
+// call, the session credential check alone decides, so every session gets
+// accessFiles.
 func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.SessionID) accessLevel {
+	if a.unimplemented.Load() {
+		return accessFiles
+	}
 	now := a.now()
 	a.mu.Lock()
 	e, ok := a.cache[clientSession]
@@ -94,6 +104,12 @@ func (a *sessionAuthorizer) level(ctx context.Context, clientSession tunnel.Sess
 		ClientSessionId: string(clientSession),
 	})
 	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			if a.unimplemented.CompareAndSwap(false, true) {
+				clog.Infof(ctx, "the traffic-manager doesn't implement AuthorizeSessionAccess; session access is decided by the session credential alone")
+			}
+			return accessFiles
+		}
 		clog.Warnf(ctx, "unable to authorize access for session %s: %v", clientSession, err)
 		return accessNone
 	}
