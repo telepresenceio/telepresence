@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -879,13 +878,6 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// Closing the response tells the DNS service to terminate
 		if c.Err() != nil {
 			_ = w.Close()
-		}
-	}()
-
-	defer func() {
-		if p := recover(); p != nil {
-			clog.Errorf(c, "panic in ServeDNS for %s %s: %v\n%s", qts, q.Name, p, debug.Stack())
-			msg.SetRcode(r, dns.RcodeServerFailure)
 		}
 	}()
 
