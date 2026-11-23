@@ -45,6 +45,13 @@ func TestSetClusterDNS_dropsBadNames(t *testing.T) {
 	assert.Equal(t, []string{".ok"}, s.ExcludeSuffixes)
 }
 
+// A cluster test cannot make a traffic-manager send a ClusterInfo without dns.
+func TestSetClusterDNS_nil(t *testing.T) {
+	s := NewServer(nil, "ns", nil)
+	require.NoError(t, s.SetClusterDNS(t.Context(), nil, s.VIFAddress))
+	assert.Equal(t, defaultClusterDomain, s.clusterDomain)
+}
+
 func TestSetClusterDNS_badClusterDomain(t *testing.T) {
 	s := NewServer(nil, "ns", nil)
 	for _, d := range []string{"", "a/../b", "x\ny", "../.."} {

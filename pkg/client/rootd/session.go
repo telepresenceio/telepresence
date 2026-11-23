@@ -710,6 +710,9 @@ func (s *session) complexClusterLookup(ctx context.Context, q *dns2.Question) (d
 			return nil, dns2.RcodeServerFailure, err
 		}
 		for _, rr := range answer {
+			if dnsproxy.IsEmptyName(rr) {
+				continue
+			}
 			switch rr := rr.(type) {
 			case *dns2.A:
 				var addr netip.Addr
@@ -1111,10 +1114,10 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 	}
 
 	if dnsRouted {
-		d := clusterDNS(mgrInfo)
+		d := mgrInfo.Dns
 		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
 		clog.Infof(s, "Setting client DNS to %s", vifDNS)
-		clog.Infof(s, "Setting cluster domain to %q", d.ClusterDomain)
+		clog.Infof(s, "Setting cluster domain to %q", d.GetClusterDomain())
 		if err := s.dnsServer.SetClusterDNS(s, d, dnsAddress); err != nil {
 			return err
 		}
@@ -1123,28 +1126,21 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 }
 
 // checkAddressRecords returns an error if an A or AAAA record has an address of the wrong length.
+// Records without an address are the manager's missing-family markers and are accepted.
 func checkAddressRecords(rrs dnsproxy.RRs) error {
 	for _, rr := range rrs {
 		switch rr := rr.(type) {
 		case *dns2.A:
-			if len(rr.A) != net.IPv4len {
+			if len(rr.A) != 0 && len(rr.A) != net.IPv4len {
 				return fmt.Errorf("malformed A record for %q: %d address bytes", rr.Hdr.Name, len(rr.A))
 			}
 		case *dns2.AAAA:
-			if len(rr.AAAA) != net.IPv6len {
+			if len(rr.AAAA) != 0 && len(rr.AAAA) != net.IPv6len {
 				return fmt.Errorf("malformed AAAA record for %q: %d address bytes", rr.Hdr.Name, len(rr.AAAA))
 			}
 		}
 	}
 	return nil
-}
-
-// clusterDNS returns the DNS part of the ClusterInfo, or an empty one when the manager sent none.
-func clusterDNS(mgrInfo *manager.ClusterInfo) *manager.DNS {
-	if mgrInfo.Dns == nil {
-		return &manager.DNS{}
-	}
-	return mgrInfo.Dns
 }
 
 func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
