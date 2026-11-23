@@ -20,8 +20,9 @@ match it. --all skips the check and prints the complete set for the given
 subjects, without contacting the cluster.
 
 The traffic-manager namespace is --manager-namespace, or ambassador when it's
-not given, the same as for telepresence helm install. It isn't looked up in
-the cluster.
+not given. These commands have no -n, so if you install with
+telepresence helm install -n foo, pass --manager-namespace foo here. It isn't
+looked up in the cluster.
 
 ### Usage:
 ```

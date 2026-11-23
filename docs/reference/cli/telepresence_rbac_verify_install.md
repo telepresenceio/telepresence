@@ -16,8 +16,9 @@ kubeconfig (after --as and --as-group), and prints what's missing. It exits
 with a non-zero status when anything is missing.
 
 The traffic-manager namespace is --manager-namespace, or ambassador when it's
-not given, the same as for telepresence helm install. It isn't looked up in
-the cluster.
+not given. These commands have no -n, so if you install with
+telepresence helm install -n foo, pass --manager-namespace foo here. It isn't
+looked up in the cluster.
 
 ### Usage:
 ```
