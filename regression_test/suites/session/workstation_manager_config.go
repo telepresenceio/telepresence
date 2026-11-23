@@ -134,6 +134,9 @@ func (s *WshardManagerConfig) Test_LocalSettingsAreNotAdopted() {
 	r := s.R()
 	mgrNS := managers.ManagerNamespace
 
+	// The test patches the shared release, so the fixture is re-provisioned after it.
+	rt.Mutate(t, rt.ManagerFixture(wshardSpec))
+
 	original, err := r.Kubectl(ctx, mgrNS, "get", "configmap", wshardManagerConfigMap,
 		"-o", "jsonpath={.data.client\\.yaml}")
 	s.Require().NoError(err)
@@ -159,7 +162,7 @@ func (s *WshardManagerConfig) Test_LocalSettingsAreNotAdopted() {
 	}
 	t.Cleanup(func() {
 		if err := patchConfigMap(original); err != nil {
-			r.Infof("[rtest] WshardManagerConfig: restoring %s: %v", wshardManagerConfigMap, err)
+			t.Errorf("restoring %s: %v", wshardManagerConfigMap, err)
 		}
 	})
 	hostile, err := yaml.Marshal(doc)
