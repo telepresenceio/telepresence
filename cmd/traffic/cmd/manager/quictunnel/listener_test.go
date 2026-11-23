@@ -3,10 +3,12 @@ package quictunnel_test
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/netip"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -519,4 +521,54 @@ func TestListener_DatagramsEnabledByEnv(t *testing.T) {
 	conn = dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-enabled", clientQCfg)
 	sd = conn.ConnectionState().SupportsDatagrams
 	require.True(t, sd.Local && sd.Remote, "expected datagram negotiation to succeed once the listener opts in")
+}
+
+// failingDialer fails every dial and counts the attempts.
+type failingDialer struct {
+	attempts atomic.Int64
+}
+
+func (d *failingDialer) DialTCP(context.Context, netip.AddrPort) (net.Conn, error) {
+	d.attempts.Add(1)
+	return nil, errors.New("connection refused")
+}
+
+func (d *failingDialer) DialUDP(context.Context, netip.AddrPort, netip.AddrPort) (net.Conn, error) {
+	d.attempts.Add(1)
+	return nil, errors.New("connection refused")
+}
+
+// TestListener_DialStopsWhenConnectionCloses: a cluster test cannot count dial attempts
+// made by the traffic-manager, so the retry loop is observed through a fake dialer.
+func TestListener_DialStopsWhenConnectionCloses(t *testing.T) {
+	ctx, cancel := testContext(t, 20*time.Second)
+	defer cancel()
+
+	fd := &failingDialer{}
+	handler := func(ctx context.Context, s tunnel.Stream) error {
+		ep := tunnel.NewDialer(s, func() {}, nil, nil)
+		ep.Start(tunnel.WithDialer(ctx, fd))
+		<-ep.Done()
+		return nil
+	}
+	ca, dialAddr := startTestListener(t, ctx, handler)
+	conn := dialSession(t, ctx, ca, dialAddr, "session-dial")
+
+	qs, err := conn.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	id := tunnel.NewConnID(types.ProtoTCP,
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001),
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
+	_, err = tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn, qs),
+		id, tunnel.SessionID("session-dial"), 0, time.Hour)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool { return fd.attempts.Load() > 0 }, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, conn.CloseWithError(0, ""))
+
+	// Allow an in-flight attempt to finish, then require that no more arrive.
+	time.Sleep(200 * time.Millisecond)
+	n := fd.attempts.Load()
+	time.Sleep(2500 * time.Millisecond)
+	require.Equal(t, n, fd.attempts.Load(), "dial attempts continued after the connection closed")
 }
