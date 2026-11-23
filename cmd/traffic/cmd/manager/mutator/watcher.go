@@ -492,21 +492,8 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 		return ac, nil
 	}
 
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
-	if err != nil {
-		return nil, err
-	}
-
 	clog.Debugf(ctx, "GetOrGenerate generates config for workload %s.%s", wl.GetName(), wl.GetNamespace())
-	var ac *agentconfig.Sidecar
-	err = backoff.Retry(func() error {
-		var genErr error
-		ac, genErr = gc.Generate(ctx, wl, nil)
-		if genErr != nil && errcat.GetCategory(genErr) == errcat.User {
-			return backoff.Permanent(genErr)
-		}
-		return genErr
-	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 10), ctx))
+	ac, err := generateWithRetry(ctx, wl)
 	if err != nil {
 		return nil, err
 	}
@@ -520,6 +507,25 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 		return ac, xsync.UpdateOp
 	})
 	return ac, nil
+}
+
+// generateWithRetry generates a config for wl without storing it, and retries transient errors as
+// described for GetOrGenerate.
+func generateWithRetry(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		return nil, err
+	}
+	var ac *agentconfig.Sidecar
+	err = backoff.Retry(func() error {
+		var genErr error
+		ac, genErr = gc.Generate(ctx, wl, nil)
+		if genErr != nil && errcat.GetCategory(genErr) == errcat.User {
+			return backoff.Permanent(genErr)
+		}
+		return genErr
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 10), ctx))
+	return ac, err
 }
 
 func whereWeWatch(ns string) string {

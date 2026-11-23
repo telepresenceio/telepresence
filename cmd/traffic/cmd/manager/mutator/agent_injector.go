@@ -191,11 +191,7 @@ func (a *agentInjector) configFor(ctx context.Context, wl k8sapi.Workload) (*age
 	if sc := a.agentConfigs.Get(wl.GetName(), wl.GetNamespace()); sc != nil {
 		return sc, nil
 	}
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
-	if err != nil {
-		return nil, err
-	}
-	return gc.Generate(ctx, wl, nil)
+	return generateWithRetry(ctx, wl)
 }
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod, wlTpl *core.PodTemplateSpec) (patches PatchOps, err error) {
