@@ -926,28 +926,10 @@ func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rp
 				// All pods in one workload share a participant key. Avoid entering
 				// UpdateIntercept once the workload is already represented; otherwise a
 				// burst of pods needlessly contends on the same intercept record.
+				// Only the Service watcher adds a participant, after the
+				// participant authorization has passed.
 				if _, exists := intercept.participants[participantKey]; !exists {
-					if _, selectionKnown := s.selectedServiceParticipants(intercept); selectionKnown {
-						// The Service selector is authoritative when its
-						// informer state is available. An old agent can keep
-						// advertising a target after its workload was
-						// pruned, but must not rejoin the intercept.
-						return true
-					}
-					intercept = s.UpdateIntercept(interceptID, func(intercept *Intercept) {
-						if _, exists := intercept.participants[participantKey]; exists {
-							return
-						}
-						intercept.addParticipant(agent)
-						if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
-							intercept.Disposition = rpc.InterceptDispositionType_WAITING
-							intercept.Message = fmt.Sprintf("Waiting for Agent approval from workloads: %s",
-								strings.Join(intercept.pendingParticipants(), ", "))
-						}
-					})
-					if intercept == nil {
-						return true
-					}
+					return true
 				}
 			}
 		} else if !matches {
