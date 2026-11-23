@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,6 +42,7 @@ const (
 	maxConcurrentDialRejecters  = 16
 	minDialRequestTimeout       = time.Second
 	maxDialRejectTimeout        = 5 * time.Second
+	maxDialTiming               = time.Hour
 )
 
 const (
@@ -483,6 +485,11 @@ func DialWaitLoop(
 				clog.Errorf(ctx, "!! %s dropping dial request with malformed ConnID of %d bytes", tag, len(dr.ConnId))
 				continue
 			}
+			if !validDialTiming(dr) {
+				clog.Errorf(ctx, "!! %s %s dropping dial request with invalid timing: roundtrip latency %d, dial timeout %d",
+					tag, id, dr.RoundtripLatency, dr.DialTimeout)
+				continue
+			}
 			if allowed == nil || !allowed(id) {
 				clog.Errorf(ctx, "!! %s %s, dial request refused: destination is not an intercept target", tag, id)
 				rejectAsync(ctx, tag, tunnelProvider, dr, sessionID, dialRejecters)
@@ -517,6 +524,7 @@ func DialWaitLoop(
 				defer func() {
 					<-dialResponders
 				}()
+				defer recoverDial(ctx, tag, id)
 				dialRespond(ctx, tag, tunnelProvider, dr, sessionID, metrics)
 			}()
 			continue
@@ -541,15 +549,30 @@ func DialWaitLoop(
 func rejectAsync(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.DialRequest, sessionID SessionID, rejecters chan struct{}) {
 	select {
 	case rejecters <- struct{}{}:
+		id := ConnID(dr.ConnId)
 		go func() {
 			defer func() {
 				<-rejecters
 			}()
+			defer recoverDial(ctx, tag, id)
 			dialReject(ctx, tag, tunnelProvider, dr, sessionID)
 		}()
 	default:
 		clog.Errorf(ctx, "!! %s %s, dial reject queue saturated; dropping request", tag, ConnID(dr.ConnId))
 	}
+}
+
+// recoverDial logs a panic in a dial goroutine, which then ends without taking the process down.
+func recoverDial(ctx context.Context, tag Tag, id ConnID) {
+	if r := recover(); r != nil {
+		clog.Errorf(ctx, "!! %s %s, panic in dial handler: %v\n%s", tag, id, r, debug.Stack())
+	}
+}
+
+// validDialTiming returns true if the roundtrip latency and the dial timeout are between zero and maxDialTiming.
+func validDialTiming(dr *rpc.DialRequest) bool {
+	return dr.RoundtripLatency >= 0 && dr.RoundtripLatency <= int64(maxDialTiming) &&
+		dr.DialTimeout >= 0 && dr.DialTimeout <= int64(maxDialTiming)
 }
 
 func dialRequestTimeout(dr *rpc.DialRequest) time.Duration {
