@@ -48,14 +48,11 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) e
 		return err
 	}
 	if !resp.GetEnabled() {
-		// The manager we're now talking to has no QUIC CA configured, so it has no
-		// session credential to hand out either; fileShareAuth stays unpopulated. If a
-		// listener from an earlier, QUIC-enabled manager is still running, it keeps
-		// running on its old material: connections from a client minted by this new
-		// manager will simply fail certificate verification, which is the correct
-		// fallback (the client falls back to its port-forward path). Nothing to do
-		// here but say so.
+		// The manager has no QUIC CA, so it issues no session credentials and there is
+		// nothing to verify against; file-sharing and tunnel calls are accepted
+		// unauthenticated. A listener from an earlier manager keeps its old material.
 		clog.Debugf(fetchCtx, "quicserver: traffic-manager has no QUIC CA configured; not starting a QUIC listener")
+		s.fileShareAuth.setNoCredentials()
 		return nil
 	}
 
