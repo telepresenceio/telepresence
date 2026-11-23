@@ -171,7 +171,7 @@ func interceptTargets(intercepts []*manager.InterceptInfo, dests map[string]dest
 		workloads := []workload{{spec.Namespace, spec.Agent}}
 		// A shared-service intercept receives traffic from every participating workload.
 		for _, sw := range ii.ServiceWorkloads {
-			if w := (workload{sw.Namespace, sw.WorkloadName}); w.name != "" && !slices.Contains(workloads, w) {
+			if w := (workload{sw.GetNamespace(), sw.GetWorkloadName()}); w.name != "" && !slices.Contains(workloads, w) {
 				workloads = append(workloads, w)
 			}
 		}
