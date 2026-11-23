@@ -486,6 +486,30 @@ message GetInterceptRequest {
   string name = 2;
 }
 
+// AuthorizeSessionAccessRequest asks what a client session may do through the
+// calling agent.
+message AuthorizeSessionAccessRequest {
+  // The agent's own session.
+  SessionInfo session = 1;
+
+  // The ID of the client session that wants to use the agent.
+  string client_session_id = 2;
+}
+
+message AuthorizeSessionAccessResponse {
+  enum Level {
+    // The session may not use the agent.
+    LEVEL_NONE = 0;
+
+    // The session may open tunnels and register as dial watcher.
+    LEVEL_NETWORK = 1;
+
+    // The session may also reach the agent's file servers.
+    LEVEL_FILES = 2;
+  }
+  Level level = 1;
+}
+
 message ReviewInterceptRequest {
   SessionInfo session = 1;
   string id = 2;
@@ -1222,6 +1246,12 @@ service Manager {
   // changing the disposition from "WATING" to "ACTIVE" or to an
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
+
+  // AuthorizeSessionAccess lets an agent ask what a client session may do
+  // through that agent. The caller's session must be an agent session. The
+  // answer is computed for the workload of the agent session and is
+  // LEVEL_NONE for an unknown client session.
+  rpc AuthorizeSessionAccess(AuthorizeSessionAccessRequest) returns (AuthorizeSessionAccessResponse);
 
   // GetKnownWorkloadKinds returns the known workload kinds
   // that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)

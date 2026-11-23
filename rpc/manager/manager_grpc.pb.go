@@ -55,6 +55,7 @@ const (
 	Manager_RemoveIntercept_FullMethodName                 = "/telepresence.manager.Manager/RemoveIntercept"
 	Manager_GetIntercept_FullMethodName                    = "/telepresence.manager.Manager/GetIntercept"
 	Manager_ReviewIntercept_FullMethodName                 = "/telepresence.manager.Manager/ReviewIntercept"
+	Manager_AuthorizeSessionAccess_FullMethodName          = "/telepresence.manager.Manager/AuthorizeSessionAccess"
 	Manager_GetKnownWorkloadKinds_FullMethodName           = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
 	Manager_Lookup_FullMethodName                          = "/telepresence.manager.Manager/Lookup"
 	Manager_LookupDNS_FullMethodName                       = "/telepresence.manager.Manager/LookupDNS"
@@ -175,6 +176,11 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// AuthorizeSessionAccess lets an agent ask what a client session may do
+	// through that agent. The caller's session must be an agent session. The
+	// answer is computed for the workload of the agent session and is
+	// LEVEL_NONE for an unknown client session.
+	AuthorizeSessionAccess(ctx context.Context, in *AuthorizeSessionAccessRequest, opts ...grpc.CallOption) (*AuthorizeSessionAccessResponse, error)
 	// GetKnownWorkloadKinds returns the known workload kinds
 	// that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)
 	// as configured in the manager's Helm values.
@@ -653,6 +659,16 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
+func (c *managerClient) AuthorizeSessionAccess(ctx context.Context, in *AuthorizeSessionAccessRequest, opts ...grpc.CallOption) (*AuthorizeSessionAccessResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthorizeSessionAccessResponse)
+	err := c.cc.Invoke(ctx, Manager_AuthorizeSessionAccess_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) GetKnownWorkloadKinds(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*KnownWorkloadKinds, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KnownWorkloadKinds)
@@ -900,6 +916,11 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error)
+	// AuthorizeSessionAccess lets an agent ask what a client session may do
+	// through that agent. The caller's session must be an agent session. The
+	// answer is computed for the workload of the agent session and is
+	// LEVEL_NONE for an unknown client session.
+	AuthorizeSessionAccess(context.Context, *AuthorizeSessionAccessRequest) (*AuthorizeSessionAccessResponse, error)
 	// GetKnownWorkloadKinds returns the known workload kinds
 	// that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)
 	// as configured in the manager's Helm values.
@@ -1052,6 +1073,9 @@ func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptReq
 }
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReviewIntercept not implemented")
+}
+func (UnimplementedManagerServer) AuthorizeSessionAccess(context.Context, *AuthorizeSessionAccessRequest) (*AuthorizeSessionAccessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AuthorizeSessionAccess not implemented")
 }
 func (UnimplementedManagerServer) GetKnownWorkloadKinds(context.Context, *SessionInfo) (*KnownWorkloadKinds, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetKnownWorkloadKinds not implemented")
@@ -1584,6 +1608,24 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_AuthorizeSessionAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorizeSessionAccessRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).AuthorizeSessionAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_AuthorizeSessionAccess_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).AuthorizeSessionAccess(ctx, req.(*AuthorizeSessionAccessRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_GetKnownWorkloadKinds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SessionInfo)
 	if err := dec(in); err != nil {
@@ -1857,6 +1899,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReviewIntercept",
 			Handler:    _Manager_ReviewIntercept_Handler,
+		},
+		{
+			MethodName: "AuthorizeSessionAccess",
+			Handler:    _Manager_AuthorizeSessionAccess_Handler,
 		},
 		{
 			MethodName: "GetKnownWorkloadKinds",
