@@ -24,6 +24,10 @@ func serveLocal(ctx context.Context, pp types.PortAndProto, target netip.AddrPor
 		return forwarder.New(pp, tunnel.ClientToAgent, target).Serve(ctx, nil)
 	}
 
+	// The IPv6 forwarder stops when the IPv4 forwarder, which is required, returns.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// The IPv6 bind is best-effort; the host may have IPv6 disabled.
 	go func() {
 		f := forwarder.New(pp, tunnel.ClientToAgent, target, forwarder.WithListenAddr(netip.IPv6Loopback()))
