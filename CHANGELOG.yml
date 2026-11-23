@@ -27,6 +27,15 @@ items:
   - version: 2.34.0
     date: (TBD)
     notes:
+      - type: security
+        title: A malformed gRPC message no longer ends the traffic-manager or a traffic-agent
+        body: >-
+          A malformed gRPC message could make the traffic-manager or a
+          traffic-agent exit. Reaching a traffic-agent this way needed no
+          credentials, only network access to the pod. The traffic-manager
+          and the traffic-agent now reject such messages, and a failure in
+          one call no longer ends the process. Reported by
+          <code>jpabeem</code>.
       - type: feature
         title: Prometheus metrics for the traffic-manager's gRPC requests
         body: >-

@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.34.0
 <Note>
+	<Title type="security">A malformed gRPC message no longer ends the traffic-manager or a traffic-agent</Title>
+	<Body>
+A malformed gRPC message could make the traffic-manager or a traffic-agent exit. Reaching a traffic-agent this way needed no credentials, only network access to the pod. The traffic-manager and the traffic-agent now reject such messages, and a failure in one call no longer ends the process. Reported by <code>jpabeem</code>.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="howtos/monitoring">Prometheus metrics for the traffic-manager's gRPC requests</Title>
 	<Body>
 The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.
