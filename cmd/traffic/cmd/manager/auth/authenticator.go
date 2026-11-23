@@ -26,8 +26,7 @@ import (
 var ErrInvalidToken = errors.New("invalid bearer token")
 
 // errTooManyReviews is returned when review admission rejects a TokenReview.
-// The token cache stores it for the failure TTL, so a throttled token backs
-// off for those ten seconds instead of re-entering admission per call.
+// The token cache does not store errors, so the next call reviews afresh.
 var errTooManyReviews = errors.New("too many authentication attempts")
 
 const (
@@ -36,6 +35,11 @@ const (
 
 	successCacheTTL = 2 * time.Minute
 	failureCacheTTL = 10 * time.Second
+
+	// knownTokenTTL is how long an accepted token stays in the known set
+	// after its last successful review.
+	knownTokenTTL      = 5 * successCacheTTL
+	knownTokenCapacity = 4096
 )
 
 // Authenticator validates bearer tokens using cached Kubernetes TokenReviews, or,
@@ -76,12 +80,17 @@ func WithMetrics(m *Metrics) Option {
 // WithReviewAdmission bounds the rate and concurrency of TokenReviews -- the
 // expensive, API-server-bound step -- with the external admission constants.
 // Cached tokens never enter admission; only a review pays it. Each
-// Authenticator gets its own limiter, so the internal and external listeners
-// cannot exhaust each other's budget.
+// Authenticator gets its own limiters, so the internal and external listeners
+// cannot exhaust each other's budget. A token this Authenticator has accepted
+// before is re-reviewed under a separate budget, so a flood of unknown tokens
+// cannot lock out callers that were already admitted.
 func WithReviewAdmission() Option {
 	return func(a *Authenticator) {
 		a.reviewer.limiter = rate.NewLimiter(rate.Limit(externalAuthQPS), externalAuthBurst)
 		a.reviewer.sem = make(chan struct{}, externalMaxConcurrentAuth)
+		a.reviewer.knownLimiter = rate.NewLimiter(rate.Limit(externalAuthQPS), externalAuthBurst)
+		a.reviewer.knownSem = make(chan struct{}, externalMaxConcurrentAuth)
+		a.reviewer.known = &knownTokens{}
 	}
 }
 
@@ -89,7 +98,7 @@ func WithReviewAdmission() Option {
 func NewAuthenticator(ci kubernetes.Interface, opts ...Option) *Authenticator {
 	reviewer := &tokenReviewer{client: ci}
 	a := &Authenticator{
-		token:    cache.New(reviewer, true, successCacheTTL, failureCacheTTL),
+		token:    cache.New(reviewer, false, successCacheTTL, failureCacheTTL),
 		reviewer: reviewer,
 		metrics:  unregisteredMetrics(),
 	}
@@ -172,6 +181,50 @@ func (m *audienceMemo) remove(hash [sha256.Size]byte) {
 	delete(m.hashes, hash)
 }
 
+// knownTokens is a bounded set of hashes of tokens that passed a review. An
+// entry expires knownTokenTTL after its last successful review.
+type knownTokens struct {
+	mu      sync.Mutex
+	expires map[[sha256.Size]byte]time.Time
+}
+
+func (k *knownTokens) has(hash [sha256.Size]byte) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	exp, ok := k.expires[hash]
+	return ok && time.Now().Before(exp)
+}
+
+func (k *knownTokens) add(hash [sha256.Size]byte) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	now := time.Now()
+	if _, ok := k.expires[hash]; !ok && len(k.expires) >= knownTokenCapacity {
+		var oldest [sha256.Size]byte
+		var oldestExp time.Time
+		for h, exp := range k.expires {
+			if !now.Before(exp) {
+				delete(k.expires, h)
+			} else if oldestExp.IsZero() || exp.Before(oldestExp) {
+				oldest, oldestExp = h, exp
+			}
+		}
+		if len(k.expires) >= knownTokenCapacity {
+			delete(k.expires, oldest)
+		}
+	}
+	if k.expires == nil {
+		k.expires = make(map[[sha256.Size]byte]time.Time)
+	}
+	k.expires[hash] = now.Add(knownTokenTTL)
+}
+
+func (k *knownTokens) remove(hash [sha256.Size]byte) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	delete(k.expires, hash)
+}
+
 // reviewCounted authenticates the token, counting a cache hit when the call completed
 // without a new TokenReview. Concurrent calls can mask a hit, so the metric is a
 // proportional signal, not an exact count.
@@ -215,22 +268,40 @@ type tokenReviewer struct {
 	// concurrency of reviews.
 	limiter *rate.Limiter
 	sem     chan struct{}
+	// knownLimiter and knownSem bound reviews of tokens in known.
+	knownLimiter *rate.Limiter
+	knownSem     chan struct{}
+	known        *knownTokens
+}
+
+// admit takes a review slot from the budget matching the token. The returned
+// function releases the slot.
+func (t *tokenReviewer) admit(hash [sha256.Size]byte) (func(), bool) {
+	limiter, sem := t.limiter, t.sem
+	if t.known.has(hash) {
+		limiter, sem = t.knownLimiter, t.knownSem
+	}
+	if !limiter.Allow() {
+		return nil, false
+	}
+	select {
+	case sem <- struct{}{}:
+		return func() { <-sem }, true
+	default:
+		return nil, false
+	}
 }
 
 func (t *tokenReviewer) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	t.calls.Add(1)
+	hash := sha256.Sum256([]byte(token))
 	if t.limiter != nil {
-		if !t.limiter.Allow() {
+		release, ok := t.admit(hash)
+		if !ok {
 			t.metrics.RateLimited.Inc()
 			return nil, false, errTooManyReviews
 		}
-		select {
-		case t.sem <- struct{}{}:
-			defer func() { <-t.sem }()
-		default:
-			t.metrics.RateLimited.Inc()
-			return nil, false, errTooManyReviews
-		}
+		defer release()
 	}
 	auds, hasAuds := authenticator.AudiencesFrom(ctx)
 	review := &authenticationv1.TokenReview{
@@ -253,7 +324,15 @@ func (t *tokenReviewer) AuthenticateToken(ctx context.Context, token string) (*a
 	}
 	status := result.Status
 	if !status.Authenticated {
+		// A review scoped to an audience can fail for a token that is valid
+		// for the API server's own audience.
+		if t.known != nil && !hasAuds {
+			t.known.remove(hash)
+		}
 		return nil, false, nil
+	}
+	if t.known != nil {
+		t.known.add(hash)
 	}
 	extra := make(map[string][]string, len(status.User.Extra))
 	for k, v := range status.User.Extra {
