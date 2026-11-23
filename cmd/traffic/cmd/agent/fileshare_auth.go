@@ -34,13 +34,19 @@ var errNoCredentials = errors.New("fileshareauth: this agent has no session cred
 
 // fileShareAuthSnapshot is the credential material fileShareAuth holds once populated.
 type fileShareAuthSnapshot struct {
-	pub  *ecdsa.PublicKey // verifies session tokens (sessiontoken.Verify)
+	pub  *ecdsa.PublicKey // verifies session tokens (sessiontoken.Verify); nil when the manager issues none
 	mode string           // the manager's authentication mode; "" or non-"enforcing" never rejects
 }
 
 // set installs a freshly fetched snapshot, replacing whatever was there before.
 func (a *fileShareAuth) set(pub *ecdsa.PublicKey, mode string) {
 	a.v.Store(&fileShareAuthSnapshot{pub: pub, mode: mode})
+}
+
+// setNoCredentials records that the manager issues no session credentials. There is then
+// nothing to verify against, and every connection and call is accepted unauthenticated.
+func (a *fileShareAuth) setNoCredentials() {
+	a.v.Store(&fileShareAuthSnapshot{})
 }
 
 // ready reports whether a snapshot has been populated. Until then every connection
@@ -67,6 +73,9 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 	if s == nil {
 		clog.Debugf(ctx, "fileshareauth: no session credential material yet; refusing FTP login for %q", user)
 		return errNoCredentials
+	}
+	if s.pub == nil {
+		return nil
 	}
 	_, err := sessiontoken.Verify(s.pub, password, time.Now())
 	if err == nil {
@@ -103,6 +112,9 @@ func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.Sessi
 	s := a.v.Load()
 	if s == nil {
 		return false, status.Error(codes.Unavailable, errNoCredentials.Error())
+	}
+	if s.pub == nil {
+		return false, nil
 	}
 	var token string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {

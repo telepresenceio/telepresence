@@ -618,7 +618,9 @@ func TestRefreshQuicAgentListenerWithRetry_Unimplemented(t *testing.T) {
 	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 1, fm.callCount())
-	require.Nil(t, st.fileShareAuth.v.Load())
+	require.True(t, st.fileShareAuth.ready())
+	require.False(t, st.fileShareAuth.enforcing())
+	require.NoError(t, st.fileShareAuth.validatePassword(ctx, "user", "anonymous"))
 }
 
 func TestRefreshQuicAgentListenerWithRetry_CancelledSession(t *testing.T) {
@@ -808,4 +810,17 @@ func TestWithoutDebugLogging(t *testing.T) {
 	require.False(t, clog.Enabled(ctx, slog.LevelDebug))
 	require.True(t, clog.Enabled(ctx, slog.LevelInfo))
 	require.False(t, clog.Enabled(clog.With(ctx, "k", "v"), slog.LevelDebug))
+}
+
+func TestFileShareAuth_NoCredentialsAcceptsUnauthenticated(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	a := &fileShareAuth{}
+	a.setNoCredentials()
+
+	require.True(t, a.ready())
+	require.False(t, a.enforcing())
+	require.NoError(t, a.validatePassword(ctx, "user", "anonymous"))
+	verified, err := a.verifySession(ctx, "some-session")
+	require.NoError(t, err)
+	require.False(t, verified)
 }

@@ -307,10 +307,11 @@ first. A new client talking to an old agent gets no benefit from its
 credential — the old agent has no verification code path, so its ports stay
 exactly as open as before — but nothing breaks. Talking through a manager
 that predates session credentials, a new agent never receives credential
-material to verify against, so it refuses every FTP login, SFTP connection,
-`WatchDial` and `Tunnel` call. The same applies to a new agent that has not
-yet fetched credential material from the manager: the gRPC calls report
-`Unavailable`, which a client can retry.
+material to verify against. The manager tells it so, and the agent then
+accepts every connection and call unauthenticated, the same as before this
+feature existed. An agent that has not yet heard from its manager refuses
+every FTP login, SFTP connection, `WatchDial` and `Tunnel` call until it
+has: the gRPC calls report `Unavailable`, which a client can retry.
 
 ## Requirements under enforcement
 
