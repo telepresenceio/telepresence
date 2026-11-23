@@ -720,6 +720,19 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 		return dv.answer, dv.rCode, nil
 	}
 	defer close(dv.wait)
+	defer func() {
+		if p := recover(); p != nil {
+			// Waiting callers must not see the initial result.
+			dv.answer, dv.rCode = nil, dns.RcodeServerFailure
+			s.cache.Compute(key, func(old *cacheEntry, loaded bool) (*cacheEntry, xsync.ComputeOp) {
+				if loaded && old == dv {
+					return nil, xsync.DeleteOp
+				}
+				return old, xsync.CancelOp
+			})
+			panic(p)
+		}
+	}()
 
 	answer, rCode, err = s.resolveInCluster(s.ctx, q)
 	if err != nil {

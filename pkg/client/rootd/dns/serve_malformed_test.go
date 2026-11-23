@@ -1,11 +1,14 @@
 package dns
 
 import (
+	"context"
 	"net"
 	"testing"
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 )
 
 type recordingWriter struct {
@@ -30,4 +33,17 @@ func TestServeDNS_messageWithoutQuestion(t *testing.T) {
 	require.NotPanics(t, func() { s.ServeDNS(w, &dns.Msg{MsgHdr: dns.MsgHdr{Id: 7}}) })
 	require.Len(t, w.msgs, 1)
 	require.Equal(t, dns.RcodeFormatError, w.msgs[0].Rcode)
+}
+
+// A cluster test cannot make a lookup panic.
+func TestResolveThruCache_panicLeavesNoEntry(t *testing.T) {
+	s := NewServer(nil, "ns", func(context.Context, *dns.Question) (dnsproxy.RRs, int, error) {
+		panic("boom")
+	})
+	s.ctx = t.Context()
+	s.IncludeSuffixes = []string{".example"}
+	q := &dns.Question{Name: "a.example.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+	require.Panics(t, func() { _, _, _ = s.resolveThruCache(q) })
+	_, found := s.cache.Load(cacheKey{name: q.Name, qType: q.Qtype})
+	require.False(t, found)
 }
