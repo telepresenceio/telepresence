@@ -338,7 +338,9 @@ bulkiest data path telepresence carries for no real confidentiality gain.
 Two weaknesses remain, accepted as improvements over the previous, fully
 open listener rather than as complete mitigations:
 
-- An agent injected into a `hostNetwork` workload shares its pod address with
+- An agent injected into a `hostNetwork` workload (Telepresence does not inject
+  one when the Service port is numeric or headless, since that needs packet
+  redirection on the node) shares its pod address with
   every other workload on that node, so the source gate degrades to
   same-node granularity there.
 - A pod CIDR that is routable but never proxied through the tunnel can still
