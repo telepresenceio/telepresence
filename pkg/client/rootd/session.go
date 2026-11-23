@@ -1111,7 +1111,7 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 	}
 
 	if dnsRouted {
-		d := mgrInfo.Dns
+		d := clusterDNS(mgrInfo)
 		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
 		clog.Infof(s, "Setting client DNS to %s", vifDNS)
 		clog.Infof(s, "Setting cluster domain to %q", d.ClusterDomain)
@@ -1137,6 +1137,14 @@ func checkAddressRecords(rrs dnsproxy.RRs) error {
 		}
 	}
 	return nil
+}
+
+// clusterDNS returns the DNS part of the ClusterInfo, or an empty one when the manager sent none.
+func clusterDNS(mgrInfo *manager.ClusterInfo) *manager.DNS {
+	if mgrInfo.Dns == nil {
+		return &manager.DNS{}
+	}
+	return mgrInfo.Dns
 }
 
 func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {

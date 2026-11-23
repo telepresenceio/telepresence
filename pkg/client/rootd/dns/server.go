@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -855,6 +856,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
 	atomic.AddInt64(&s.requestCount, 1)
 
+	if len(r.Question) == 0 {
+		clog.Debugf(c, "ServeDNS %5d dropping message without a question", r.Id)
+		reply := new(dns.Msg)
+		reply.SetRcode(r, dns.RcodeFormatError)
+		_ = w.WriteMsg(reply)
+		return
+	}
 	q := &r.Question[0]
 	qts := dns.TypeToString[q.Qtype]
 	clog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
@@ -871,6 +879,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// Closing the response tells the DNS service to terminate
 		if c.Err() != nil {
 			_ = w.Close()
+		}
+	}()
+
+	defer func() {
+		if p := recover(); p != nil {
+			clog.Errorf(c, "panic in ServeDNS for %s %s: %v\n%s", qts, q.Name, p, debug.Stack())
+			msg.SetRcode(r, dns.RcodeServerFailure)
 		}
 	}()
 
