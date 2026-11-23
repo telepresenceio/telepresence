@@ -109,12 +109,19 @@ func (a *fileShareAuth) requireAccess(ctx context.Context, clientSession tunnel.
 	return nil
 }
 
-// isOwnAddress reports whether dialing ip reaches this pod itself: loopback, the
-// unspecified address, one of the pod's addresses or an address of a local interface.
-func isOwnAddress(ip netip.Addr, podIPs ...netip.Addr) bool {
-	ip = ip.Unmap()
+// needsFileAccess reports whether a dial to dst requires LEVEL_FILES: loopback and
+// unspecified addresses on any port, and the pod's own addresses (podIPs or a
+// local interface address) on the sftp or ftp port. Everything else needs only
+// LEVEL_NETWORK. When the interface addresses cannot be read, an address is
+// treated as the pod's own.
+func needsFileAccess(dst netip.AddrPort, sftpPort, ftpPort uint16, podIPs ...netip.Addr) bool {
+	ip := dst.Addr().Unmap()
 	if ip.IsLoopback() || ip.IsUnspecified() {
 		return true
+	}
+	port := dst.Port()
+	if port == 0 || (port != sftpPort && port != ftpPort) {
+		return false
 	}
 	for _, pip := range podIPs {
 		if pip.IsValid() && ip == pip.Unmap() {
@@ -123,7 +130,6 @@ func isOwnAddress(ip netip.Addr, podIPs ...netip.Addr) bool {
 	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		// Unable to tell, so treat the address as the pod's own.
 		return true
 	}
 	for _, addr := range addrs {

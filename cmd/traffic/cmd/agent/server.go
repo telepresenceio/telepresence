@@ -96,7 +96,7 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 			return nil
 		}
 	}
-	if s.fileShareAuth.enforcing() && isOwnAddress(stream.ID().DestinationAddr(), s.PodIP(), s.AppPodIP()) {
+	if s.fileShareAuth.enforcing() && needsFileAccess(stream.ID().Destination(), s.SftpPort(), s.FtpPort(), s.PodIP(), s.AppPodIP()) {
 		if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), rpc.AuthorizeSessionAccessResponse_LEVEL_FILES); err != nil {
 			return err
 		}
