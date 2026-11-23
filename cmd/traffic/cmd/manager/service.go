@@ -60,7 +60,6 @@ type Service interface {
 	rpc.ManagerServer
 	ID() string
 	InstallID() string
-	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
 	State() *state.State
 	ClusterInfo() cluster.Info
@@ -1726,28 +1725,6 @@ func workloadPodNames(ctx context.Context, name, namespace string) ([]string, er
 	return names, nil
 }
 
-func (s *service) MakeInterceptID(ctx context.Context, sessionID string, name string) (string, error) {
-	// When something without a session ID (e.g. System A) calls this function,
-	// it is sending the intercept ID as the name, so we use that.
-	//
-	// TODO: Look at cmd/traffic/cmd/manager/internal/state API and see if it makes
-	// sense to make more / all functions use intercept ID instead of session ID + name.
-	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
-	// use in requests.
-	if sessionID == "" {
-		return name, nil
-	}
-	sid := tunnel.SessionID(sessionID)
-	client := s.state.GetClient(sid)
-	if client == nil {
-		return "", errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-	}
-	if err := state.ClientOwnershipError(ctx, sid, client); err != nil {
-		return "", err
-	}
-	return sessionID + ":" + name, nil
-}
-
 // RemoveIntercept lets a client remove an intercept.
 func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	name := riReq.Name
@@ -1765,10 +1742,11 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // GetIntercept gets an intercept info from intercept name.
 func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
-	interceptID, err := s.MakeInterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
+	ctx, _, err := s.ownedClientSession(ctx, request.GetSession())
 	if err != nil {
 		return nil, err
 	}
+	interceptID := string(managerutil.GetSessionID(ctx)) + ":" + request.GetName()
 	if intercept, ok := s.state.GetIntercept(interceptID); ok {
 		return intercept.InterceptInfo, nil
 	}
@@ -2195,10 +2173,10 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
 	name := request.Name
 	// Name must be at least one character long and end with a dot.
-	nl := len(name)
-	if nl < 2 || name[nl-1] != '.' {
-		return nil, status.Errorf(codes.InvalidArgument, "empty name")
+	if err = validateDNSName(name); err != nil {
+		return nil, err
 	}
+	nl := len(name)
 	nDots := 0
 	for _, c := range name {
 		if c == '.' {
@@ -2233,7 +2211,18 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	return response, nil
 }
 
+// validateDNSName requires at least one character before a trailing dot.
+func validateDNSName(name string) error {
+	if len(name) < 2 || name[len(name)-1] != '.' {
+		return status.Errorf(codes.InvalidArgument, "name must be at least one character long and end with a dot")
+	}
+	return nil
+}
+
 func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (response *rpc.DNSResponse, err error) {
+	if err = validateDNSName(request.Name); err != nil {
+		return nil, err
+	}
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	qType := uint16(request.Type)
 	qtn := dns2.TypeToString[qType]
