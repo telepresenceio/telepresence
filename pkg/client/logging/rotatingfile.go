@@ -125,14 +125,22 @@ func OpenRotatingFile(
 	}
 
 	// Try to open existing file for append.
-	if rf.file, err = dos.OpenFile(ctx, logfilePath, os.O_WRONLY|os.O_APPEND|noFollow, rf.fileMode); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			// There is no existing file, go ahead and create a new one.
-			if err = rf.openNew(nil, ""); err == nil {
-				return rf, nil
-			}
+	appendFlag := os.O_WRONLY | os.O_APPEND | noFollow
+	if rf.file, err = dos.OpenFile(ctx, logfilePath, appendFlag, rf.fileMode); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
 		}
-		return nil, err
+		// There is no existing file, go ahead and create a new one.
+		if err = rf.openNew(nil, ""); err == nil {
+			return rf, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return nil, err
+		}
+		// Another process created the file first, so append to it.
+		if rf.file, err = dos.OpenFile(ctx, logfilePath, appendFlag, rf.fileMode); err != nil {
+			return nil, err
+		}
 	}
 	// We successfully opened the existing file, get it plugged in.
 	stat, err := FStat(rf.file)
