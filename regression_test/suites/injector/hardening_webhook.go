@@ -161,3 +161,83 @@ func (s *injhardWebhook) Test_ForgedAdmissionLeavesNoConfig() {
 	s.Require().NoError(err)
 	s.Empty(uids, "the restarted pods of %s should have no agent", wl.Name)
 }
+
+// forgedPodReview returns an AdmissionReview for a CREATE of a copy of a live
+// pod of workload name in podNS that asks for an agent. The request carries
+// reqNS as its namespace and the pod object keeps podNS.
+func (s *injhardWebhook) forgedPodReview(podNS, name, reqNS string) map[string]any {
+	ctx := s.Ctx()
+	var pl struct {
+		Items []map[string]any `json:"items"`
+	}
+	s.Require().NoError(s.R().KubectlJSON(ctx, podNS, &pl, "get", "pod", "-l", "app="+name))
+	s.Require().NotEmpty(pl.Items)
+	pod := pl.Items[0]
+	delete(pod, "status")
+	md := pod["metadata"].(map[string]any)
+	for _, k := range []string{"resourceVersion", "creationTimestamp", "managedFields"} {
+		delete(md, k)
+	}
+	md["name"] = "injhard-forged-pod"
+	md["uid"] = "00000000-0000-4000-8000-0000000000f2"
+	anns, _ := md["annotations"].(map[string]any)
+	if anns == nil {
+		anns = map[string]any{}
+	}
+	anns[annotation.InjectTrafficAgent] = "enabled"
+	md["annotations"] = anns
+	return map[string]any{
+		"apiVersion": "admission.k8s.io/v1",
+		"kind":       "AdmissionReview",
+		"request": map[string]any{
+			"uid":       "00000000-0000-4000-8000-0000000000f3",
+			"kind":      map[string]any{"group": "", "version": "v1", "kind": "Pod"},
+			"resource":  map[string]any{"group": "", "version": "v1", "resource": "pods"},
+			"namespace": reqNS,
+			"operation": "CREATE",
+			"object":    pod,
+		},
+	}
+}
+
+// requireAdmittedUnchanged posts review to the webhook and requires an
+// allowed answer without a patch.
+func (s *injhardWebhook) requireAdmittedUnchanged(review map[string]any) {
+	port, _ := s.caller()
+	code, body, err := injhardWebhookDo(s.Ctx(), port, http.MethodPost, "/traffic-agent",
+		map[string]string{"Content-Type": "application/json"}, injhardJSON(s.T(), review))
+	s.Require().NoError(err)
+	s.Require().Equal(http.StatusOK, code, "%s", body)
+	var decision struct {
+		Response struct {
+			Allowed bool   `json:"allowed"`
+			Patch   []byte `json:"patch"`
+		} `json:"response"`
+	}
+	s.Require().NoError(json.Unmarshal(body, &decision), "%s", body)
+	s.Require().True(decision.Response.Allowed, "the request should be admitted: %s", body)
+	s.Require().Empty(decision.Response.Patch, "the request should be admitted unchanged: %s", body)
+	s.Require().NotContains(string(body), agentContainerName)
+}
+
+// Test_ForgedAdmissionInUnmanagedNamespace sends a review whose request
+// namespace is one the traffic-manager does not manage, naming a workload
+// there. The answer is allowed and carries no patch.
+func (s *injhardWebhook) Test_ForgedAdmissionInUnmanagedNamespace() {
+	t := s.T()
+	rt.Mutate(t, rt.ManagerFixture(managers.Default))
+	ns := rt.PrivateUnmanagedNamespace(rt.Env{Ctx: s.Ctx(), T: t, R: s.R()}, "injhard-unmanaged")
+	wl := rt.Get(t, rt.WorkloadFixture(ns, workloads.Echo("injhard-unmanaged-victim")))
+	s.requireAdmittedUnchanged(s.forgedPodReview(ns, wl.Name, ns))
+}
+
+// Test_ForgedAdmissionWithForeignPodNamespace sends a review whose request
+// namespace is managed but whose pod object names the namespace of a workload
+// outside the managed set. The answer is allowed and carries no patch.
+func (s *injhardWebhook) Test_ForgedAdmissionWithForeignPodNamespace() {
+	t := s.T()
+	rt.Mutate(t, rt.ManagerFixture(managers.Default))
+	ns := rt.PrivateUnmanagedNamespace(rt.Env{Ctx: s.Ctx(), T: t, R: s.R()}, "injhard-foreign")
+	wl := rt.Get(t, rt.WorkloadFixture(ns, workloads.Echo("injhard-foreign-victim")))
+	s.requireAdmittedUnchanged(s.forgedPodReview(ns, wl.Name, s.AppNamespace()))
+}
