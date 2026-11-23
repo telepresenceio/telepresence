@@ -56,9 +56,7 @@ designed for a cluster in which one of the following two is hostile:
   everything else that runs in its pod. Someone who can deploy containers
   to a namespace, or change the pod specification of a workload there,
   is therefore trusted by every developer who connects to workloads in
-  that namespace. The containers of one pod are not protected from each
-  other: the traffic-agent's SFTP server accepts connections from the
-  other containers of its pod.
+  that namespace.
 - **The traffic-manager.** A client sends the credential it
   authenticates with to the traffic-manager on every call, and takes
   network routes, DNS settings and configuration from it. Whoever
@@ -358,28 +356,25 @@ is registered yet — it can never take over a live one.
 
 SFTP carries no credential of its own. Two things protect it instead:
 
+- **The tunnel is the only way in, in every mode.** The agent announces an
+  SFTP port, and a client addresses a mount by the pod's address and that
+  port, but the port serves no connection. When a tunnel stream targets
+  it, the agent connects the stream to the SFTP server inside its own
+  process. The tunnel call is what authenticates the client: in enforcing
+  mode the agent verifies the session and requires the files
+  [access level](#access-levels) before it connects the stream. Nothing
+  else reaches the server, the other containers of the agent's pod
+  included.
 - **Confinement.** The server is confined to the agent's exports tree; it
   cannot open a path outside it regardless of what the client requests.
-- **No direct connections, in enforcing mode only.** Every legitimate
-  consumer — sshfs, the IPv6 mount path, and the `--local-mount-port` bridge
-  used by docker-volume-telemount — reaches the SFTP server through the
-  telepresence tunnel. When a tunnel stream, whose session the agent has
-  already authorized for file access, targets the agent's own SFTP port, the
-  agent connects it to the SFTP server inside the agent process, over a
-  private socket pair, instead of dialing the port. In enforcing mode the
-  SFTP port itself closes every TCP connection. Session authentication is
-  therefore the only way to reach the server; disabled/permissive modes
-  still serve direct connections (logged).
 
 SFTP is deliberately not wrapped in its own TLS layer: the QUIC tunnel is
 already TLS 1.3 end-to-end, and the port-forward path is already TLS on its
 client-to-manager leg, so an SFTP-level TLS wrap would double-encrypt the
 bulkiest data path telepresence carries for no real confidentiality gain.
 
-In disabled and permissive modes the SFTP port still serves every TCP
-connection that reaches it, including connections from the other containers
-of the agent's pod and from a pod CIDR that is routable but not proxied
-through the tunnel. Only enforcing mode closes the port.
+An SFTP mount needs the pod's address to be routed through Telepresence. A
+pod in a subnet that is listed in `neverProxySubnets` gets no SFTP mount.
 
 ### Version skew
 
