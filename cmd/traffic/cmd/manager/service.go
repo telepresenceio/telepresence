@@ -1992,6 +1992,9 @@ func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeS
 		return nil, err
 	}
 	none := &rpc.AuthorizeSessionAccessResponse{Level: rpc.AuthorizeSessionAccessResponse_NONE_UNSPECIFIED}
+	if !s.State().ManagesNamespace(ctx, agent.Namespace) {
+		return none, nil
+	}
 	clientID := tunnel.SessionID(rq.GetClientSessionId())
 	if state.IsAgentSessionID(clientID) {
 		return none, nil
