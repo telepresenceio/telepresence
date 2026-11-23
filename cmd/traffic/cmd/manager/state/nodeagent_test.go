@@ -1217,6 +1217,7 @@ func TestNodeAgentTargets_AllReadyPods(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.ReplicaSetKind}})
 
 	targets, err := nodeAgentTargets(ctx, wl)
 	require.NoError(t, err)
@@ -1242,6 +1243,7 @@ func TestNodeAgentTargets_SkipsInadmissiblePod(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.ReplicaSetKind}})
 
 	targets, err := nodeAgentTargets(ctx, wl)
 	require.NoError(t, err)
@@ -1267,6 +1269,7 @@ func TestNodeAgentTargets_NoneReady(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(pod, nodeAgentTestReplicaSet(pod.Namespace))
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.ReplicaSetKind}})
 
 	_, err := nodeAgentTargets(ctx, wl)
 	require.Error(t, err)
@@ -1290,6 +1293,7 @@ func TestNodeAgentTargets_AllInadmissible(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.ReplicaSetKind}})
 
 	_, err := nodeAgentTargets(ctx, wl)
 	require.Error(t, err)
