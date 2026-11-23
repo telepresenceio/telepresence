@@ -13,6 +13,7 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
@@ -183,13 +184,57 @@ func ownedAgentConfig(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) *a
 		clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
 		return nil
 	}
+	if slices.Contains(sc.Containers, nil) || slices.ContainsFunc(sc.Containers, func(cc *agentconfig.Container) bool {
+		return slices.Contains(cc.Intercepts, nil)
+	}) {
+		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: it has a null container or intercept", pod.Name, pod.Namespace)
+		return nil
+	}
 	if sc.Namespace != pod.Namespace || sc.Namespace != wl.GetNamespace() ||
 		sc.WorkloadName != wl.GetName() || sc.AgentName != wl.GetName() || sc.WorkloadKind != wl.GetKind() {
 		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: it names %s %s.%s, but the pod belongs to %s",
 			pod.Name, pod.Namespace, sc.WorkloadKind, sc.WorkloadName, sc.Namespace, wl)
 		return nil
 	}
+	if !podControlledBy(ctx, pod, wl) {
+		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: its owner references don't lead to %s", pod.Name, pod.Namespace, wl)
+		return nil
+	}
 	return sc
+}
+
+// podControlledBy reports whether the pod's controller owner references lead to wl, directly or
+// through a ReplicaSet, by kind, name, and UID. The workload labels of the pod are not consulted.
+func podControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) bool {
+	ref := controllerRef(pod.OwnerReferences)
+	if ref == nil {
+		return false
+	}
+	if refersTo(ref, wl) {
+		return true
+	}
+	if ref.Kind != string(k8sapi.ReplicaSetKind) {
+		return false
+	}
+	rs, err := agentmap.GetWorkload(ctx, ref.Name, pod.Namespace, k8sapi.ReplicaSetKind)
+	if err != nil || rs.GetUID() != ref.UID {
+		return false
+	}
+	rsRef := controllerRef(rs.GetOwnerReferences())
+	return rsRef != nil && refersTo(rsRef, wl)
+}
+
+func controllerRef(refs []meta.OwnerReference) *meta.OwnerReference {
+	for i := range refs {
+		if refs[i].Controller != nil && *refs[i].Controller {
+			return &refs[i]
+		}
+	}
+	return nil
+}
+
+func refersTo(ref *meta.OwnerReference, wl k8sapi.Workload) bool {
+	return ref.Kind == string(wl.GetKind()) && ref.Name == wl.GetName() && ref.UID != "" && ref.UID == wl.GetUID()
 }
 
 // RegenerateAgentMaps regenerates all agent configurations and requests the replacement of every pod
