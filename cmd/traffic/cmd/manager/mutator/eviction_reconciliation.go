@@ -153,7 +153,7 @@ func (c *configWatcher) reconcile(ctx context.Context, key WorkloadKey) (pending
 	if !state.requested {
 		return false, nil
 	}
-	pending, err = c.reconcileLocked(ctx, key, state)
+	pending, err = c.reconcileLockedRecovering(ctx, key, state)
 	switch {
 	case err != nil:
 		if ctx.Err() != nil {
@@ -171,6 +171,17 @@ func (c *configWatcher) reconcile(ctx context.Context, key WorkloadKey) (pending
 		state.failures = 0
 	}
 	return pending, err
+}
+
+// reconcileLockedRecovering reports a panic of reconcileLocked as an error, so that it counts as a failure.
+func (c *configWatcher) reconcileLockedRecovering(ctx context.Context, key WorkloadKey, state *workloadEvictionState) (pending bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			clog.Errorf(ctx, "panic in eviction pass for %s: %v\n%s", key, r, debug.Stack())
+			pending, err = false, fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return c.reconcileLocked(ctx, key, state)
 }
 
 func (c *configWatcher) reconcileLocked(ctx context.Context, key WorkloadKey, state *workloadEvictionState) (bool, error) {
