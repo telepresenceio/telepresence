@@ -125,7 +125,7 @@ func OpenRotatingFile(
 	}
 
 	// Try to open existing file for append.
-	if rf.file, err = dos.OpenFile(ctx, logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
+	if rf.file, err = dos.OpenFile(ctx, logfilePath, os.O_WRONLY|os.O_APPEND|noFollow, rf.fileMode); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// There is no existing file, go ahead and create a new one.
 			if err = rf.openNew(nil, ""); err == nil {
@@ -215,28 +215,33 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 	fullPath := filepath.Join(rf.dirName, rf.fileName)
 	var flag int
 	if rf.file == nil {
-		flag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		flag = os.O_CREATE | os.O_EXCL | os.O_WRONLY | noFollow
 	} else {
 		// Open file with a different name so that a tail -F on the original doesn't fail with a permission denied
 		tmp := fullPath + ".tmp"
+		// A stale temp file is unlinked (a link is removed, not followed) and the new one must not exist.
+		if err = dos.Remove(rf.ctx, tmp); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s: %w", tmp, err)
+		}
 		var tmpFile dos.File
-		if tmpFile, err = dos.OpenFile(rf.ctx, tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
+		if tmpFile, err = dos.OpenFile(rf.ctx, tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY|noFollow, rf.fileMode); err != nil {
 			return fmt.Errorf("failed to createFile %s: %w", tmp, err)
 		}
 
 		var si SysInfo
 		si, err = FStat(tmpFile)
-		_ = tmpFile.Close()
-
 		if err != nil {
+			_ = tmpFile.Close()
 			return fmt.Errorf("failed to stat %s: %w", tmp, err)
 		}
 
 		if prevInfo != nil && !prevInfo.HaveSameOwnerAndGroup(si) {
-			if err = prevInfo.SetOwnerAndGroup(tmp); err != nil {
+			if err = prevInfo.SetOwnerAndGroup(tmpFile); err != nil {
+				_ = tmpFile.Close()
 				return fmt.Errorf("failed to SetOwnerAndGroup for %s: %w", tmp, err)
 			}
 		}
+		_ = tmpFile.Close()
 
 		if err = rf.file.Close(); err != nil {
 			return fmt.Errorf("failed to close %s: %w", rf.file.Name(), err)
@@ -252,7 +257,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 		if err = restoreCTimeAfterRename(fullPath, si.BirthTime()); err != nil {
 			return fmt.Errorf("failed to restore creation time of %s to %s: %w", tmp, si.BirthTime(), err)
 		}
-		flag = os.O_WRONLY | os.O_APPEND
+		flag = os.O_WRONLY | os.O_APPEND | noFollow
 	}
 	if rf.file, err = dos.OpenFile(rf.ctx, fullPath, flag, rf.fileMode); err != nil {
 		return fmt.Errorf("failed to open file %s: %w", fullPath, err)

@@ -68,8 +68,8 @@ func (wi *windowsSysInfo) Size() int64 {
 	return int64(wi.data.FileSizeHigh)<<32 + int64(wi.data.FileSizeLow)
 }
 
-func (wi *windowsSysInfo) SetOwnerAndGroup(name string) error {
-	err := api.SetNamedSecurityInfo(name, api.SE_FILE_OBJECT, api.OWNER_SECURITY_INFORMATION, wi.owner, wi.group, wi.dacl, wi.sacl)
+func (wi *windowsSysInfo) SetOwnerAndGroup(f dos.File) error {
+	err := api.SetNamedSecurityInfo(f.Name(), api.SE_FILE_OBJECT, api.OWNER_SECURITY_INFORMATION, wi.owner, wi.group, wi.dacl, wi.sacl)
 	if err != nil {
 		// On some systems it seems SetNamedSecurityInfo will return ERROR_SUCCESS on success... this is an odd violation of the principle
 		// that windows APIs return err = nil on success but okay

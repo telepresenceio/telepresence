@@ -2,7 +2,6 @@ package logging
 
 import (
 	"fmt"
-	"os"
 	"syscall" //nolint:depguard // We specifically need "syscall.Stat_t" rather than "unix.Stat_t" for fs.File.Sys().
 	"time"
 
@@ -29,8 +28,8 @@ func (u fileInfo) Size() int64 {
 	return u.Stat_t.Size
 }
 
-func (u fileInfo) SetOwnerAndGroup(name string) error {
-	return os.Chown(name, int(u.Uid), int(u.Gid))
+func (u fileInfo) SetOwnerAndGroup(f dos.File) error {
+	return chownFile(f, int(u.Uid), int(u.Gid))
 }
 
 func (u fileInfo) HaveSameOwnerAndGroup(other SysInfo) bool {
