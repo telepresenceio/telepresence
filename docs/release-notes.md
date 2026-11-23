@@ -20,6 +20,12 @@ The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was alw
 The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--as-user-extra</code>. The user daemon ignored them too when it ran in a container (<code>telepresence connect --docker</code>) or read the kubeconfig from stdin (<code>--kubeconfig -</code>). Both daemons now apply the two flags the same way <code>kubectl</code> does.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Traffic-agents are upgraded with the traffic-manager again](reference/cluster-config)</div></div>
+<div style="margin-left: 15px">
+
+Since 2.22.0, a pod kept its traffic-agent image when the traffic-manager was upgraded or the <code>agent.image</code> Helm value changed. The traffic-manager now replaces such pods, paced like other agent replacements. The first upgrade to this version replaces every pod that has a traffic-agent.
+</div>
+
 ## Version 2.33.4 <span style="font-size: 16px;">(November 22)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Only a traffic-agent can register an agent session with the traffic-manager](reference/authentication)</div></div>
 <div style="margin-left: 15px">
