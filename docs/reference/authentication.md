@@ -38,6 +38,39 @@ This is independent of, and does not replace, restricting network reachability
 to the traffic-manager in the first place. NetworkPolicy and a namespaced
 install (see [RBAC](rbac.md)) remain the recommended defense in depth.
 
+## Trust model
+
+Telepresence connects a developer's workstation to the cluster network,
+and lets a program on that workstation take the place of a workload in
+the cluster. That takes trust in the developers who are given access,
+and no setting removes the need for it.
+
+Authentication and authorization keep each developer inside the limits
+that an administrator sets with Kubernetes RBAC: which namespaces a
+developer can connect to, which workloads a developer can intercept or
+ingest, and which of their volumes a developer can mount. They are not
+designed for a cluster in which one of the following two is hostile:
+
+- **Whoever can run containers in a namespace.** A traffic-agent is
+  trusted with the sessions of the clients that use it, and so is
+  everything else that runs in its pod. Someone who can deploy containers
+  to a namespace, or change the pod specification of a workload there,
+  is therefore trusted by every developer who connects to workloads in
+  that namespace. The containers of one pod are not protected from each
+  other: the traffic-agent's SFTP server accepts connections from the
+  other containers of its pod.
+- **The traffic-manager.** A client sends the credential it
+  authenticates with to the traffic-manager on every call, and takes
+  network routes, DNS settings and configuration from it. Whoever
+  controls the traffic-manager can act in the cluster as the users who
+  connect to it. Connect only to clusters whose administrators you
+  trust.
+
+On the workstation, the root daemon serves one session at a time, and
+only the user daemon that created the session can read, change or end
+it (see [Who may call the daemons](../concepts/architecture.md#who-may-call-the-daemons)).
+It is meant for a single user at a time.
+
 ## How identity is established
 
 ### Clients
@@ -289,11 +322,19 @@ network side only.
 
 The agent remembers each answer for five minutes per client session and
 credential, except a `none` answer, which it remembers for fifteen
-seconds. A grant that is revoked therefore stops working on an
-agent within five minutes, not at once. A grant that is added takes effect
-within fifteen seconds for a session that was refused. A failed call to
-the traffic-manager counts as `none` for that request and is not
-remembered.
+seconds. Access is checked when a connection or a call starts, so a
+change in a client's grants does not take effect at once:
+
+- After an attachment grant is revoked, new connections to the file
+  servers are refused within about seven minutes. Connections that are
+  already open stay open.
+- Read access to a namespace is evaluated once per session, so the
+  network level lasts until the session ends.
+- A grant that is added takes effect within fifteen seconds for a
+  session that was refused.
+
+A failed call to the traffic-manager counts as `none` for that request
+and is not remembered.
 
 ### FTP
 
@@ -335,9 +376,13 @@ already TLS 1.3 end-to-end, and the port-forward path is already TLS on its
 client-to-manager leg, so an SFTP-level TLS wrap would double-encrypt the
 bulkiest data path telepresence carries for no real confidentiality gain.
 
-Two weaknesses remain, accepted as improvements over the previous, fully
+Three weaknesses remain, accepted as improvements over the previous, fully
 open listener rather than as complete mitigations:
 
+- Every container of the agent's pod shares its network. Another
+  container in that pod reaches the SFTP port from loopback and passes
+  the source gate, so it can read and write the volumes that the agent
+  shares for the other containers of the pod.
 - An agent injected into a `hostNetwork` workload (Telepresence does not inject
   one when the Service port is numeric or headless, since that needs packet
   redirection on the node) shares its pod address with
