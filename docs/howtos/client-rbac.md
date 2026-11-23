@@ -60,9 +60,10 @@ security:
 
 Steps 3 and 4 move enforcement from the API server to the traffic-manager,
 which only means something when the manager rejects callers it cannot
-authenticate. Under the default `permissive` mode an unauthenticated caller
-is still admitted (and merely logged), so the required grant below
-would have nothing to bite on. [Authentication and
+authenticate. Under `permissive` mode an unauthenticated caller
+is still admitted (and logged), so the required grant below
+would have nothing to bite on. `enforcing` is the default from 2.34.0, so an
+installation that never set the mode already has it. [Authentication and
 authorization](../reference/authentication.md) covers what enforcing mode
 requires — most notably that every client's kubeconfig can produce a bearer
 token or a verifiable client certificate.
