@@ -169,6 +169,19 @@ func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerS
 	sender := &logChunkSender{stream: stream}
 	nsAuth := newLogNamespaceAuth(s.authorizer, principal)
 
+	targets, skipped, err := reviewAgentTargets(ctx, nsAuth, targets)
+	if err != nil {
+		return err
+	}
+	if skipped > 0 {
+		if err = sender.sendError(logTarget{}, skippedAgentLogsNote); err != nil {
+			return err
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+
 	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(env.LogStreamPodConcurrency)
 	for _, target := range targets {
@@ -177,6 +190,34 @@ func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerS
 		})
 	}
 	return g.Wait()
+}
+
+// skippedAgentLogsFormat is the pod-less error sent in place of the frames of
+// agent pods in namespaces where the caller may not get logs.
+const skippedAgentLogsNote = "logs of some traffic-agent pods were skipped because access to logs.telepresence.io was denied in their namespaces"
+
+// reviewAgentTargets drops the traffic-agent targets whose namespace the
+// caller may not get logs in, so nothing about those pods is sent, and
+// returns how many were dropped. A review that cannot be performed fails the
+// request. The traffic-manager target is kept; streamPodLog reviews it.
+func reviewAgentTargets(ctx context.Context, nsAuth *logNamespaceAuth, targets []logTarget) ([]logTarget, int, error) {
+	kept := make([]logTarget, 0, len(targets))
+	skipped := 0
+	for _, target := range targets {
+		if target.container != agentconfig.ContainerName {
+			kept = append(kept, target)
+			continue
+		}
+		switch authErr := nsAuth.can(ctx, target.podNamespace, ""); {
+		case authErr == nil:
+			kept = append(kept, target)
+		case status.Code(authErr) == codes.PermissionDenied:
+			skipped++
+		default:
+			return nil, 0, authErr
+		}
+	}
+	return kept, skipped, nil
 }
 
 // logStreamTargets resolves a StreamLogsRequest's traffic_manager and agents
