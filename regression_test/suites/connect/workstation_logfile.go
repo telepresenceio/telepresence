@@ -6,7 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"syscall"
+	"syscall" //nolint:depguard // fs.FileInfo.Sys() returns a *syscall.Stat_t.
 	"testing"
 	"time"
 
