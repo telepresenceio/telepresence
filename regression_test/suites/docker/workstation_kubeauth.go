@@ -16,6 +16,7 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
@@ -157,7 +158,6 @@ func (s *WshardKubeAuth) Test_TokenIsNotOnACommandLine() {
 		t.Logf("quit before connect: %v", err)
 	}
 
-	connectStart := time.Now()
 	w := wshardWatchStubs()
 	args := []string{
 		"connect", "--docker", "--name", wshardKubeAuthConn,
@@ -179,24 +179,27 @@ func (s *WshardKubeAuth) Test_TokenIsNotOnACommandLine() {
 		s.NotContains(argv, "--token", "the stub (pid %d) is started with a token flag: %v", pid, argv)
 	}
 
-	// The daemon names its port file after the kubeconfig list and context, so
-	// the file this test's daemon wrote is the only kubeauthd-*.port file
-	// written since the connect started.
+	// The port file of this test's daemon is the one that records the test's
+	// kubeconfig and context.
 	portFiles, err := filepath.Glob(filepath.Join(r.UserCacheDir(), "kubeauthd-*.port"))
 	s.Require().NoError(err)
-	var fresh []string
-	for _, pf := range portFiles {
-		if fi, err := os.Stat(pf); err == nil && !fi.ModTime().Before(connectStart) {
-			fresh = append(fresh, pf)
+	var pf kubeauth.PortFile
+	var matches []string
+	for _, name := range portFiles {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			continue
+		}
+		var c kubeauth.PortFile
+		if json.Unmarshal(data, &c) != nil {
+			continue
+		}
+		if c.Kubeconfig == path && c.Context == wshardKubeAuthContext {
+			pf = c
+			matches = append(matches, filepath.Base(name))
 		}
 	}
-	s.Require().Len(fresh, 1, "expected exactly one kubeauth port file written since the connect: %v", fresh)
-	data, err := os.ReadFile(fresh[0])
-	s.Require().NoError(err, "the kubeauth port file")
-	var pf struct {
-		Token string `json:"token"`
-	}
-	s.Require().NoError(json.Unmarshal(data, &pf))
+	s.Require().Len(matches, 1, "expected exactly one kubeauth port file for the test kubeconfig and context, found: %v", matches)
 	s.Require().NotEmpty(pf.Token, "the kubeauth port file holds no token")
 	for pid, argv := range wshardCmdlines() {
 		s.NotContains(strings.Join(argv, " "), pf.Token, "the token is on the command line of process %d", pid)
