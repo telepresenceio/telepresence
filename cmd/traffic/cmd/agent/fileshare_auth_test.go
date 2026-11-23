@@ -315,7 +315,7 @@ func newSftpGateFixture(t *testing.T) *sftpGateFixture {
 	t.Helper()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644))
-	srv, err := sftpserver.New(dir, t.TempDir())
+	srv, err := sftpserver.New(dir, []string{t.TempDir()}, nil)
 	require.NoError(t, err)
 	return &sftpGateFixture{srv: srv}
 }
