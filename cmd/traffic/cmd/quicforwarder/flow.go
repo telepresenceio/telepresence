@@ -108,20 +108,14 @@ func (t *flowTable) putBatchBuffers(gro bool, b *batchBuffers) {
 	t.batchPools[i].Put(b)
 }
 
-// waitReadable blocks until conn has data to read or is closed.
+// waitReadable blocks until conn has data to read or is closed. RawConn.Read discards any
+// readiness seen before the call, so the callback itself checks for queued data.
 func waitReadable(conn *net.UDPConn) error {
 	rc, err := conn.SyscallConn()
 	if err != nil {
 		return err
 	}
-	first := true
-	return rc.Read(func(uintptr) bool {
-		if first {
-			first = false
-			return false
-		}
-		return true
-	})
+	return rc.Read(readable)
 }
 
 func newFlowTable(frontPC *ipv4.PacketConn, m *metrics) *flowTable {
