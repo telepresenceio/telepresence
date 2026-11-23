@@ -235,6 +235,7 @@ func (s *state) SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClie
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version
+	s.fileShareAuth.authorizer.Store(newSessionAuthorizer(manager, sessionInfo))
 }
 
 func (s *state) SetGRPCServer(svc *grpc.Server) {

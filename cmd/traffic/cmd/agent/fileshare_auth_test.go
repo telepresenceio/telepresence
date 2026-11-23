@@ -71,6 +71,7 @@ func TestFileShareAuth_ValidatePassword_Enforcing(t *testing.T) {
 
 	a := &fileShareAuth{}
 	a.set(&key.PublicKey, "enforcing")
+	a.authorizer.Store(newSessionAuthorizer(filesAccess{}, &mgrrpc.SessionInfo{}))
 	require.True(t, a.enforcing())
 
 	require.NoError(t, a.validatePassword(ctx, "u", valid))
@@ -823,4 +824,13 @@ func TestFileShareAuth_NoCredentialsAcceptsUnauthenticated(t *testing.T) {
 	verified, err := a.verifySession(ctx, "some-session")
 	require.NoError(t, err)
 	require.False(t, verified)
+}
+
+// filesAccess is a manager client that grants every session access to the file servers.
+type filesAccess struct {
+	mgrrpc.ManagerClient
+}
+
+func (filesAccess) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
+	return &mgrrpc.AuthorizeSessionAccessResponse{Level: mgrrpc.AuthorizeSessionAccessResponse_LEVEL_FILES}, nil
 }

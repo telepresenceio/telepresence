@@ -86,11 +86,19 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 	if _, err := s.fileShareAuth.verifySession(ctx, stream.SessionID()); err != nil {
 		return err
 	}
+	if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK); err != nil {
+		return err
+	}
 	if awc, ok := s.awaitingForwards.Load(stream.SessionID()); ok {
 		if awf, ok := awc.LoadAndDelete(stream.ID()); ok {
 			awf.streamCh <- stream
 			<-awf.doneCh
 			return nil
+		}
+	}
+	if s.fileShareAuth.enforcing() && isOwnAddress(stream.ID().DestinationAddr(), s.PodIP(), s.AppPodIP()) {
+		if err := s.fileShareAuth.requireAccess(ctx, stream.SessionID(), rpc.AuthorizeSessionAccessResponse_LEVEL_FILES); err != nil {
+			return err
 		}
 	}
 	reporting := s.MetricsEnabled()
@@ -119,6 +127,9 @@ func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDial
 	sid := tunnel.SessionID(session.SessionId)
 	verified, err := s.fileShareAuth.verifySession(ctx, sid)
 	if err != nil {
+		return err
+	}
+	if err := s.fileShareAuth.requireAccess(ctx, sid, rpc.AuthorizeSessionAccessResponse_LEVEL_NETWORK); err != nil {
 		return err
 	}
 	started := time.Now()

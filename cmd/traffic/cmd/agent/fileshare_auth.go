@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -28,6 +29,10 @@ import (
 // "Traffic-agent ports" in docs/reference/authentication.md.
 type fileShareAuth struct {
 	v atomic.Pointer[fileShareAuthSnapshot]
+
+	// authorizer answers what a client session may do through this agent. It is
+	// replaced whenever a manager session is established.
+	authorizer atomic.Pointer[sessionAuthorizer]
 }
 
 var errNoCredentials = errors.New("fileshareauth: this agent has no session credential material yet")
@@ -77,8 +82,11 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 	if s.pub == nil {
 		return nil
 	}
-	_, err := sessiontoken.Verify(s.pub, password, time.Now())
+	sessionID, err := sessiontoken.Verify(s.pub, password, time.Now())
 	if err == nil {
+		if s.mode == "enforcing" {
+			return a.requireAccess(ctx, tunnel.SessionID(sessionID), rpc.AuthorizeSessionAccessResponse_LEVEL_FILES)
+		}
 		return nil
 	}
 	if s.mode == "enforcing" {
