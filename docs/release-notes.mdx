@@ -75,36 +75,6 @@ The user daemon and the root daemon choose their ports themselves and publish th
   </Body>
 </Note>
 <Note>
-	<Title type="feature" docs="howtos/monitoring">Prometheus metrics for the traffic-manager's gRPC requests</Title>
-	<Body>
-The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.
-  </Body>
-</Note>
-<Note>
-	<Title type="change" docs="reference/authentication#moving-an-existing-installation-to-enforcing">The traffic-manager enforces authentication by default</Title>
-	<Body>
-The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. An enforcing traffic-manager refuses clients older than 2.31.0; a permissive one still serves them. Traffic-agents are replaced when the traffic-manager is upgraded and need no action, unless the <code>agent.image</code> Helm values pin an agent older than 2.31. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
-  </Body>
-</Note>
-<Note>
-	<Title type="bugfix" docs="howtos/monitoring">The active gRPC request gauge counts requests again</Title>
-	<Body>
-The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was always zero. It now counts the gRPC requests that the traffic-manager is serving, including those on the external control endpoint.
-  </Body>
-</Note>
-<Note>
-	<Title type="bugfix">The --proxy-url and --as-user-extra flags are honored by both daemons</Title>
-	<Body>
-The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--as-user-extra</code>. The user daemon ignored them too when it ran in a container (<code>telepresence connect --docker</code>) or read the kubeconfig from stdin (<code>--kubeconfig -</code>). Both daemons now apply the two flags the same way <code>kubectl</code> does.
-  </Body>
-</Note>
-<Note>
-	<Title type="bugfix">Intercepts survive a traffic-manager restart in enforcing mode</Title>
-	<Body>
-After a traffic-manager restart, a client that was connected to an enforcing traffic-manager kept the session credential that the previous traffic-manager had issued. The traffic-agents refused it, so intercepted traffic did not reach the workstation until the client reconnected. The client now fetches a new credential when it reconnects to the traffic-manager.
-  </Body>
-</Note>
-<Note>
 	<Title type="security">Authorization is checked before a workload joins an intercept</Title>
 	<Body>
 In an intercept of a shared Service, a workload joins as a participant only after the participant authorization has passed for it. A traffic-agent that registers no longer joins on its own. A request that names a Service UID without a Service name is treated as an intercept of a single workload.
@@ -129,27 +99,57 @@ In node-agent mode, a shared directory is not offered for mounting when a volume
   </Body>
 </Note>
 <Note>
-	<Title type="change">Host-network workloads are refused when they need an init container</Title>
-	<Body>
-An intercept of a workload that uses host networking is now refused with an error message when the Service port is numeric or the Service is headless. The init container of the traffic-agent would set up packet redirection in the node's network namespace. The traffic-manager checks this before it restarts any pod, and the injector no longer adds the init container to such a pod. It admits the pod without a traffic-agent and logs a warning. An intercept through a named port of a Service that is not headless needs no init container, and works as before.
-  </Body>
-</Note>
-<Note>
-	<Title type="bugfix">The traffic-manager can read ReplicaSets when Deployments are enabled</Title>
-	<Body>
-With <code>workloads.replicaSets.enabled=false</code>, the traffic-manager had no right to read ReplicaSets unless Argo Rollouts were enabled, so it could not tell which Deployment a pod belongs to. The Role of the traffic-manager now keeps read-only <code>get</code> access to ReplicaSets when Deployments or Argo Rollouts are enabled.
-  </Body>
-</Note>
-<Note>
 	<Title type="security" docs="reference/authentication#sftp">The SFTP server of a traffic-agent is reached only through the tunnel</Title>
 	<Body>
 The SFTP port of a traffic-agent serves no connections. A mount reaches the SFTP server through the Telepresence tunnel, where the traffic-agent connects it to the server inside its own process. This applies in every authentication mode. Mounts created by <code>telepresence intercept</code>, <code>replace</code> and <code>ingest</code> work as before, with one exception. An ingest by a client that has no direct connection to the traffic-agent gets no SFTP mount on a traffic-manager that does not enforce authentication. A client is in that position when it lacks the <code>pods/portforward</code> permission and the QUIC tunnel is not enabled. FTP mounts are not affected.
   </Body>
 </Note>
 <Note>
+	<Title type="feature" docs="howtos/monitoring">Prometheus metrics for the traffic-manager's gRPC requests</Title>
+	<Body>
+The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.
+  </Body>
+</Note>
+<Note>
+	<Title type="change" docs="reference/authentication#moving-an-existing-installation-to-enforcing">The traffic-manager enforces authentication by default</Title>
+	<Body>
+The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. An enforcing traffic-manager refuses clients older than 2.31.0; a permissive one still serves them. Traffic-agents are replaced when the traffic-manager is upgraded and need no action, unless the <code>agent.image</code> Helm values pin an agent older than 2.31. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
+  </Body>
+</Note>
+<Note>
+	<Title type="change">Host-network workloads are refused when they need an init container</Title>
+	<Body>
+An intercept of a workload that uses host networking is now refused with an error message when the Service port is numeric or the Service is headless. The init container of the traffic-agent would set up packet redirection in the node's network namespace. The traffic-manager checks this before it restarts any pod, and the injector no longer adds the init container to such a pod. It admits the pod without a traffic-agent and logs a warning. An intercept through a named port of a Service that is not headless needs no init container, and works as before.
+  </Body>
+</Note>
+<Note>
 	<Title type="change" docs="reference/config#neverproxysubnets">A workload with a never-proxied pod address can't be attached</Title>
 	<Body>
 An intercept, replace or ingest of a workload whose pod address is covered by a <code>neverProxySubnets</code> entry fails with an error that names the address and the subnet. The client has no route to such a pod through Telepresence. An <code>alsoProxySubnets</code> entry inside the never-proxy subnet that contains the pod's address lifts the restriction.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix" docs="howtos/monitoring">The active gRPC request gauge counts requests again</Title>
+	<Body>
+The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was always zero. It now counts the gRPC requests that the traffic-manager is serving, including those on the external control endpoint.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">The --proxy-url and --as-user-extra flags are honored by both daemons</Title>
+	<Body>
+The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--as-user-extra</code>. The user daemon ignored them too when it ran in a container (<code>telepresence connect --docker</code>) or read the kubeconfig from stdin (<code>--kubeconfig -</code>). Both daemons now apply the two flags the same way <code>kubectl</code> does.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Intercepts survive a traffic-manager restart in enforcing mode</Title>
+	<Body>
+After a traffic-manager restart, a client that was connected to an enforcing traffic-manager kept the session credential that the previous traffic-manager had issued. The traffic-agents refused it, so intercepted traffic did not reach the workstation until the client reconnected. The client now fetches a new credential when it reconnects to the traffic-manager.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">The traffic-manager can read ReplicaSets when Deployments are enabled</Title>
+	<Body>
+With <code>workloads.replicaSets.enabled=false</code>, the traffic-manager had no right to read ReplicaSets unless Argo Rollouts were enabled, so it could not tell which Deployment a pod belongs to. The Role of the traffic-manager now keeps read-only <code>get</code> access to ReplicaSets when Deployments or Argo Rollouts are enabled.
   </Body>
 </Note>
 <Note>
