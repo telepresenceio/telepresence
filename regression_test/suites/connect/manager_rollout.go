@@ -114,11 +114,12 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 	// reconnects on its own schedule, so the check watches for rolloutRouteWatch.
 	if runtime.GOOS == "linux" {
 		newAddr := s.managerPodAddr(ctx, r, mgrNS)
-		s.Require().Never(func() bool {
-			return len(routesAround(ctx, oldAddr)) > 0 || len(routesAround(ctx, newAddr)) > 0
-		}, rolloutRouteWatch, time.Second,
-			"no host route may exist for the old manager address %s (%v) or the new one %s (%v)",
-			oldAddr, routesAround(ctx, oldAddr), newAddr, routesAround(ctx, newAddr))
+		var found []string
+		clean := s.Never(func() bool {
+			found = append(routesAround(ctx, oldAddr), routesAround(ctx, newAddr)...)
+			return len(found) > 0
+		}, rolloutRouteWatch, time.Second)
+		s.Require().True(clean, "no host route may exist for the old manager address %s or the new one %s: %v", oldAddr, newAddr, found)
 	}
 }
 
