@@ -1280,7 +1280,6 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	// Merge traffic-manager's reported config, but get priority to the local config.
 	cfg := client.GetConfig(s)
 	if tmCfg != nil {
-		dropLocalSettings(s, tmCfg)
 		tmMappedNamespaces := tmCfg.Cluster().MappedNamespaces
 		clientMappedNamespaces := cfg.Cluster().MappedNamespaces
 		cfg = tmCfg.Merge(cfg)
