@@ -49,17 +49,6 @@ func snapshotRouting(ctx context.Context) routingBaseline {
 	return b
 }
 
-// currentTables returns the Telepresence-range tables that policy rules send
-// lookups to now.
-func currentTables(ctx context.Context) []int {
-	var tables []int
-	for n := range snapshotRouting(ctx).tables {
-		tables = append(tables, n)
-	}
-	sort.Ints(tables)
-	return tables
-}
-
 // newRules returns the rule lines that were not in the baseline, and the
 // tables they send lookups to, excluding tables that were in the baseline.
 func (b routingBaseline) newRules(ctx context.Context) (rules []string, tables []int) {
