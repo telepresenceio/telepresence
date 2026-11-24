@@ -21,6 +21,12 @@ The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grp
   </Body>
 </Note>
 <Note>
+	<Title type="change" docs="reference/authentication#moving-an-existing-installation-to-enforcing">The traffic-manager enforces authentication by default</Title>
+	<Body>
+The default of <code>security.authentication.mode</code> is <code>enforcing</code>. A traffic-manager that is installed or upgraded without an explicit mode authenticates every client and traffic-agent, and checks that a client holds a grant for what it does. An enforcing traffic-manager refuses clients older than 2.31.0; a permissive one still serves them. Traffic-agents are replaced when the traffic-manager is upgraded and need no action, unless the <code>agent.image</code> Helm values pin an agent older than 2.31. <code>telepresence helm upgrade</code> without value flags uses the new chart's defaults together with the values that were set earlier, so an existing installation that never set the mode becomes enforcing when it is upgraded. Set <code>security.authentication.mode=permissive</code> to keep the earlier behavior.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix" docs="howtos/monitoring">The active gRPC request gauge counts requests again</Title>
 	<Body>
 The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was always zero. It now counts the gRPC requests that the traffic-manager is serving, including those on the external control endpoint.
