@@ -104,7 +104,8 @@ func (sf *stateFile) lookup(key, hash string) *fixtureState {
 // invoked via `go run ./regression_test/framework/rtclean` (make
 // rtest-clean). It builds a minimal Runtime directly rather than going
 // through newRuntime/Main, since cleanup needs neither version detection
-// nor a fresh per-run artifact directory.
+// nor a fresh per-run artifact directory. The telepresence child processes
+// get a kubeconfig pinned to RTEST_CONTEXT.
 func CleanAll(ctx context.Context) error {
 	root, err := repoRoot()
 	if err != nil {
@@ -113,12 +114,19 @@ func CleanAll(ctx context.Context) error {
 	env := loadEnv(root)
 	homeDir := filepath.Join(root, "build-output", "rtest", "home")
 	r := &Runtime{
-		ctx:        ctx,
-		exe:        env.executable,
-		kubeconfig: env.kubeconfig,
-		kubeCtx:    env.context,
-		configDir:  filepath.Join(homeDir, "config"),
-		logDir:     filepath.Join(homeDir, "logs"),
+		ctx:         ctx,
+		exe:         env.executable,
+		kubeconfig:  env.kubeconfig,
+		kubeCtx:     env.context,
+		configDir:   filepath.Join(homeDir, "config"),
+		logDir:      filepath.Join(homeDir, "logs"),
+		artifactDir: homeDir,
+	}
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		return err
+	}
+	if err := r.pinContextKubeconfig(); err != nil {
+		return err
 	}
 
 	if _, stderr, err := r.CLI().Run(ctx, "quit", "-s"); err != nil {

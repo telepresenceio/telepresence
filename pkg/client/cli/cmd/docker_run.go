@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -105,6 +106,15 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	tty := flags.HasOption("tty", 't', runOpts)
+	var sigCh <-chan os.Signal
+	if !tty {
+		// Register before the container is started, so that an early signal is not lost.
+		var stopSignals func()
+		sigCh, stopSignals = cliDocker.NotifySignals()
+		defer stopSignals()
+	}
+
 	cni, cc, err := docker.Start(ctx, true, args...)
 	if err != nil {
 		return errcat.NoDaemonLogs.New(err)
@@ -116,10 +126,10 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 
 	var exited, signalled atomic.Bool
 	done := make(chan error, 1)
-	if flags.HasOption("tty", 't', runOpts) {
+	if tty {
 		close(done)
 	} else {
-		go cliDocker.EnsureStopContainer(ctx, cni.Name, cni.ID, nil, &exited, &signalled, done)
+		go cliDocker.EnsureStopContainer(ctx, cni.Name, cni.ID, nil, sigCh, &exited, &signalled, done)
 	}
 
 	err = cc.Wait()

@@ -23,6 +23,8 @@ import (
 
 const Exe = "docker"
 
+// Start creates and starts a container. If the container was created but a later step fails, the
+// container is removed and the returned ContainerInfo has only its ID set.
 func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *ContainerInfo, cc *exec.Cmd, err error) {
 	dockerOpts := []string{"create"}
 	var nwName string
@@ -44,10 +46,17 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 		return nil, nil, err
 	}
 	containerID := strings.TrimSpace(idReader.String())
+	created := &ContainerInfo{ID: containerID}
+	failed := true
+	defer func() {
+		if failed {
+			removeContainer(ctx, containerID)
+		}
+	}()
 
 	cli, err := GetClient(ctx)
 	if err != nil {
-		return nil, nil, err
+		return created, nil, err
 	}
 
 	if nwName != "" {
@@ -68,18 +77,34 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 	cc.Env = dos.Environ(ctx)
 	err = cc.Start()
 	if err != nil {
-		return nil, nil, err
+		return created, nil, err
 	}
 
 	cni, err = GetContainerInfo(ctx, containerID, nwName)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			// Container is already done, so not much left to do here.
+			failed = false
 			err = cc.Wait()
+			return nil, nil, errcat.NoDaemonLogs.New(err)
 		}
-		return nil, nil, errcat.NoDaemonLogs.New(err)
+		return created, nil, errcat.NoDaemonLogs.New(err)
 	}
+	failed = false
 	return cni, cc, nil
+}
+
+// removeContainer force-removes a container, ignoring errors.
+func removeContainer(ctx context.Context, id string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return
+	}
+	if _, err = cli.ContainerRemove(ctx, id, dockerClient.ContainerRemoveOptions{Force: true}); err != nil && !errdefs.IsNotFound(err) {
+		clog.Debugf(ctx, "failed to remove container %s: %v", id, err)
+	}
 }
 
 func StopContainer(ctx context.Context, nameOrID string) error {

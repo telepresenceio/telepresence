@@ -88,6 +88,11 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		}
 	}()
 
+	// Register for signals before the container is started, so that a signal arriving
+	// while it starts is kept until the wait begins.
+	sigCh, stopSignals := NotifySignals()
+	defer stopSignals()
+
 	progress.Working(ctx, "Starting")
 	w := s.start(procCtx, envFile, runFlags, args)
 	if w.err == nil {
@@ -104,7 +109,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	// Can't have the progress monitor running and show process output at the same time.
 	progress.Stop(ctx)
 
-	if err = w.wait(procCtx); err != nil {
+	if err = w.wait(procCtx, sigCh); err != nil {
 		return err
 	}
 	return nil
@@ -242,9 +247,20 @@ type waiter struct {
 	volumes map[string]string
 }
 
-func (w *waiter) wait(ctx context.Context) error {
+func (w *waiter) wait(ctx context.Context, sigCh <-chan os.Signal) error {
 	if w.err != nil {
 		clog.Error(ctx, w.err)
+		if w.cni != nil && w.cmd != nil {
+			// The container was started but could not be registered as a handler.
+			if err := docker.StopContainer(context.WithoutCancel(ctx), w.cni.ID); err != nil {
+				clog.Errorf(ctx, "failed to stop container %s: %v", w.cni.Name, err)
+			}
+		}
+		if len(w.volumes) > 0 {
+			rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			docker.RemoveVolumes(rmCtx, slices.Collect(maps.Keys(w.volumes)))
+			cancel()
+		}
 		return errcat.NoDaemonLogs.New(w.err)
 	}
 
@@ -259,7 +275,7 @@ func (w *waiter) wait(ctx context.Context) error {
 	defer cancel()
 	done := make(chan error, 1)
 
-	go EnsureStopContainer(ctx, w.cni.Name, w.cni.ID, volNames, &exited, &signalled, done)
+	go EnsureStopContainer(ctx, w.cni.Name, w.cni.ID, volNames, sigCh, &exited, &signalled, done)
 
 	err := w.cmd.Wait()
 	exited.Store(true)
@@ -275,7 +291,16 @@ func (w *waiter) wait(ctx context.Context) error {
 	return errcat.NoDaemonLogs.New(err)
 }
 
-func EnsureStopContainer(ctx context.Context, name, containerID string, volumes []string, exited, signalled *atomic.Bool, done chan<- error) {
+// NotifySignals returns a channel that receives the signals that should stop a container, and
+// a function that unregisters it.
+func NotifySignals() (<-chan os.Signal, func()) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, proc.SignalsToForward...)
+	return sigCh, func() { signal.Stop(sigCh) }
+}
+
+// EnsureStopContainer stops the container when ctx is done or a signal arrives on sigCh.
+func EnsureStopContainer(ctx context.Context, name, containerID string, volumes []string, sigCh <-chan os.Signal, exited, signalled *atomic.Bool, done chan<- error) {
 	clog.Debugf(ctx, "EnsureStopContainer %s", name)
 	defer clog.Debugf(ctx, "EnsureStopContainer %s ended", name)
 	defer close(done)
@@ -287,11 +312,6 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 			docker.RemoveVolumes(ctx, volumes)
 		}()
 	}
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, proc.SignalsToForward...)
-	defer func() {
-		signal.Stop(sigCh)
-	}()
 	select {
 	case <-ctx.Done():
 		clog.Debugf(ctx, "EnsureStopContainer %s: Context done", name)

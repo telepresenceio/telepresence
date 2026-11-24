@@ -27,6 +27,19 @@ Link 4 (eth1): [2001:db8::1]:53
 	}, got)
 }
 
+// The exact output of resolvectl dns cannot be produced on demand in a cluster test.
+func TestParseResolveCtlDNSSkipsLinks(t *testing.T) {
+	out := []byte(`Global:
+Link 2 (ens5): 172.31.0.2
+Link 7 (tel0): 10.96.0.10
+Link 8 (tel01): 10.96.0.11
+`)
+	require.Equal(t, []netip.AddrPort{
+		netip.MustParseAddrPort("10.96.0.11:53"),
+		netip.MustParseAddrPort("172.31.0.2:53"),
+	}, parseResolveCtlDNS(out, "tel0"))
+}
+
 func TestLinkDomainsIncludesNamespaceQualifiedServiceRoutes(t *testing.T) {
 	paths := linkDomains(
 		[]string{"tel2-search"},

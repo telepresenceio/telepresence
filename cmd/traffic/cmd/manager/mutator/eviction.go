@@ -118,8 +118,8 @@ func podsWithAgentConfigMismatch(ctx context.Context, pods []*core.Pod, wanted *
 	})
 }
 
-// tightAgentConfig returns the config as a pod annotation carries it, with the creation-only fields
-// that MarshalTight strips absent.
+// tightAgentConfig returns the config as a pod annotation carries it: the creation-only fields that
+// MarshalTight strips are absent, the agent image is present.
 func tightAgentConfig(sc *agentconfig.Sidecar) (*agentconfig.Sidecar, error) {
 	if sc == nil {
 		return nil, nil

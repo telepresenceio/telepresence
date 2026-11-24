@@ -52,7 +52,7 @@ Create and start containers
       --scale uint32                 Scale SERVICE to NUM instances. Overrides the scale setting in the Compose file if present.
   -t, --timeout int                  Use this timeout in seconds for container shutdown when attached or when containers are already running
       --timestamps                   Show timestamps
-      --wait                         Wait for services to be running|healthy. Implies detached mode.
+      --wait                         Wait for services to be running|healthy, streaming their logs unless --detach is set
       --wait-timeout int             Maximum duration in seconds to wait for the project to be running|healthy
   -w, --watch                        Watch source code and rebuild/refresh containers when files are updated.
   -y, --yes                          Assume &quot;yes&quot; as answer to all prompts and run non-interactively

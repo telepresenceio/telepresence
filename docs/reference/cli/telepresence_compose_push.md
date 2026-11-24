@@ -27,9 +27,9 @@ Push service images
 
 ### Compose push flags:
 ```
-      --ignore-push-failures   Push what it can and ignores images with push failures
-      --include-deps           Also push images of services declared as dependencies
-  -q, --quiet                  Push without printing progress information
+      --ignore-missing   Skip images that are not available locally instead of failing to push them
+      --include-deps     Also push images of services declared as dependencies
+  -q, --quiet            Push without printing progress information
 ```
 
 ### Global Flags:
