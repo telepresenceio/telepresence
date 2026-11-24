@@ -340,6 +340,9 @@ func (s *stream) receiveFromTransport(ctx context.Context) (Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(cm.GetPayload()) == 0 {
+		return nil, errors.New("received a tunnel message with an empty payload")
+	}
 	m := msg(cm.Payload)
 	switch m.Code() {
 	case closeSend:
