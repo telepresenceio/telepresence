@@ -119,6 +119,24 @@
       <Component Id="Cmp_PathEnv" Directory="INSTALLDIR" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
         <Environment Id="PATH" Name="PATH" Value="[INSTALLDIR]" Permanent="no" Part="last" Action="set" System="yes"/>
       </Component>
+      <!-- The client trusts the machine-wide config and the daemon info
+           only when no one but an administrator can change them. Windows
+           lets every user add files below C:\ProgramData, so the directory
+           and its subdirectories get an access list of their own: full
+           control for SYSTEM and Administrators, read and execute for
+           Users, nothing inherited from above. The installer does not
+           pass a new access list on to a directory that already exists,
+           so each directory is listed. -->
+      <Component Id="Cmp_ConfigDir" Directory="CONFIGDIR" Guid="ca66fac2-f343-4270-b05c-ace7e36b512b">
+        <CreateFolder>
+          <PermissionEx Id="ConfigDirAcl" Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)"/>
+        </CreateFolder>
+      </Component>
+      <Component Id="Cmp_LogDir" Directory="LOGDIR" Guid="819493f6-14b4-475a-9b0f-e9624606715d">
+        <CreateFolder>
+          <PermissionEx Id="LogDirAcl" Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)"/>
+        </CreateFolder>
+      </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="TelepresenceService">
@@ -142,10 +160,16 @@
             Wait="yes"/>
       </Component>
       <Component Id="Cmd_RemoveRootd" Guid="0ddbad7d-65d2-417d-a4af-f2d3492d3cd6" Directory="ROOTD">
+        <CreateFolder>
+          <PermissionEx Id="RootdDirAcl" Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)"/>
+        </CreateFolder>
         <RemoveFile Id="PurgeRootdFolder" Name="*.*" On="uninstall"/>
         <RemoveFolder On="uninstall"/>
       </Component>
       <Component Id="Cmd_RemoveCache" Guid="6ae39c09-285a-4e3f-9add-f9aad238cc15" Directory="CACHEDIR">
+        <CreateFolder>
+          <PermissionEx Id="CacheDirAcl" Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)"/>
+        </CreateFolder>
         <RemoveFile Id="PurgeCacheFolder" Name="*.*" On="uninstall"/>
         <RemoveFolder On="uninstall"/>
       </Component>
