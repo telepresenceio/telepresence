@@ -97,7 +97,8 @@ items:
           it exit. See the authentication reference. When authentication
           is enforced, a 2.34 traffic-agent requires a traffic-manager of
           version 2.34 or later, and refuses session access until the
-          traffic-manager has been upgraded.
+          traffic-manager has been upgraded. With a traffic-manager older
+          than 2.31, it refuses file access and tunnel calls.
         docs: reference/authentication
       - type: security
         title: Callers without a grant are shown less
