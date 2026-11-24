@@ -2,7 +2,6 @@ package trafficmgr
 
 import (
 	"context"
-	"maps"
 	"net/netip"
 	"slices"
 	"sync"
@@ -33,44 +32,15 @@ const (
 	interceptTargetsRetryMax   = 5 * time.Second
 )
 
-// destinationSet is the set of local destinations that one intercept may deliver traffic to.
-type destinationSet map[types.AddrPortProto]struct{}
-
-// newDestinationSet returns the destinations that a local intercept request asked for: the
-// target port and the local side of each additional pod port, all on the target host.
-func newDestinationSet(targetHost string, targetPort int32, protocol string, podPorts []string) destinationSet {
-	addr, err := netip.ParseAddr(targetHost)
-	if err != nil {
-		return nil
-	}
-	set := make(destinationSet, 1+len(podPorts))
-	add := func(port int32, proto string) {
-		pr, err := types.ParseProto(proto)
-		if err != nil || port <= 0 || port > 65535 {
-			return
-		}
-		set[types.AddrPortProto{AddrPort: netip.AddrPortFrom(addr, uint16(port)), Proto: pr}] = struct{}{}
-	}
-	add(targetPort, protocol)
-	for _, pms := range podPorts {
-		to := types.PortMapping(pms).ToAsNumeric()
-		add(int32(to.Port), to.Proto.String())
-	}
-	return set
-}
-
 // pushInterceptTargets declares the local destinations of the given intercepts to the root
 // daemon, which dials a destination requested by a traffic-agent only if it is declared. Each
 // push replaces the previous set. The set is in place when the call returns, unless the root
 // daemon is unavailable, in which case it is retried in the background.
 func (s *session) pushInterceptTargets(intercepts []*manager.InterceptInfo) {
-	s.currentInterceptsLock.Lock()
-	dests := maps.Clone(s.localDestinations)
-	s.currentInterceptsLock.Unlock()
 	p := &s.targetsPublisher
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.targets = interceptTargets(intercepts, dests)
+	p.targets = interceptTargets(intercepts)
 	p.dirty = true
 	s.flushInterceptTargetsLocked()
 }
@@ -138,20 +108,15 @@ func (s *session) retryInterceptTargets() {
 
 // interceptTargets returns the local destinations that the given intercepts deliver traffic to.
 // A WAITING intercept is included because its traffic-agent may start forwarding before the
-// intercept turns ACTIVE here. Only destinations that the local request for the intercept
-// asked for are included; an intercept without such a record yields none. The target host may be a synthetic IP that stands in for a name,
+// intercept turns ACTIVE here. The target host may be a synthetic IP that stands in for a name,
 // which is how the traffic-agent addresses it too.
-func interceptTargets(intercepts []*manager.InterceptInfo, dests map[string]destinationSet) []*daemon.InterceptTarget {
+func interceptTargets(intercepts []*manager.InterceptInfo) []*daemon.InterceptTarget {
 	targets := make([]*daemon.InterceptTarget, 0, len(intercepts))
 	for _, ii := range intercepts {
 		if ii.Disposition != manager.InterceptDispositionType_ACTIVE && ii.Disposition != manager.InterceptDispositionType_WAITING {
 			continue
 		}
 		spec := ii.Spec
-		allowed := dests[spec.Name]
-		if len(allowed) == 0 {
-			continue
-		}
 		addr, err := netip.ParseAddr(spec.TargetHost)
 		if err != nil {
 			continue
@@ -182,9 +147,6 @@ func interceptTargets(intercepts []*manager.InterceptInfo, dests map[string]dest
 			ap := netip.AddrPortFrom(addr, uint16(pp.port))
 			pr, err := types.ParseProto(pp.proto)
 			if err != nil {
-				continue
-			}
-			if _, ok := allowed[types.AddrPortProto{AddrPort: ap, Proto: pr}]; !ok {
 				continue
 			}
 			target, err := ap.MarshalBinary()

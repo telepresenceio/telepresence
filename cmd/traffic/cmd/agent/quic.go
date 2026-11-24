@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -24,6 +25,9 @@ import (
 type quicAgentState struct {
 	mu       sync.Mutex
 	listener *quicserver.Listener
+
+	// unimplementedLogged is set once the missing-call error has been logged.
+	unimplementedLogged atomic.Bool
 }
 
 // RefreshQuicAgentListener implements the State method of the same name and serves two
@@ -37,11 +41,13 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) e
 	resp, err := s.manager.GetQuicAgentCert(fetchCtx, s.sessionInfo)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
-			// The traffic-manager predates agent QUIC certificates and session
-			// credentials. The agent stays on its port-forwarded path and accepts
-			// file-sharing connections and tunnel calls unauthenticated.
-			clog.Debugf(fetchCtx, "quicserver: traffic-manager predates QUIC agent certificates")
-			s.fileShareAuth.setNoCredentials()
+			// This agent requires a traffic-manager that implements GetQuicAgentCert.
+			// The credential state stays unset, so file-sharing connections and tunnel
+			// calls are refused until a newer traffic-manager supplies credentials.
+			if s.quicAgent.unimplementedLogged.CompareAndSwap(false, true) {
+				clog.Errorf(fetchCtx, "the traffic-manager doesn't implement GetQuicAgentCert; "+
+					"this traffic-agent requires traffic-manager 2.34.0 or later, and refuses file-sharing and tunnel access until then")
+			}
 			return nil
 		}
 		clog.Errorf(fetchCtx, "quicserver: failed to fetch QUIC agent certificate: %v", err)

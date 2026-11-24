@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
@@ -17,6 +19,10 @@ import (
 // agentidUnimplementedLog is the line a traffic-agent logs when its
 // traffic-manager answers AuthorizeSessionAccess with Unimplemented.
 const agentidUnimplementedLog = "doesn't implement AuthorizeSessionAccess"
+
+// agentidQuicCertUnimplementedLog is the line a traffic-agent logs when its
+// traffic-manager answers GetQuicAgentCert with Unimplemented.
+const agentidQuicCertUnimplementedLog = "doesn't implement GetQuicAgentCert"
 
 // AgentidPreAccessCallManager runs a current traffic-agent against an
 // enforcing traffic-manager that answers Unimplemented for
@@ -79,6 +85,66 @@ func (s *AgentidPreAccessCallManager) Test_OldManagerRefusesFileAccess() {
 		log, err := agentidAgentLogs(ctx, r, ns, wl.Name)
 		return err == nil && strings.Contains(log, agentidUnimplementedLog)
 	}, agentidMountTimeout, time.Second, "the traffic-agent of %s should log that the traffic-manager doesn't implement AuthorizeSessionAccess", wl.Name)
+}
+
+// AgentidPreQuicCertManager runs a current traffic-agent against a
+// traffic-manager that answers Unimplemented for GetQuicAgentCert, as a
+// manager older than 2.31 does. The agent requires a newer traffic-manager,
+// so it must refuse tunnel calls instead of serving them unauthenticated.
+type AgentidPreQuicCertManager struct {
+	rt.Suite
+}
+
+func init() {
+	rt.Register(&AgentidPreQuicCertManager{}, rt.InArea("auth"), rt.NeedsManager(managers.AgentidEnforcingPreQuicAgentCert()),
+		rt.Requires(rt.FUSE), rt.NotOn("windows"))
+}
+
+// Test_OldManagerRefusesTunnel opens a Tunnel through the traffic-agent to
+// its own loopback SFTP port, as a client session of the old traffic-manager
+// (which issues no session credential), and tries to read the file that the
+// workload's ConfigMap mount exposes. The agent must refuse the call and the
+// marker content must never come back. The agent's log must say that the
+// traffic-manager doesn't implement GetQuicAgentCert.
+func (s *AgentidPreQuicCertManager) Test_OldManagerRefusesTunnel() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	s.Manager()
+
+	wl := s.Workload(workloads.EchoWithConfigVolume("agentid-compat-no-cert"))
+	container, mountedPath := agentidInstallFileShareAgent(s, wl)
+	info := agentidAgentInfoFor(t, ctx, r, ns, wl.Name)
+	ci := info.GetContainers()[container]
+	s.Require().NotNil(ci, "%s's AgentInfo has no entry for container %q", wl.Name, container)
+	remotePath := ci.GetMountPoint() + mountedPath
+	s.Require().NotZero(info.GetSftpPort(), "%s should have a traffic-agent with an SFTP port", wl.Name)
+
+	ac, closeFn, err := agentidDialAgentPod(ctx, ns, info.GetPodName(), info.GetPodUid(), info.GetApiPort())
+	s.Require().NoError(err)
+	defer closeFn()
+
+	tok := kubectlCreateToken(t, ctx, r, managers.TestServiceAccount)
+	_, _, si := dialAndArrive(t, ctx, r, ns, "rtest-agentid-no-cert", tok)
+
+	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	dst := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(info.GetSftpPort()))
+	conn, err := agentidOpenAgentTunnel(callCtx, ac, "", si.GetSessionId(), dst)
+	if err == nil {
+		defer conn.Close()
+		err = agentidReadRemoteFile(conn, remotePath)
+	}
+	s.Require().Error(err, "a traffic-agent whose traffic-manager lacks GetQuicAgentCert must not serve %s", remotePath)
+	if status.Code(err) != codes.Unavailable {
+		agentidRequireRefusedOrEnded(t, "reading "+remotePath, err)
+	}
+
+	s.Require().Eventually(func() bool {
+		log, err := agentidAgentLogs(ctx, r, ns, wl.Name)
+		return err == nil && strings.Contains(log, agentidQuicCertUnimplementedLog)
+	}, agentidMountTimeout, time.Second, "the traffic-agent of %s should log that the traffic-manager doesn't implement GetQuicAgentCert", wl.Name)
 }
 
 // agentidReadRemoteFile reads path over an SFTP session on conn. It returns
