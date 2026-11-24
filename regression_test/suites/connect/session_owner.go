@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
@@ -175,6 +176,50 @@ func (s *SessionOwner) Test_KilledUserDaemonFreesRootDaemon() {
 		time.Sleep(pollInterval)
 	}
 	rt.RoutedToCluster(t, wl.ServiceURL())
+}
+
+// Test_InterceptResumesAfterUserDaemonKill kills the user daemon while an
+// intercept is active and connects again. The new user daemon resumes the
+// session from the traffic-manager's snapshot, and the service reaches the
+// local server again without the intercept being recreated.
+func (s *SessionOwner) Test_InterceptResumesAfterUserDaemonKill() {
+	t := s.T()
+	wl := s.Workload(workloads.Echo("owner-resume"))
+	ls := s.LocalEcho()
+	s.claimConnection()
+	conn := rt.Reconnect(t, s.Ctx(), s.AppNamespace())
+	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
+
+	port := s.daemonPort("userd")
+	s.Require().NotZero(port, "the info file must name the user daemon's port")
+	pid, err := listenerPid(s.Ctx(), port)
+	s.Require().NoError(err)
+	proc, err := os.FindProcess(pid)
+	s.Require().NoError(err)
+	s.Require().NoError(proc.Kill(), "kill user daemon (pid %d)", pid)
+
+	waitFor(t, func() bool { return !reachable(wl.ServiceURL()) },
+		"the service is still reachable after the user daemon was killed")
+
+	// The killed daemon's info file counts as alive until it has gone
+	// unrefreshed for a few seconds, and connect fails until then.
+	deadline := time.Now().Add(staleInfoTimeout)
+	for {
+		_, stderr, err := s.CLI().Run(s.Ctx(), "connect",
+			"--namespace", s.AppNamespace(),
+			"--manager-namespace", managers.ManagerNamespace,
+			"--as", connectAs)
+		if err == nil {
+			break
+		}
+		s.Require().Contains(stderr, "user daemon is not running", "connect: %s", stderr)
+		s.Require().True(time.Now().Before(deadline), "connect still fails after %s: %s", staleInfoTimeout, stderr)
+		time.Sleep(pollInterval)
+	}
+
+	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
+	a.Detach(t)
 }
 
 // Test_QuitStopsBothDaemons expects `quit -s` to leave neither daemon running.
