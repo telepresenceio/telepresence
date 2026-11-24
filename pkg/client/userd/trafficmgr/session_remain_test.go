@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/stretchr/testify/require"
@@ -18,15 +19,20 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/clog/testutil"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 )
 
 type remainTestManager struct {
 	manager.UnimplementedManagerServer
 	mu   sync.Mutex
 	errs []error
+
+	// reconnectErr is returned by ReconnectClient.
+	reconnectErr error
 }
 
 func (s *remainTestManager) Remain(context.Context, *manager.RemainRequest) (*emptypb.Empty, error) {
@@ -44,7 +50,74 @@ func (s *remainTestManager) Remain(context.Context, *manager.RemainRequest) (*em
 }
 
 func (s *remainTestManager) ReconnectClient(context.Context, *manager.ReconnectClientRequest) (*emptypb.Empty, error) {
+	if s.reconnectErr != nil {
+		return nil, s.reconnectErr
+	}
 	return &emptypb.Empty{}, nil
+}
+
+type disconnectCounter struct {
+	connector.UnimplementedConnectorServer
+	n atomic.Int32
+}
+
+func (d *disconnectCounter) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	d.n.Add(1)
+	return &emptypb.Empty{}, nil
+}
+
+type disconnectService struct {
+	userd.Service
+	srv connector.ConnectorServer
+}
+
+func (d disconnectService) ConnectorServer() connector.ConnectorServer { return d.srv }
+
+// TestReconnectFailureEndsSession covers the decision that a regression test cannot reach
+// reliably: which ReconnectClient errors are final, and that several watchers hitting the
+// same failure disconnect once. The cluster path for FailedPrecondition is covered by the
+// regression suite, but a cluster cannot be made to answer Unavailable or NotFound on demand.
+func TestReconnectFailureEndsSession(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		final bool
+	}{
+		{"namespace not managed", status.Error(codes.FailedPrecondition, "namespace x is not managed"), true},
+		{"not found", status.Error(codes.NotFound, "gone"), true},
+		{"unavailable", status.Error(codes.Unavailable, "restarting"), false},
+		{"deadline", status.Error(codes.DeadlineExceeded, "slow"), false},
+		{"unauthenticated", status.Error(codes.Unauthenticated, "token expired"), false},
+		{"permission denied", status.Error(codes.PermissionDenied, "no"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newRemainTestSession(t)
+			dc := &disconnectCounter{}
+			s.service = disconnectService{srv: dc}
+			failedGeneration := s.currentManagerGeneration()
+			connect := func(context.Context) (*grpc.ClientConn, string, semver.Version, error) {
+				// A failed reconnect closes the connection, so each attempt needs its own.
+				conn, cleanup := dialRemainTestManager(t, &remainTestManager{reconnectErr: tt.err})
+				t.Cleanup(cleanup)
+				return conn, "manager", semver.Version{Major: 2, Minor: 32}, nil
+			}
+			for range 3 {
+				require.Error(t, s.reconnectManagerWith(failedGeneration, connect))
+			}
+			if tt.final {
+				require.Eventually(t, func() bool { return dc.n.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
+			} else {
+				time.Sleep(100 * time.Millisecond)
+			}
+			want := int32(0)
+			if tt.final {
+				want = 1
+			}
+			require.Equal(t, want, dc.n.Load())
+		})
+	}
 }
 
 func TestRemainReconnectsExpiredSession(t *testing.T) {
