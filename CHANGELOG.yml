@@ -35,6 +35,13 @@ items:
           the Alpine base image when they are built. A release ships the
           package fixes that Alpine has published by then, also when the
           base image itself has not been rebuilt yet.
+      - type: bugfix
+        title: Port-forward connections recover after the first stream fails
+        body: >-
+          A failed first stream left an unused port-forward connection in the
+          cache, so later attempts repeatedly reused a closed transport.
+          The failed dial now closes and evicts the connection when no other
+          users remain, so the next attempt opens a fresh transport.
   - version: 2.34.0
     date: 2026-11-25
     notes:

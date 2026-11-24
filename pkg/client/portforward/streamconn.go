@@ -140,7 +140,9 @@ func (pc *podDialer) dial(ctx context.Context, remotePort uint16) (conn net.Conn
 	var dataStream, errorStream httpstream.Stream
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&pc.refCount, -1)
+			if atomic.AddInt64(&pc.refCount, -1) == 0 {
+				_ = pc.Close()
+			}
 			if errorStream != nil {
 				errorStream.Close()
 				pc.streamConn.RemoveStreams(errorStream)

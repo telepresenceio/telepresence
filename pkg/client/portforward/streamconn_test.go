@@ -522,3 +522,22 @@ func Test_PairDeadlineDoesNotPoisonSiblings(t *testing.T) {
 
 	assertSiblingsHealthy(t, pd, longPing)
 }
+
+type failedStreamConnection struct{ httpstream.Connection }
+
+func (failedStreamConnection) CreateStream(http.Header) (httpstream.Stream, error) {
+	return nil, errors.New("injected stream creation failure")
+}
+
+// The stream-creation error is injected because a cluster cannot reliably
+// reject exactly one stream while leaving its sibling streams healthy.
+func Test_FailedDialKeepsSiblingsHealthy(t *testing.T) {
+	pd, short, longPing := sharedConnFixture(t)
+	defer short.Close()
+	streamConn := pd.streamConn
+	pd.streamConn = failedStreamConnection{streamConn}
+	_, err := pd.dial(t.Context(), 2222)
+	pd.streamConn = streamConn
+	require.ErrorContains(t, err, "injected stream creation failure")
+	assertSiblingsHealthy(t, pd, longPing)
+}
