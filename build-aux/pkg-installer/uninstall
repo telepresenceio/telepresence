@@ -4,6 +4,7 @@ sudo /bin/launchctl unload -w /Library/LaunchDaemons/io.telepresence.rootd.plist
 sudo rm -f /usr/local/bin/telepresence
 sudo rm -f /usr/local/bin/telepresence-rootd
 sudo rm -f /Library/LaunchDaemons/io.telepresence.rootd.plist
+sudo rm -f /etc/newsyslog.d/telepresence-rootd.conf
 sudo rm -rf "/Library/Application Support/telepresence"
 sudo rm -rf "/Library/Caches/telepresence"
 echo "Uninstalled."
