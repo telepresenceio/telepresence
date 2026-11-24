@@ -968,9 +968,9 @@
           "description": "Execute command in dry run mode"
         },
         {
-          "name": "ignore-push-failures",
+          "name": "ignore-missing",
           "type": "bool",
-          "description": "Push what it can and ignores images with push failures"
+          "description": "Skip images that are not available locally instead of failing to push them"
         },
         {
           "name": "include-deps",
@@ -1108,6 +1108,11 @@
           "description": "Don't start linked services"
         },
         {
+          "name": "no-recreate",
+          "type": "bool",
+          "description": "If dependent containers already exist, don't recreate them, even if their configuration diverged"
+        },
+        {
           "name": "no-tty",
           "shorthand": "T",
           "type": "bool",
@@ -1226,10 +1231,20 @@
       "description": "Display a live stream of container(s) resource usage statistics",
       "flags": [
         {
+          "name": "aggregate",
+          "type": "bool",
+          "description": "Show one line per project, summing the resource usage of its containers (only 'table' and 'json' formats)"
+        },
+        {
           "name": "all",
           "shorthand": "a",
           "type": "bool",
           "description": "Show all containers (default shows just running)"
+        },
+        {
+          "name": "all-projects",
+          "type": "bool",
+          "description": "Show the containers of all projects instead of the current one, with their project (only 'table' and 'json' formats)"
         },
         {
           "name": "dry-run",
@@ -1436,7 +1451,7 @@
         {
           "name": "wait",
           "type": "bool",
-          "description": "Wait for services to be running|healthy. Implies detached mode."
+          "description": "Wait for services to be running|healthy, streaming their logs unless --detach is set"
         },
         {
           "name": "wait-timeout",
