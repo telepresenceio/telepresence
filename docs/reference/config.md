@@ -472,7 +472,7 @@ grpc:
 
 ## Workstation Per-Cluster Configuration
 
-Configuration that is specific to a cluster connection can also be overriden per-workstation by modifying your `$KUBECONFIG` file.
+Configuration that is specific to a cluster connection can also be overridden per-workstation by modifying your `$KUBECONFIG` file.
 It is recommended that you do not do this, and instead rely on upstream values provided to the Traffic Manager. This ensures
 that all users that connect to the Traffic Manager will behave the same.
 An important exception to this is the [`cluster.defaultManagerNamespace` configuration](#manager) which must be set locally.
