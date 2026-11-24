@@ -1253,9 +1253,17 @@ func (s *session) neverProxyWithLocalDNS(subnets []netip.Prefix) (neverProxy, dn
 	for _, ap := range s.dnsServer.LocalAddresses {
 		dnsServers = append(dnsServers, ap.Addr())
 	}
-	for _, ap := range dns.SystemResolvers(s) {
+	var skipLinks []string
+	if s.tunVif != nil {
+		skipLinks = append(skipLinks, s.tunVif.Device.Name())
+	}
+	for _, ap := range dns.SystemResolvers(s, skipLinks...) {
 		dnsServers = append(dnsServers, ap.Addr())
 	}
+
+	// The cluster DNS address that this daemon configured is never a local DNS server.
+	ownDNS := []netip.Addr{s.vifDNS.Addr(), s.dnsServer.VIFAddress.Addr()}
+	dnsServers = slices.DeleteFunc(dnsServers, func(a netip.Addr) bool { return slices.Contains(ownDNS, a) })
 
 	return appendLocalDNSNeverProxy(s, s.neverProxySubnets, subnets, dnsServers)
 }
