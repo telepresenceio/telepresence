@@ -97,7 +97,8 @@ items:
           it exit. See the authentication reference. When authentication
           is enforced, a 2.34 traffic-agent requires a traffic-manager of
           version 2.34 or later, and refuses session access until the
-          traffic-manager has been upgraded.
+          traffic-manager has been upgraded. With a traffic-manager older
+          than 2.31, it refuses file access and tunnel calls.
         docs: reference/authentication
       - type: security
         title: Callers without a grant are shown less
@@ -137,22 +138,12 @@ items:
           it gets from the traffic-manager before it uses them in file
           names, on all platforms.
       - type: security
-        title: The cluster decides less about the workstation
+        title: The workstation opens less on request
         body: >-
-          The client configuration that the traffic-manager provides can
-          no longer set the program used for mounts, the mount root, or
-          the Docker, image and chart settings. A traffic-agent can make
-          the root daemon dial only the targets of the session's own
-          intercepts. That includes the additional pod ports of an
-          intercept and all workloads of a shared-service intercept. The
-          user daemon acts only on intercepts that it created in the
-          current session. The mount directory, the local ports and the
-          dial targets come from the user's own request, never from the
-          traffic-manager. Other intercepts in a snapshot are listed and
-          can be removed, but nothing is mounted or opened for them. With
-          <code>--port all</code>, or when no local port is given, the
-          traffic-manager still picks the port, on the user's own target
-          host. A mount path from the cluster that is not a clean
+          A traffic-agent can make the root daemon dial only the targets
+          of the session's own intercepts. That includes the additional
+          pod ports of an intercept and all workloads of a shared-service
+          intercept. A mount path from the cluster that is not a clean
           absolute path, or that contains a comma, a colon, a quote, a
           backslash or a control character, is skipped with a warning
           when the intercept runs with <code>--docker-run</code>. The API
@@ -287,13 +278,6 @@ items:
           traffic-agent and logs a warning. An intercept through a named
           port of a Service that is not headless needs no init container,
           and works as before.
-      - type: change
-        title: Intercepts of a crashed user daemon carry no traffic
-        body: >-
-          After a crash of the user daemon, the intercepts of its cached
-          session are listed but carry no traffic. Remove them and create
-          them again. A normal quit, a reconnect and a restart of the
-          traffic-manager are not affected.
       - type: bugfix
         title: The traffic-manager can read ReplicaSets when Deployments are enabled
         body: >-
