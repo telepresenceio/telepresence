@@ -432,9 +432,10 @@ func TestRefreshQuicAgentListenerWithRetry_Unimplemented(t *testing.T) {
 	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 1, fm.callCount())
-	require.True(t, st.fileShareAuth.ready())
-	require.False(t, st.fileShareAuth.enforcing())
-	require.NoError(t, st.fileShareAuth.validatePassword(ctx, "user", "anonymous"))
+	require.False(t, st.fileShareAuth.ready())
+	require.Error(t, st.fileShareAuth.validatePassword(ctx, "user", "anonymous"))
+	_, err := st.fileShareAuth.verifySession(ctx, tunnel.SessionID("session-a"))
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 func TestRefreshQuicAgentListenerWithRetry_CancelledSession(t *testing.T) {

@@ -385,11 +385,15 @@ disabled/permissive agents; only enforcing mode requires it to be upgraded
 first. A new client talking to an old agent gets no benefit from its
 credential — the old agent has no verification code path, so its ports stay
 exactly as open as before — but nothing breaks. Talking through a manager
-that predates session credentials, a new agent never receives credential
-material to verify against. The manager tells it so, and the agent then
-accepts every connection and call unauthenticated. An agent that has not yet
-heard from its manager refuses every FTP login, SFTP connection, `WatchDial`
-and `Tunnel` call until it has: the gRPC calls report `Unavailable`, which a
+that predates session credentials (older than 2.31.0), a new agent never
+receives credential material. The manager answers `Unimplemented`, and the
+agent logs an error that it requires traffic-manager 2.34.0 or later. It
+refuses every FTP login, SFTP connection, `WatchDial` and `Tunnel` call until
+the traffic-manager has been upgraded. A manager that implements the call but
+reports no QUIC CA issues no credentials: the agent then accepts every
+connection and call unauthenticated. An agent that has not yet heard from its
+manager also refuses every FTP login, SFTP connection, `WatchDial` and
+`Tunnel` call until it has: the gRPC calls report `Unavailable`, which a
 client can retry.
 
 The [access levels](#access-levels) add two more cases:
