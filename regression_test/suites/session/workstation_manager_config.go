@@ -7,11 +7,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
 
-// The values that the traffic-manager serves to the client in this suite.
-const (
-	wshardValidSuffix = "wshard-valid.internal"
-	wshardAlsoProxy   = "198.51.100.0/24"
-)
+// wshardValidSuffix is the valid DNS suffix that the traffic-manager serves in this suite.
+const wshardValidSuffix = "wshard-valid.internal"
 
 // wshardInvalidSuffixes holds one valid DNS suffix and several names that are
 // not DNS names but are valid as parts of a file path.
@@ -25,14 +22,12 @@ var wshardInvalidSuffixes = []string{
 	"wshard bad.internal",
 }
 
-// wshardSpec makes the traffic-manager serve the suffixes above and one
-// routing setting.
+// wshardSpec makes the traffic-manager serve the suffixes above.
 //
 //nolint:gochecknoglobals // catalog spec, referenced by both Register and the tests
 var wshardSpec = managers.ClientConfig("wshard-dns", managers.Values{
 	Client: managers.Client{
-		DNS:     managers.ClientDNS{IncludeSuffixes: wshardInvalidSuffixes},
-		Routing: managers.ClientRouting{AlsoProxySubnets: []string{wshardAlsoProxy}},
+		DNS: managers.ClientDNS{IncludeSuffixes: wshardInvalidSuffixes},
 	},
 })
 
