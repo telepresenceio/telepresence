@@ -2,6 +2,7 @@ package connect
 
 import (
 	"context"
+	"net/netip"
 	"runtime"
 	"strings"
 	"time"
@@ -71,6 +72,10 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 	rt.Mutate(t, rt.ManagerFixture(managers.Default))
 
 	mgrNS := managers.ManagerNamespace
+	var oldAddr string
+	if runtime.GOOS == "linux" {
+		oldAddr = s.managerPodAddr(ctx, r, mgrNS)
+	}
 	_, err := r.Kubectl(ctx, mgrNS, "rollout", "restart", "statefulset/"+managerStatefulSet)
 	s.Require().NoError(err, "rollout restart statefulset/%s", managerStatefulSet)
 	_, err = r.Kubectl(ctx, mgrNS, "rollout", "status", "statefulset/"+managerStatefulSet, "--timeout=120s")
@@ -84,16 +89,18 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 	}, rolloutRecoveryTimeout, rolloutPollInterval,
 		"telepresence status should report a healthy connection again after the manager rollout")
 
-	// The daemon's own cluster DNS address is the new manager pod's address. It
-	// must never be taken for a local DNS server, which would give it a host
-	// route through the workstation's default gateway.
+	// The daemon's cluster DNS address moves from the old traffic-manager pod to
+	// the new one. Neither address may get a host route outside the virtual interface.
 	if runtime.GOOS == "linux" {
-		ip, err := r.Kubectl(ctx, mgrNS, "get", "pod", managerStatefulSet+"-0", "-o", "jsonpath={.status.podIP}")
-		s.Require().NoError(err, "get the manager pod's address")
-		ip = strings.TrimSpace(ip)
-		s.Require().NotEmpty(ip)
-		s.Require().Never(func() bool { return len(routesAround(ctx, ip)) > 0 }, 10*time.Second, time.Second,
-			"no host route may exist for the cluster DNS address %s: %v", ip, routesAround(ctx, ip))
+		newAddr := s.managerPodAddr(ctx, r, mgrNS)
+		s.Require().Eventually(func() bool {
+			return rootDNSAddr(ctx, tp) == newAddr
+		}, rolloutRecoveryTimeout, rolloutPollInterval,
+			"the root daemon should use the new manager pod address %s as its DNS address", newAddr)
+		for _, addr := range []string{oldAddr, newAddr} {
+			s.Require().Never(func() bool { return len(routesAround(ctx, addr)) > 0 }, 5*time.Second, 500*time.Millisecond,
+				"no host route may exist for %s: %v", addr, routesAround(ctx, addr))
+		}
 	}
 
 	// Exactly one intercept for wl: neither lost nor duplicated by the
@@ -124,6 +131,35 @@ func statusHealthy(ctx context.Context, tp *cli.TP) bool {
 		return false
 	}
 	return st.UserDaemon.Running && st.TrafficManager.Name != ""
+}
+
+// managerPodAddr returns the address of the traffic-manager pod.
+func (s *ManagerRollout) managerPodAddr(ctx context.Context, r *rt.Runtime, ns string) string {
+	out, err := r.Kubectl(ctx, ns, "get", "pod", managerStatefulSet+"-0", "-o", "jsonpath={.status.podIP}")
+	s.Require().NoError(err, "get the manager pod's address")
+	addr := strings.TrimSpace(out)
+	s.Require().NotEmpty(addr)
+	return addr
+}
+
+// rootDNSAddr returns the address part of the root daemon's DNS address, or
+// an empty string when it cannot be read.
+func rootDNSAddr(ctx context.Context, tp *cli.TP) string {
+	var st struct {
+		RootDaemon struct {
+			DNS struct {
+				VifAddress string `json:"vif_address"`
+			} `json:"dns"`
+		} `json:"root_daemon"`
+	}
+	if err := tp.JSON(ctx, &st, "status", "--format", "json"); err != nil {
+		return ""
+	}
+	ap, err := netip.ParseAddrPort(st.RootDaemon.DNS.VifAddress)
+	if err != nil {
+		return ""
+	}
+	return ap.Addr().String()
 }
 
 // interceptCount returns how many intercepts `list` reports for the
