@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -16,19 +17,16 @@ func ipOutput(ctx context.Context, args ...string) string {
 	return string(out)
 }
 
+// vifName matches the name of a Telepresence virtual interface on Linux.
+//
+//nolint:gochecknoglobals // constant pattern
+var vifName = regexp.MustCompile(`^tel\d+$`)
+
 // routesAround returns the lines of `ip route show table all` whose destination is
-// exactly addr and that do not use the session's virtual interface, ignoring the
+// exactly addr and that do not use a Telepresence virtual interface, ignoring the
 // kernel's "local" and "broadcast" entries. Such a route sends traffic for addr out
 // through the workstation's own network.
-//
-// The interface name is learned from the routes that the root daemon keeps in its
-// own policy tables. When no such route exists, the name is unknown and no route
-// is reported.
 func routesAround(ctx context.Context, addr string) []string {
-	devs := telepresenceDevices(ctx, currentTables(ctx)...)
-	if len(devs) == 0 {
-		return nil
-	}
 	var lines []string
 	for _, family := range []string{"-4", "-6"} {
 		for _, line := range strings.Split(ipOutput(ctx, family, "route", "show", "table", "all"), "\n") {
@@ -41,7 +39,7 @@ func routesAround(ctx context.Context, addr string) []string {
 			}
 			onVif := false
 			for i := 0; i+1 < len(f); i++ {
-				if f[i] == "dev" && devs[f[i+1]] {
+				if f[i] == "dev" && vifName.MatchString(f[i+1]) {
 					onVif = true
 				}
 			}

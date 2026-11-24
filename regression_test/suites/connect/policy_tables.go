@@ -120,22 +120,3 @@ func (b routingBaseline) removeLeftoverRouting(ctx context.Context, tables ...in
 		}
 	}
 }
-
-// telepresenceDevices returns the names of the devices that routes in the
-// given tables use.
-func telepresenceDevices(ctx context.Context, tables ...int) map[string]bool {
-	devs := map[string]bool{}
-	for _, family := range []string{"-4", "-6"} {
-		for _, table := range tables {
-			for _, line := range strings.Split(ipOutput(ctx, family, "route", "show", "table", strconv.Itoa(table)), "\n") {
-				f := strings.Fields(line)
-				for i := 0; i+1 < len(f); i++ {
-					if f[i] == "dev" {
-						devs[f[i+1]] = true
-					}
-				}
-			}
-		}
-	}
-	return devs
-}
