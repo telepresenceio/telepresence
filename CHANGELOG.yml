@@ -98,6 +98,22 @@ items:
           container was not acted on. The command hung, and the container and
           the intercept remained. The command now stops the container,
           removes the intercept and exits.
+      - type: bugfix
+        title: The kubeauth helper of telepresence connect --docker exits when it should
+        body: >-
+          The helper process that <code>telepresence connect --docker</code>
+          starts on the host to resolve Kubernetes credentials is meant to
+          exit when its port file is removed or the kubeconfig changes. It
+          kept running instead, so such processes accumulated. It now exits.
+      - type: bugfix
+        title: The macOS package no longer stops system log rotation
+        body: >-
+          The macOS package installed a log rotation file for the root
+          daemon that <code>newsyslog</code> could not read. As a result,
+          <code>newsyslog</code> stopped at that file and most system logs
+          were no longer rotated. The file now has the correct format.
+          Installing this version repairs an existing installation. The
+          uninstall script now removes the file.
   - version: 2.33.4
     date: 2026-11-22
     notes:
