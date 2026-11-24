@@ -62,3 +62,11 @@ func (c *Cache) Get(
 	c.cred = cred
 	return cred
 }
+
+// Reset drops the cached credential so that the next Get fetches again. It does not
+// clear the record of a manager that lacks the RPC.
+func (c *Cache) Reset() {
+	c.mu.Lock()
+	c.cred = nil
+	c.mu.Unlock()
+}
