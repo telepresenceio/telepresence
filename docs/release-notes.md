@@ -56,10 +56,10 @@ Malformed tunnel messages and a DNS lookup of an empty name are rejected. The QU
 The root daemon checks the DNS domain names that it gets from the traffic-manager before it uses them. On macOS, those names become file names in the resolver directory. Separately, <code>telepresence gather-logs</code> checks the pod names that it gets from the traffic-manager before it uses them in file names, on all platforms.
 </div>
 
-## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The cluster decides less about the workstation</div></div>
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The workstation opens less on request</div></div>
 <div style="margin-left: 15px">
 
-The client configuration that the traffic-manager provides can no longer set the program used for mounts, the mount root, or the Docker, image and chart settings. A traffic-agent can make the root daemon dial only the targets of the session's own intercepts. That includes the additional pod ports of an intercept and all workloads of a shared-service intercept. The user daemon acts only on intercepts that it created in the current session. The mount directory, the local ports and the dial targets come from the user's own request, never from the traffic-manager. Other intercepts in a snapshot are listed and can be removed, but nothing is mounted or opened for them. With <code>--port all</code>, or when no local port is given, the traffic-manager still picks the port, on the user's own target host. A mount path from the cluster that is not a clean absolute path, or that contains a comma, a colon, a quote, a backslash or a control character, is skipped with a warning when the intercept runs with <code>--docker-run</code>. The API port that a traffic-agent's environment names for the local REST API must be 1024 or higher. When the daemon runs directly on the workstation, the ports opened with <code>--local-mount-port</code> and <code>--reroute-local</code> listen on localhost only. In a daemon container (<code>telepresence connect --docker</code>) they listen on the container's network.
+A traffic-agent can make the root daemon dial only the targets of the session's own intercepts. That includes the additional pod ports of an intercept and all workloads of a shared-service intercept. A mount path from the cluster that is not a clean absolute path, or that contains a comma, a colon, a quote, a backslash or a control character, is skipped with a warning when the intercept runs with <code>--docker-run</code>. The API port that a traffic-agent's environment names for the local REST API must be 1024 or higher. When the daemon runs directly on the workstation, the ports opened with <code>--local-mount-port</code> and <code>--reroute-local</code> listen on localhost only. In a daemon container (<code>telepresence connect --docker</code>) they listen on the container's network.
 </div>
 
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemon files and ports are protected from other local users</div></div>
@@ -114,12 +114,6 @@ In node-agent mode, a shared directory is not offered for mounting when a volume
 <div style="margin-left: 15px">
 
 An intercept of a workload that uses host networking is now refused with an error message when the Service port is numeric or the Service is headless. The init container of the traffic-agent would set up packet redirection in the node's network namespace. The traffic-manager checks this before it restarts any pod, and the injector no longer adds the init container to such a pod. It admits the pod without a traffic-agent and logs a warning. An intercept through a named port of a Service that is not headless needs no init container, and works as before.
-</div>
-
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercepts of a crashed user daemon carry no traffic</div></div>
-<div style="margin-left: 15px">
-
-After a crash of the user daemon, the intercepts of its cached session are listed but carry no traffic. Remove them and create them again. A normal quit, a reconnect and a restart of the traffic-manager are not affected.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-manager can read ReplicaSets when Deployments are enabled</div></div>
