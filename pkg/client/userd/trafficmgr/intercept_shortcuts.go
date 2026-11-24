@@ -2,7 +2,6 @@ package trafficmgr
 
 import (
 	"context"
-	"maps"
 	"net/netip"
 
 	"google.golang.org/grpc/codes"
@@ -59,12 +58,8 @@ func shortcutEligible(spec *manager.InterceptSpec, isGlobal bool) bool {
 }
 
 // interceptShortcuts derives the shortcut declarations from the active intercepts of
-// the given snapshot. The target of a shortcut must be one that the local request for the
-// intercept asked for.
+// the given snapshot.
 func (s *session) interceptShortcuts(intercepts []*manager.InterceptInfo, isGlobal bool) []*daemon.InterceptShortcut {
-	s.currentInterceptsLock.Lock()
-	dests := maps.Clone(s.localDestinations)
-	s.currentInterceptsLock.Unlock()
 	shortcuts := make([]*daemon.InterceptShortcut, 0, len(intercepts))
 	for _, ii := range intercepts {
 		if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
@@ -82,11 +77,7 @@ func (s *session) interceptShortcuts(intercepts []*manager.InterceptInfo, isGlob
 		if proto == "" {
 			proto = types.ProtoTCP.String()
 		}
-		pr, err := types.ParseProto(proto)
-		if err != nil || spec.TargetPort <= 0 || spec.TargetPort > 65535 {
-			continue
-		}
-		if _, ok := dests[spec.Name][types.AddrPortProto{AddrPort: netip.AddrPortFrom(addr, uint16(spec.TargetPort)), Proto: pr}]; !ok {
+		if _, err := types.ParseProto(proto); err != nil || spec.TargetPort <= 0 || spec.TargetPort > 65535 {
 			continue
 		}
 		// The target host may be a synthetic IP representing a hostname.

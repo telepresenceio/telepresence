@@ -12,7 +12,6 @@ import (
 func TestHandleInterceptSnapshot_TracksAgentlessIntercepts(t *testing.T) {
 	ic := testIntercept("i1", "echo", "app-space", "Deployment")
 	ic.Spec.Name = "echo"
-	ic.local = true
 	s := newWorkloadSnapshotTestSession(t, map[string]*intercept{"i1": ic})
 	s.Context = client.WithConfig(s.Context, client.GetDefaultConfig())
 

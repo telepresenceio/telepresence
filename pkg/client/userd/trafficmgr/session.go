@@ -178,11 +178,6 @@ type session struct {
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
 
-	// localDestinations holds, per intercept name, the destinations that the local request
-	// asked for. It is the only source of the destinations the root daemon may dial for an
-	// intercept. Guarded by currentInterceptsLock.
-	localDestinations map[string]destinationSet
-
 	// agentless holds the ids of established intercepts whose traffic-agent is gone, so the
 	// loss and the later re-attach are each logged once. Only the session-events loop touches it.
 	agentless map[string]struct{}
@@ -514,7 +509,6 @@ func connectMgr(
 		ingestTracker:      newPodAccessTracker(),
 		workloads:          make(map[string]map[workloadInfoKey]workloadInfo),
 		interceptWaiters:   make(map[string]*awaitIntercept),
-		localDestinations:  make(map[string]destinationSet),
 		isPodDaemon:        cr.IsPodDaemon,
 		subnetViaWorkloads: cr.SubnetViaWorkloads,
 		podRelay:           newPodRelay(),

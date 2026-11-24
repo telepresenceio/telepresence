@@ -75,10 +75,6 @@ type intercept struct {
 	// Mount read-only
 	readOnly bool
 
-	// local is true when this daemon created the intercept in this session. Only such an
-	// intercept gets mounts, listeners, an API server, shortcuts and dial targets.
-	local bool
-
 	// localPorts are the ports that the local request asked to forward to the pod.
 	localPorts []string
 
@@ -123,6 +119,17 @@ type awaitIntercept struct {
 
 	readOnly bool
 	waitCh   chan<- interceptResult
+}
+
+// specLocalPorts returns the local ports of the spec. Older versions use ExtraPorts (TCP only).
+func specLocalPorts(spec *manager.InterceptSpec) []string {
+	ps := slices.Clone(spec.LocalPorts)
+	if len(ps) == 0 {
+		for _, ep := range spec.ExtraPorts {
+			ps = append(ps, strconv.Itoa(int(ep)))
+		}
+	}
+	return ps
 }
 
 func (ic *intercept) podAccess() *podAccess {
@@ -193,8 +200,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 	})
 	// The root daemon must know the targets before any waiter is told that an intercept is
 	// active and before a removal is reported as done.
-	owned := s.ownedIntercepts(intercepts)
-	s.pushInterceptTargets(owned)
+	s.pushInterceptTargets(intercepts)
 	s.setCurrentIntercepts(intercepts)
 	pat.initSnapshot()
 	for id := range s.agentless {
@@ -210,11 +216,6 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		s.currentInterceptsLock.Lock()
 		ic := s.currentIntercepts[ii.Id]
-		if !ic.local {
-			// Nothing is mounted, forwarded or served for an intercept this daemon did not create.
-			s.currentInterceptsLock.Unlock()
-			continue
-		}
 		aw := s.pendingWaiter(ii)
 		if aw != nil {
 			delete(s.interceptWaiters, ii.Spec.Name)
@@ -286,7 +287,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		pat.start(pa)
 	}
 	pat.cancelUnwanted(s, nil)
-	s.pushInterceptShortcuts(owned)
+	s.pushInterceptShortcuts(intercepts)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does
@@ -308,24 +309,6 @@ func (s *session) getCurrentInterceptInfos() []*manager.InterceptInfo {
 		ifs[idx] = ic.InterceptInfo
 	}
 	return ifs
-}
-
-// ownedIntercepts returns the entries that this daemon created in this session: those it
-// already tracks as its own, and new ones that match a pending AddIntercept.
-func (s *session) ownedIntercepts(iis []*manager.InterceptInfo) []*manager.InterceptInfo {
-	s.currentInterceptsLock.Lock()
-	defer s.currentInterceptsLock.Unlock()
-	owned := make([]*manager.InterceptInfo, 0, len(iis))
-	for _, ii := range iis {
-		if ic, ok := s.currentIntercepts[ii.Id]; ok {
-			if ic.local {
-				owned = append(owned, ii)
-			}
-		} else if s.pendingWaiter(ii) != nil {
-			owned = append(owned, ii)
-		}
-	}
-	return owned
 }
 
 // pendingWaiter returns the waiter of a pending AddIntercept that expects ii, or nil. The caller
@@ -353,8 +336,8 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 			ic.ctx, ic.cancel = context.WithCancel(s)
 			clog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
 			ic.ClientMountPoint = ""
+			ic.localPorts = specLocalPorts(ii.Spec)
 			if aw := s.pendingWaiter(ii); aw != nil {
-				ic.local = true
 				ic.localPorts = aw.localPorts
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
@@ -378,7 +361,6 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	for id, ic := range s.currentIntercepts {
 		if _, ok := intercepts[id]; !ok {
 			removed = append(removed, ic)
-			delete(s.localDestinations, ic.Spec.Name)
 		}
 	}
 	s.currentIntercepts = intercepts
@@ -771,10 +753,6 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	}
 
 	spec := ir.Spec
-	// The local side of the additional pod ports is what the request names, except for "all",
-	// where the traffic-manager supplies the pod ports.
-	requestedPodPorts := slices.Clone(spec.PodPorts)
-	allPorts := spec.PortIdentifier == "all"
 	spec.Client = s.clientID
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
@@ -830,10 +808,6 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
 	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel,
-	destPodPorts := requestedPodPorts
-	if allPorts {
-		destPodPorts = spec.PodPorts
-	}
 	// The name is reserved for this call until it returns.
 	s.currentInterceptsLock.Lock()
 	if err := s.reserveInterceptNameLocked(spec.Name); err != nil {
@@ -850,15 +824,10 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		waitCh:         waitCh,
 	}
 	s.interceptWaiters[spec.Name] = aw
-	s.localDestinations[spec.Name] = newDestinationSet(spec.TargetHost, spec.TargetPort, spec.Protocol, destPodPorts)
 	s.currentInterceptsLock.Unlock()
-	success := false
 	defer func() {
 		s.currentInterceptsLock.Lock()
 		cur, reserved := s.interceptWaiters[spec.Name]
-		if !success && (!reserved || cur == aw) {
-			delete(s.localDestinations, spec.Name)
-		}
 		if reserved && cur == aw {
 			delete(s.interceptWaiters, spec.Name)
 			close(waitCh)
@@ -875,6 +844,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 	clog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
+	success := false
 	defer func() {
 		if !success {
 			clog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
@@ -1175,7 +1145,7 @@ func (s *session) reconcileAPIServers() {
 
 	for _, ic := range s.currentIntercepts {
 		ii := ic.InterceptInfo
-		if ic.local && ic.Disposition == manager.InterceptDispositionType_ACTIVE {
+		if ic.Disposition == manager.InterceptDispositionType_ACTIVE {
 			if port := agentAPIPort(ii); port > 0 {
 				wantedPorts[port] = struct{}{}
 				wantedMatchers[ic.Id] = ii
