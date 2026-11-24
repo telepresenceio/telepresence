@@ -29,6 +29,7 @@ var exemptions = []exemption{
 	{"ReportMetrics", "agent-only: called only from cmd/traffic/cmd/agent (server.go, fwd/http.go, fwd/tcp.go, fwdstate.go); no client caller"},
 	{"WatchLogLevel", "agent-only: called only from cmd/traffic/cmd/agent/client.go to receive log-level pushes; no client caller"},
 	{"GetQuicAgentCert", "agent-only: called only from cmd/traffic/cmd/agent/quic.go; no client caller"},
+	{"AuthorizeSessionAccess", "agent-only: called only from cmd/traffic/cmd/agent/session_access.go; no client caller"},
 	{"ReconnectAgent", "agent-only: called only from cmd/traffic/cmd/agent/client.go; the client-side equivalent is ReconnectClient"},
 	{"ArriveAsAgent", "agent-only: called only from cmd/traffic/cmd/agent/client.go; the client-side equivalent is ArriveAsClient"},
 
