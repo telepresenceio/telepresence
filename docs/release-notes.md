@@ -11,7 +11,7 @@ The <code>tel2</code>, <code>telepresence</code> and <code>route-controller</cod
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Port-forward connections recover after the first stream fails</div></div>
 <div style="margin-left: 15px">
 
-A failed first stream left an unused port-forward connection in the cache, so later attempts repeatedly reused a closed transport. The failed dial now closes and evicts the connection when no other users remain, so the next attempt opens a fresh transport.
+A failed first stream left an unused port-forward connection in the cache, so later attempts repeatedly reused a closed transport. The failed dial now closes and evicts the connection when no other users remain, so the next attempt opens a fresh transport. Connection retirement also prevents concurrent dials and repeated closes from interrupting other connections.
 </div>
 
 ## Version 2.34.0 <span style="font-size: 16px;">(November 25)</span>

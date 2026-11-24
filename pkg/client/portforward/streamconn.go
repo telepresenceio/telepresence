@@ -25,10 +25,12 @@ import (
 
 const ProtocolV1Name = "portforward.k8s.io"
 
+var errPodDialerRetired = errors.New("pod dialer is retired")
+
 type podDialer struct {
 	streamConn httpstream.Connection
 	requestID  int64
-	refCount   int64
+	refCount   int64 // -1 means retired; new references cannot acquire it.
 	onClose    func()
 }
 
@@ -70,14 +72,23 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 		// is detected by connection death, not UID pinning.
 		key = types.UID(pa.Name + "." + pa.Namespace)
 	}
-	pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
-		pc, err = newPodDialer(logCtx, key, cfg, pa.Name, pa.Namespace)
-		return pc, err != nil
-	})
-	if err != nil {
-		return nil, err
+	for {
+		if err := grpcCtx.Err(); err != nil {
+			return nil, err
+		}
+		pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
+			pc, err = newPodDialer(logCtx, key, cfg, pa.Name, pa.Namespace)
+			return pc, err != nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		conn, err := pc.dial(grpcCtx, pa.Port)
+		if !errors.Is(err, errPodDialerRetired) {
+			return conn, err
+		}
+		pc.onClose()
 	}
-	return pc.dial(grpcCtx, pa.Port)
 }
 
 func newPodDialer(ctx context.Context, key types.UID, cfg *config, name, namespace string) (*podDialer, error) {
@@ -92,9 +103,16 @@ func newPodDialer(ctx context.Context, key types.UID, cfg *config, name, namespa
 	if protocol != ProtocolV1Name {
 		return nil, fmt.Errorf("unable to negotiate protocol: client supports %q, server returned %q", ProtocolV1Name, protocol)
 	}
-	return &podDialer{streamConn: streamConn, onClose: func() {
-		cfg.podDialers.Delete(key)
-	}}, nil
+	pc := &podDialer{streamConn: streamConn}
+	pc.onClose = func() {
+		cfg.podDialers.Compute(key, func(current *podDialer, loaded bool) (*podDialer, xsync.ComputeOp) {
+			if loaded && current == pc {
+				return nil, xsync.DeleteOp
+			}
+			return current, xsync.CancelOp
+		})
+	}
+	return pc, nil
 }
 
 func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespace string, forceSPDY bool) (httpstream.Dialer, error) {
@@ -136,13 +154,19 @@ func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespac
 }
 
 func (pc *podDialer) dial(ctx context.Context, remotePort uint16) (conn net.Conn, err error) {
-	atomic.AddInt64(&pc.refCount, 1)
+	for {
+		refs := atomic.LoadInt64(&pc.refCount)
+		if refs < 0 {
+			return nil, errPodDialerRetired
+		}
+		if atomic.CompareAndSwapInt64(&pc.refCount, refs, refs+1) {
+			break
+		}
+	}
 	var dataStream, errorStream httpstream.Stream
 	defer func() {
 		if err != nil {
-			if atomic.AddInt64(&pc.refCount, -1) == 0 {
-				_ = pc.Close()
-			}
+			_ = pc.release()
 			if errorStream != nil {
 				errorStream.Close()
 				pc.streamConn.RemoveStreams(errorStream)
@@ -186,6 +210,13 @@ func (pc *podDialer) dial(ctx context.Context, remotePort uint16) (conn net.Conn
 	}, nil
 }
 
+func (pc *podDialer) release() error {
+	if atomic.AddInt64(&pc.refCount, -1) == 0 && atomic.CompareAndSwapInt64(&pc.refCount, 0, -1) {
+		return pc.Close()
+	}
+	return nil
+}
+
 func (pc *podDialer) Close() error {
 	// Must close before calling onClose, because the close
 	// will release a channel that in some situations will
@@ -202,6 +233,7 @@ type portConn struct {
 	dialer      *podDialer
 	dataStream  httpstream.Stream
 	errorStream httpstream.Stream
+	closed      atomic.Bool
 }
 
 func (pc *portConn) Read(b []byte) (n int, err error) {
@@ -233,6 +265,9 @@ func (pc *portConn) RemoteAddr() net.Addr {
 }
 
 func (pc *portConn) Close() error {
+	if !pc.closed.CompareAndSwap(false, true) {
+		return nil
+	}
 	// Close sends a FIN on each stream. The Reset that follows unblocks local
 	// reads pending on the streams (the net.Conn contract for Close) and
 	// drops the streams from the spdystream connection's stream map; after
@@ -242,10 +277,7 @@ func (pc *portConn) Close() error {
 	_ = pc.dataStream.Reset()
 	_ = pc.errorStream.Reset()
 	pc.dialer.streamConn.RemoveStreams(pc.dataStream, pc.errorStream)
-	if atomic.AddInt64(&pc.dialer.refCount, -1) == 0 {
-		return pc.dialer.Close()
-	}
-	return nil
+	return pc.dialer.release()
 }
 
 // Deadlines are accepted and ignored. The spdystream layer has no per-stream

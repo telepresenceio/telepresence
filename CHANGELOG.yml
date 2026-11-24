@@ -42,6 +42,8 @@ items:
           cache, so later attempts repeatedly reused a closed transport.
           The failed dial now closes and evicts the connection when no other
           users remain, so the next attempt opens a fresh transport.
+          Connection retirement also prevents concurrent dials and repeated
+          closes from interrupting other connections.
   - version: 2.34.0
     date: 2026-11-25
     notes:
