@@ -121,9 +121,18 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 		return err
 	}
 
+	// Either watcher returning means the daemon must stop, even without an error.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	g := log.NewGroup(ctx)
-	g.Go("portfile-alive", as.keepPortFileAlive)
-	g.Go("portfile-watcher", as.watchFiles)
+	g.Go("portfile-alive", func(ctx context.Context) error {
+		defer cancel()
+		return as.keepPortFileAlive(ctx)
+	})
+	g.Go("portfile-watcher", func(ctx context.Context) error {
+		defer cancel()
+		return as.watchFiles(ctx)
+	})
 	g.Go("grpc-server", func(ctx context.Context) error {
 		svc := server.NewWithAuth(ctx, server.TokenInterceptors(token))
 		authGrpc.RegisterAuthenticatorServer(svc, as)

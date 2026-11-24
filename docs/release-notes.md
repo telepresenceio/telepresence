@@ -50,6 +50,18 @@ After a traffic-manager restart, the client asks the new traffic-manager to rest
 An interrupt that arrived while a command such as <code>telepresence intercept --docker-run</code> was starting its container was not acted on. The command hung, and the container and the intercept remained. The command now stops the container, removes the intercept and exits.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The kubeauth helper of telepresence connect --docker exits when it should</div></div>
+<div style="margin-left: 15px">
+
+The helper process that <code>telepresence connect --docker</code> starts on the host to resolve Kubernetes credentials is meant to exit when its port file is removed or the kubeconfig changes. It kept running instead, so such processes accumulated. It now exits.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The macOS package no longer stops system log rotation</div></div>
+<div style="margin-left: 15px">
+
+The macOS package installed a log rotation file for the root daemon that <code>newsyslog</code> could not read. As a result, <code>newsyslog</code> stopped at that file and most system logs were no longer rotated. The file now has the correct format. Installing this version repairs an existing installation. The uninstall script now removes the file.
+</div>
+
 ## Version 2.33.4 <span style="font-size: 16px;">(November 22)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Only a traffic-agent can register an agent session with the traffic-manager](reference/authentication)</div></div>
 <div style="margin-left: 15px">
