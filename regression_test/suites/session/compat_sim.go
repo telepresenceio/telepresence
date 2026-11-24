@@ -38,7 +38,8 @@ const compatSimVersion = "2.21.0"
 // WatchIntercepts (agents.go, intercept.go), and the agent-pod watcher
 // falls back from WatchAgentPodsInNamespacesDelta through
 // WatchAgentPodsDelta to the full-snapshot WatchAgentPods
-// (agentpf/watch.go).
+// (agentpf/watch.go). The emulation does not reach the RPCs that
+// traffic-agents call, so the current traffic-agent serves normally.
 type CompatSim struct {
 	rt.Suite
 }

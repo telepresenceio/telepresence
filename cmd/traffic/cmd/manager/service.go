@@ -163,7 +163,16 @@ func (l *sessionLocks) lock(id tunnel.SessionID) func() {
 // checkCompat checks if a CompatibilityVersion has been set for this traffic-manager, and if so, errors with
 // an Unimplemented error mentioning the given name if it is less than the required version.
 func checkCompat(ctx context.Context, name, requiredVersion string) error {
-	if cv := managerutil.GetEnv(ctx).CompatibilityVersion; cv != nil && cv.Compare(semver.MustParse(requiredVersion)) < 0 {
+	return checkCompatVersion(managerutil.GetEnv(ctx).CompatibilityVersion, name, requiredVersion)
+}
+
+// checkAgentCompat is checkCompat for the RPCs that traffic-agents call. It reads CompatibilityAgentVersion.
+func checkAgentCompat(ctx context.Context, name, requiredVersion string) error {
+	return checkCompatVersion(managerutil.GetEnv(ctx).CompatibilityAgentVersion, name, requiredVersion)
+}
+
+func checkCompatVersion(cv *semver.Version, name, requiredVersion string) error {
+	if cv != nil && cv.Compare(semver.MustParse(requiredVersion)) < 0 {
 		return status.Error(codes.Unimplemented, fmt.Sprintf("traffic manager of version %s does not implement %s", cv, name))
 	}
 	return nil
@@ -1984,7 +1993,7 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 // it. The workload comes from the agent session; the request supplies only the
 // client session ID. FILES requires "create" or "get" on the attachment.
 func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeSessionAccessRequest) (*rpc.AuthorizeSessionAccessResponse, error) {
-	if err := checkCompat(ctx, "AuthorizeSessionAccess", "2.34.0"); err != nil {
+	if err := checkAgentCompat(ctx, "AuthorizeSessionAccess", "2.34.0"); err != nil {
 		return nil, err
 	}
 	agentSessionID := tunnel.SessionID(rq.GetSession().GetSessionId())
@@ -2036,7 +2045,7 @@ func (s *service) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeS
 // and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
 // session's SessionInfo, whether or not the QUIC CA is enabled.
 func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
-	if err := checkCompat(ctx, "GetQuicAgentCert", "2.31.0"); err != nil {
+	if err := checkAgentCompat(ctx, "GetQuicAgentCert", "2.31.0"); err != nil {
 		return nil, err
 	}
 	_, agent, err := s.ensureAgentSession(ctx, session)
