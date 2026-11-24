@@ -52,7 +52,9 @@ func (s *RolloutPacing) Test_AgentUpdateHonorsMaxUnavailable() {
 	tpl.MinAvailable = 2
 	tpl.Annotations = map[string]string{annotation.InjectTrafficAgent: "enabled"}
 	// The Service patch below leaves the manifest changed, so the fixture
-	// must not be memoized past this test.
+	// must not be memoized past this test, and a Service left by a previous
+	// run must not be merged with this one.
+	_, _ = r.Kubectl(ctx, ns, "delete", "service", tpl.SvcName, "--ignore-not-found", "--wait")
 	wl := freshWorkload(t, ctx, r, ns, tpl)
 
 	var before []corev1.Pod
