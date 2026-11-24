@@ -2,7 +2,6 @@ package connect
 
 import (
 	"context"
-	"net/netip"
 	"runtime"
 	"strings"
 	"time"
@@ -28,6 +27,7 @@ const rolloutAgentContainer = "traffic-agent"
 const (
 	rolloutRecoveryTimeout = 2 * time.Minute
 	rolloutPollInterval    = 3 * time.Second
+	rolloutRouteWatch      = 20 * time.Second
 )
 
 // ManagerRollout proves that a connected session with an active intercept
@@ -89,20 +89,6 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 	}, rolloutRecoveryTimeout, rolloutPollInterval,
 		"telepresence status should report a healthy connection again after the manager rollout")
 
-	// The daemon's cluster DNS address moves from the old traffic-manager pod to
-	// the new one. Neither address may get a host route outside the virtual interface.
-	if runtime.GOOS == "linux" {
-		newAddr := s.managerPodAddr(ctx, r, mgrNS)
-		s.Require().Eventually(func() bool {
-			return rootDNSAddr(ctx, tp) == newAddr
-		}, rolloutRecoveryTimeout, rolloutPollInterval,
-			"the root daemon should use the new manager pod address %s as its DNS address", newAddr)
-		for _, addr := range []string{oldAddr, newAddr} {
-			s.Require().Never(func() bool { return len(routesAround(ctx, addr)) > 0 }, 5*time.Second, 500*time.Millisecond,
-				"no host route may exist for %s: %v", addr, routesAround(ctx, addr))
-		}
-	}
-
 	// Exactly one intercept for wl: neither lost nor duplicated by the
 	// fresh manager's restore review.
 	s.Require().Eventually(func() bool {
@@ -121,6 +107,19 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 		return cerr == nil && n == 1
 	}, rolloutRecoveryTimeout, rolloutPollInterval,
 		"pod for %s should carry exactly one traffic-agent container after the rollout", wl.Name)
+
+	// The root daemon keeps the old traffic-manager pod's address as its
+	// cluster DNS address. When it learns about the new pod, neither address
+	// may get a host route outside the virtual interface. The root daemon
+	// reconnects on its own schedule, so the check watches for rolloutRouteWatch.
+	if runtime.GOOS == "linux" {
+		newAddr := s.managerPodAddr(ctx, r, mgrNS)
+		s.Require().Never(func() bool {
+			return len(routesAround(ctx, oldAddr)) > 0 || len(routesAround(ctx, newAddr)) > 0
+		}, rolloutRouteWatch, time.Second,
+			"no host route may exist for the old manager address %s (%v) or the new one %s (%v)",
+			oldAddr, routesAround(ctx, oldAddr), newAddr, routesAround(ctx, newAddr))
+	}
 }
 
 // statusHealthy reports whether `telepresence status` shows a running user
@@ -140,26 +139,6 @@ func (s *ManagerRollout) managerPodAddr(ctx context.Context, r *rt.Runtime, ns s
 	addr := strings.TrimSpace(out)
 	s.Require().NotEmpty(addr)
 	return addr
-}
-
-// rootDNSAddr returns the address part of the root daemon's DNS address, or
-// an empty string when it cannot be read.
-func rootDNSAddr(ctx context.Context, tp *cli.TP) string {
-	var st struct {
-		RootDaemon struct {
-			DNS struct {
-				VifAddress string `json:"vif_address"`
-			} `json:"dns"`
-		} `json:"root_daemon"`
-	}
-	if err := tp.JSON(ctx, &st, "status", "--format", "json"); err != nil {
-		return ""
-	}
-	ap, err := netip.ParseAddrPort(st.RootDaemon.DNS.VifAddress)
-	if err != nil {
-		return ""
-	}
-	return ap.Addr().String()
 }
 
 // interceptCount returns how many intercepts `list` reports for the
