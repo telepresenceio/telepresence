@@ -273,6 +273,9 @@ type Compatibility struct {
 	// Version makes the manager behave like this older version, returning
 	// Unimplemented for RPCs introduced after it.
 	Version string `json:"version,omitempty"`
+
+	// AgentVersion does the same for the RPCs that traffic-agents call.
+	AgentVersion string `json:"agentVersion,omitempty"`
 }
 
 // TelepresenceAPI is the chart's telepresenceAPI.* shape, restricted to the
@@ -432,6 +435,9 @@ func Merge(base, over Values) Values {
 	m.ExternalEndpoint = mergeExternalEndpoint(m.ExternalEndpoint, over.ExternalEndpoint)
 	if over.Compatibility.Version != "" {
 		m.Compatibility.Version = over.Compatibility.Version
+	}
+	if over.Compatibility.AgentVersion != "" {
+		m.Compatibility.AgentVersion = over.Compatibility.AgentVersion
 	}
 	if over.TelepresenceAPI.Port != 0 {
 		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port

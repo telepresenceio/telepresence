@@ -349,7 +349,8 @@ type ClientRbac struct {
 
 // Compatibility makes the traffic-manager emulate an older version, for testing.
 type Compatibility struct {
-	Version *string `json:"version,omitzero"`
+	Version      *string `json:"version,omitzero"`
+	AgentVersion *string `json:"agentVersion,omitzero"`
 }
 
 // ExternalEndpoint configures the opt-in external TLS gRPC listener.

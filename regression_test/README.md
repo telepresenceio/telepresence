@@ -180,7 +180,7 @@ for now.
   `InjectorDisabled()`, `InjectPolicy(p)`, `CertRegen(m)`,
   `StaticNamespaces(ns...)`, `QuicNodePort()`, `AuthEnforcing()`,
   `UsageTo(addr)`, `AgentArrivalTimeout(d)`, `ClientConfig(key, values)`,
-  `Compat(version)`).
+  `Compat(version)`, `CompatAgents(version)`).
   Every spec is Baseline + overlay; Baseline pins debug logging, the image
   coordinates, test RBAC, and `usage.enabled=false`. Usage statistics are
   off by default on both sides; the only test that enables them points the

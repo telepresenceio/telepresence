@@ -112,6 +112,15 @@ func TestEnvconfig(t *testing.T) {
 				e.CompatibilityVersion = &v
 			},
 		},
+		"agentVersion": {
+			Input: map[string]string{
+				"COMPATIBILITY_AGENT_VERSION": `2.30.1`,
+			},
+			Output: func(e *managerutil.Env) {
+				v := semver.MustParse("2.30.1")
+				e.CompatibilityAgentVersion = &v
+			},
+		},
 		"mountPolicies": {
 			Input: map[string]string{
 				"AGENT_MOUNT_POLICIES": `{"/home/bob":"remote","/home/alice":"local"}`,
