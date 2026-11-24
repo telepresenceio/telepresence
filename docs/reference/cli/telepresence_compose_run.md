@@ -38,6 +38,7 @@ Run a one-off command on a service
   -l, --label stringArray           Add or override a label
       --name string                 Assign a name to the container
       --no-deps                     Don't start linked services
+      --no-recreate                 If dependent containers already exist, don't recreate them, even if their configuration diverged
   -T, --no-tty                      Disable pseudo-TTY allocation (default: auto-detected) (default true)
   -p, --publish stringArray         Publish a container's port(s) to the host
       --pull string                 Pull image before running (&quot;always&quot;|&quot;missing&quot;|&quot;never&quot;) (default &quot;policy&quot;)
