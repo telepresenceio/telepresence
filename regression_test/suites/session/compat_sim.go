@@ -26,6 +26,16 @@ import (
 // and WatchWorkloads (2.21.0-alpha.4) working normally.
 const compatSimVersion = "2.21.0"
 
+// compatSimSpec combines managers.Compat(compatSimVersion) with permissive
+// authentication. A manager that old issues no session credential, and only
+// a permissive traffic-agent serves a client that has none.
+//
+//nolint:gochecknoglobals // catalog spec, registered once at init time
+var compatSimSpec = managers.Spec{
+	Key:    "compat-permissive/" + compatSimVersion,
+	Values: managers.Merge(managers.AuthPermissive().Values, managers.Compat(compatSimVersion).Values),
+}
+
 // CompatSim proves the client's Unimplemented fallback chains work end to
 // end against a manager that predates every RPC checkCompat's widening
 // added, without needing an actual old traffic-manager image:
@@ -45,7 +55,7 @@ type CompatSim struct {
 }
 
 func init() {
-	rt.Register(&CompatSim{}, rt.InArea("session"), rt.NeedsManager(managers.Compat(compatSimVersion)))
+	rt.Register(&CompatSim{}, rt.InArea("session"), rt.NeedsManager(compatSimSpec))
 }
 
 // Test_ListAndIntercept connects against the emulated-old manager, confirms
