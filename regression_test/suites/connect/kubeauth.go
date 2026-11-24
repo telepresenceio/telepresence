@@ -2,17 +2,22 @@ package connect
 
 import (
 	"bufio"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
@@ -208,4 +213,85 @@ func (s *KubeAuth) Test_ExecCredentialDockerConnect() {
 		t.Skip("skipping: requires capability \"docker\"")
 	}
 	s.connectAndScanForExecCredentials("kubeauth.log", dockerCredentialLine, "--docker")
+}
+
+// findKubeAuthPortFile returns the path and port of the kubeauth port file in
+// cacheDir that records kubeconfig. The file also holds the daemon's token, so
+// only the port and kubeconfig fields are decoded.
+func findKubeAuthPortFile(cacheDir, kubeconfig string) (string, int, error) {
+	notFound := fmt.Errorf("no kubeauth port file in %s for kubeconfig %s", cacheDir, kubeconfig)
+	matches, err := filepath.Glob(filepath.Join(cacheDir, client.KubeAuthDaemonName+"*.port"))
+	if err != nil {
+		return "", 0, notFound
+	}
+	for _, m := range matches {
+		data, err := os.ReadFile(m)
+		if err != nil {
+			continue
+		}
+		var pf struct {
+			Port       int    `json:"port"`
+			Kubeconfig string `json:"kubeconfig"`
+		}
+		if json.Unmarshal(data, &pf) != nil {
+			continue
+		}
+		if pf.Kubeconfig == kubeconfig && pf.Port != 0 {
+			return m, pf.Port, nil
+		}
+	}
+	return "", 0, notFound
+}
+
+// Test_DockerKubeAuthDaemonExitsWhenPortFileRemoved connects with --docker
+// so that a kubeauth daemon runs on the host, removes its port file while
+// connected, and asserts that the daemon stops listening. The connection is
+// private to this test (raw connect under its own KUBECONFIG, quit -s in
+// cleanup), so losing the daemon does not affect other tests.
+func (s *KubeAuth) Test_DockerKubeAuthDaemonExitsWhenPortFileRemoved() {
+	t := s.T()
+	if runtime.GOOS != "linux" {
+		t.Skipf("skipping: requires GOOS in linux, running on %s", runtime.GOOS)
+	}
+	if exec.Command("docker", "info").Run() != nil {
+		t.Skip("skipping: requires capability \"docker\"")
+	}
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+
+	bin, err := buildKubeAuthCredsBinary(r.ArtifactDir("bin"))
+	s.Require().NoError(err)
+	path, err := buildExecKubeconfig(rt.Env{Ctx: ctx, T: t, R: r}, bin)
+	s.Require().NoError(err)
+
+	freeDefaultConnection(t, ns)
+	t.Cleanup(func() {
+		if _, _, err := r.CLI().Run(ctx, "quit", "-s"); err != nil {
+			r.Infof("[rtest] KubeAuth: quit -s: %v", err)
+		}
+		r.ForgetConnections()
+	})
+	_, stderr, err := r.CLIWithEnv(map[string]string{"KUBECONFIG": path}).Run(ctx,
+		"connect", "--docker", "--namespace", ns, "--manager-namespace", managers.ManagerNamespace, "--as", connectAs)
+	s.Require().NoError(err, "connect: %s", stderr)
+
+	portFile, port, err := findKubeAuthPortFile(r.UserCacheDir(), path)
+	s.Require().NoError(err)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+
+	accepts := func() bool {
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	}
+	s.Require().True(accepts(), "kubeauth daemon does not accept connections on %s", addr)
+
+	s.Require().NoError(os.Remove(portFile))
+
+	s.Require().Eventually(func() bool { return !accepts() }, 15*time.Second, 250*time.Millisecond,
+		"kubeauth daemon still accepts connections on %s after its port file was removed", addr)
 }

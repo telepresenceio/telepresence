@@ -154,7 +154,7 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("manager/%s: marshaling values: %w", spec.Key, err)
 	}
-	fileKey := strings.ReplaceAll(spec.Key, "/", "-")
+	fileKey := strings.NewReplacer("/", "-", ":", "-").Replace(spec.Key)
 	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-"+fileKey+".yaml")
 	if err := os.WriteFile(valuesPath, valuesYAML, 0o644); err != nil {
 		return nil, fmt.Errorf("manager/%s: writing values: %w", spec.Key, err)

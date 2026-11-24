@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
@@ -249,4 +250,48 @@ func (s *RunLifecycleDocker) Test_Teardown() {
 		s.reconnect(ctx, ns)
 		s.awaitGone(wl)
 	})
+}
+
+// handlerContainerPresent reports whether the handler container exists in any state.
+func (s *RunLifecycleDocker) handlerContainerPresent() bool {
+	out, err := dockerOutput(s.Ctx(), "ps", "-a", "-q", "--filter", "name=^"+runLifecycleDockerContainerName+"$")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// Test_EarlyInterrupt sends SIGINT the moment the handler container exists, which
+// is while the CLI is still starting it. The CLI must still stop the container and
+// remove the intercept, and must exit.
+func (s *RunLifecycleDocker) Test_EarlyInterrupt() {
+	wl := s.Workload(workloads.Echo("run-lifecycle-docker"))
+	name := runLifecycleDockerConnName
+
+	for i := range 5 {
+		s.Run(fmt.Sprintf("round-%d", i), func() {
+			t := s.T()
+			ctx := s.Ctx()
+			conn := s.connect()
+			t.Cleanup(func() {
+				_, _, _ = s.CLI().Run(ctx, "detach", wl.Name, "-n", wl.Namespace, "--use", name)
+			})
+			p := s.startHandler(wl)
+
+			deadline := time.Now().Add(dockerRunAttachTimeout)
+			for !s.handlerContainerPresent() {
+				if time.Now().After(deadline) {
+					_, _, _ = p.Wait(time.Second)
+					t.Fatal("the handler container was never created")
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			s.Require().NoError(p.Signal(os.Interrupt))
+
+			_, stderr, err := p.Wait(runLifecycleTeardownTimeout)
+			s.Require().False(err != nil && strings.Contains(err.Error(), "did not exit within"),
+				"the CLI did not exit after SIGINT: %v\nstderr:\n%s", err, stderr)
+			s.Eventually(func() bool { return !s.handlerContainerPresent() },
+				runLifecycleTeardownTimeout, 100*time.Millisecond, "the handler container was left behind")
+			s.Eventually(func() bool { return !attached(conn.List(t), wl.Name, wl.Namespace) },
+				dockerRunAttachTimeout, attachPollInterval, "the intercept was left behind")
+		})
+	}
 }

@@ -21,17 +21,20 @@ import (
 // addresses from that source rather than an error, since failing to discover a
 // resolver here only means the caller falls back to the explicitly configured
 // addresses.
-func SystemResolvers(ctx context.Context) []netip.AddrPort {
+//
+// Servers listed for the links named in skipLinks are ignored. The caller passes
+// its own virtual interface, whose DNS server it configured itself.
+func SystemResolvers(ctx context.Context, skipLinks ...string) []netip.AddrPort {
 	aps, err := nameserversFromResolvConf(ctx)
 	if err != nil {
 		clog.Debugf(ctx, "unable to read /etc/resolv.conf when detecting local DNS servers: %v", err)
 	}
-	aps = append(aps, resolveCtlResolvers(ctx)...)
+	aps = append(aps, resolveCtlResolvers(ctx, skipLinks)...)
 	slices.SortFunc(aps, compareAddrPort)
 	return slices.Compact(aps)
 }
 
-func resolveCtlResolvers(ctx context.Context) []netip.AddrPort {
+func resolveCtlResolvers(ctx context.Context, skipLinks []string) []netip.AddrPort {
 	// Bound the exec so a wedged resolvectl/systemd-resolved cannot stall the
 	// reconcile (and therefore connect). DNS discovery is best-effort; on
 	// timeout we simply fall back to the explicitly configured addresses.
@@ -42,7 +45,7 @@ func resolveCtlResolvers(ctx context.Context) []netip.AddrPort {
 		clog.Debugf(ctx, "unable to discover DNS servers using resolvectl dns: %v", err)
 		return nil
 	}
-	return parseResolveCtlDNS(out)
+	return parseResolveCtlDNS(out, skipLinks...)
 }
 
 // parseResolveCtlDNS extracts the DNS server addresses from the output of
@@ -50,10 +53,14 @@ func resolveCtlResolvers(ctx context.Context) []netip.AddrPort {
 // ADDRESS[:PORT][%IFACE][#SERVERNAME] (with IPv6 bracketed when a port is
 // present), framed by "Global:" and "Link N (iface):" labels. The interface and
 // server-name decorations are stripped and the remainder is parsed as an
-// address with optional port, defaulting to port 53.
-func parseResolveCtlDNS(out []byte) []netip.AddrPort {
+// address with optional port, defaulting to port 53. Lines labelled with one of
+// the skipLinks interface names are ignored.
+func parseResolveCtlDNS(out []byte, skipLinks ...string) []netip.AddrPort {
 	var aps []netip.AddrPort
 	for _, line := range bytes.Split(out, []byte{'\n'}) {
+		if slices.Contains(skipLinks, linkName(string(line))) {
+			continue
+		}
 		for _, field := range strings.Fields(string(line)) {
 			if ap, ok := parseResolveCtlServer(field); ok {
 				aps = append(aps, ap)
@@ -62,6 +69,21 @@ func parseResolveCtlDNS(out []byte) []netip.AddrPort {
 	}
 	slices.SortFunc(aps, compareAddrPort)
 	return slices.Compact(aps)
+}
+
+// linkName returns the interface name of a "Link N (iface): ..." line, or "" for
+// any other line.
+func linkName(line string) string {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "Link ") {
+		return ""
+	}
+	open := strings.IndexByte(line, '(')
+	end := strings.Index(line, "):")
+	if open < 0 || end < open {
+		return ""
+	}
+	return line[open+1 : end]
 }
 
 func parseResolveCtlServer(field string) (netip.AddrPort, bool) {

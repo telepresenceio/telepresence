@@ -43,6 +43,22 @@ func CertRegen(accessMethod string) Spec {
 	}
 }
 
+// AgentImage returns a manager spec that injects traffic-agents from the
+// given image (agent.image.registry, name and tag) instead of the build's
+// own, always with pullPolicy IfNotPresent so that a released image is
+// pulled even when the run's registry is local (pullPolicy Never).
+func AgentImage(registry, name, tag string) Spec {
+	return Spec{
+		Key: "agent-image/" + registry + "/" + name + ":" + tag,
+		Values: Values{Agent: AgentValues{Image: Image{
+			Registry:   registry,
+			Name:       name,
+			Tag:        tag,
+			PullPolicy: "IfNotPresent",
+		}}},
+	}
+}
+
 // AgentArrivalTimeout returns a manager spec that sets timeouts.agentArrival
 // to d (a Go duration string such as "5s"). The Key is parameterized so
 // specs with different timeouts hash differently.

@@ -198,7 +198,7 @@ intercepted
 ## Intercepting without a service
 
 You can intercept a workload without a service by adding an annotation that informs Telepresence what container
-ports that are eligable for intercepts. Telepresence will then inject a traffic-agent when the workload is
+ports that are eligible for intercepts. Telepresence will then inject a traffic-agent when the workload is
 deployed, and you will be able to intercept the given ports as if they were service ports. The annotation is:
 
 ```yaml

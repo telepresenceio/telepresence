@@ -2,6 +2,7 @@ package connect
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ const rolloutAgentContainer = "traffic-agent"
 const (
 	rolloutRecoveryTimeout = 2 * time.Minute
 	rolloutPollInterval    = 3 * time.Second
+	rolloutRouteWatch      = 20 * time.Second
 )
 
 // ManagerRollout proves that a connected session with an active intercept
@@ -70,6 +72,10 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 	rt.Mutate(t, rt.ManagerFixture(managers.Default))
 
 	mgrNS := managers.ManagerNamespace
+	var oldAddr string
+	if runtime.GOOS == "linux" {
+		oldAddr = s.managerPodAddr(ctx, r, mgrNS)
+	}
 	_, err := r.Kubectl(ctx, mgrNS, "rollout", "restart", "statefulset/"+managerStatefulSet)
 	s.Require().NoError(err, "rollout restart statefulset/%s", managerStatefulSet)
 	_, err = r.Kubectl(ctx, mgrNS, "rollout", "status", "statefulset/"+managerStatefulSet, "--timeout=120s")
@@ -101,6 +107,20 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 		return cerr == nil && n == 1
 	}, rolloutRecoveryTimeout, rolloutPollInterval,
 		"pod for %s should carry exactly one traffic-agent container after the rollout", wl.Name)
+
+	// The root daemon keeps the old traffic-manager pod's address as its
+	// cluster DNS address. When it learns about the new pod, neither address
+	// may get a host route outside the virtual interface. The root daemon
+	// reconnects on its own schedule, so the check watches for rolloutRouteWatch.
+	if runtime.GOOS == "linux" {
+		newAddr := s.managerPodAddr(ctx, r, mgrNS)
+		var found []string
+		clean := s.Never(func() bool {
+			found = append(routesAround(ctx, oldAddr), routesAround(ctx, newAddr)...)
+			return len(found) > 0
+		}, rolloutRouteWatch, time.Second)
+		s.Require().True(clean, "no host route may exist for the old manager address %s or the new one %s: %v", oldAddr, newAddr, found)
+	}
 }
 
 // statusHealthy reports whether `telepresence status` shows a running user
@@ -111,6 +131,15 @@ func statusHealthy(ctx context.Context, tp *cli.TP) bool {
 		return false
 	}
 	return st.UserDaemon.Running && st.TrafficManager.Name != ""
+}
+
+// managerPodAddr returns the address of the traffic-manager pod.
+func (s *ManagerRollout) managerPodAddr(ctx context.Context, r *rt.Runtime, ns string) string {
+	out, err := r.Kubectl(ctx, ns, "get", "pod", managerStatefulSet+"-0", "-o", "jsonpath={.status.podIP}")
+	s.Require().NoError(err, "get the manager pod's address")
+	addr := strings.TrimSpace(out)
+	s.Require().NotEmpty(addr)
+	return addr
 }
 
 // interceptCount returns how many intercepts `list` reports for the
