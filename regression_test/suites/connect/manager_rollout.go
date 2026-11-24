@@ -2,6 +2,7 @@ package connect
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"time"
 
@@ -82,6 +83,18 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 		return statusHealthy(ctx, tp)
 	}, rolloutRecoveryTimeout, rolloutPollInterval,
 		"telepresence status should report a healthy connection again after the manager rollout")
+
+	// The daemon's own cluster DNS address is the new manager pod's address. It
+	// must never be taken for a local DNS server, which would give it a host
+	// route through the workstation's default gateway.
+	if runtime.GOOS == "linux" {
+		ip, err := r.Kubectl(ctx, mgrNS, "get", "pod", managerStatefulSet+"-0", "-o", "jsonpath={.status.podIP}")
+		s.Require().NoError(err, "get the manager pod's address")
+		ip = strings.TrimSpace(ip)
+		s.Require().NotEmpty(ip)
+		s.Require().Never(func() bool { return len(routesAround(ctx, ip)) > 0 }, 10*time.Second, time.Second,
+			"no host route may exist for the cluster DNS address %s: %v", ip, routesAround(ctx, ip))
+	}
 
 	// Exactly one intercept for wl: neither lost nor duplicated by the
 	// fresh manager's restore review.
