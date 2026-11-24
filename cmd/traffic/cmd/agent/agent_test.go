@@ -96,7 +96,6 @@ func Test_LoadConfig(t *testing.T) {
 	ctx := testContext(t, nil)
 	config, err := agent.LoadConfig(ctx)
 	require.NoError(t, err)
-	testConfig.AgentImage = ""
 	require.Equal(t, &testConfig, config.AgentConfig())
 	require.Equal(t, podIP, config.PodIP())
 }
