@@ -357,7 +357,10 @@ properties:
     additionalProperties: false
     properties:
       version:
-        description: The traffic-manager version to emulate
+        description: The traffic-manager version to emulate toward clients
+        type: string
+      agentVersion:
+        description: The traffic-manager version to emulate toward traffic-agents
         type: string
 
   externalEndpoint:

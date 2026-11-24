@@ -401,6 +401,10 @@ spec:
           - name: COMPATIBILITY_VERSION
             value: {{ .version }}
           {{- end }}
+          {{- if .agentVersion }}
+          - name: COMPATIBILITY_AGENT_VERSION
+            value: {{ .agentVersion }}
+          {{- end }}
           {{- end }}
           {{- with .extraEnv }}
           {{ toYaml . | nindent 10 }}

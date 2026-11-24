@@ -209,6 +209,9 @@ type Env struct {
 
 	// For testing only
 	CompatibilityVersion *semver.Version
+
+	// CompatibilityAgentVersion does the same for the RPCs that traffic-agents call.
+	CompatibilityAgentVersion *semver.Version
 }
 
 // HostNetwork reports whether the traffic-manager pod runs on the host
