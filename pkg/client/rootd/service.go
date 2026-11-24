@@ -65,7 +65,8 @@ type service struct {
 	newSession func(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig, activity chan<- time.Time, cleanupDNSRouting func(context.Context)) (*session, error)
 	runSession func(sn *session, initErrs chan<- error)
 
-	// sessionRunning is closed when the session is done running.
+	// sessionRunning is closed when the session is done running. It is never nil and is closed
+	// while no session has run.
 	sessionRunning chan struct{}
 	activity       chan time.Time
 	managed        bool

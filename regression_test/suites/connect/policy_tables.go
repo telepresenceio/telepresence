@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -14,36 +15,81 @@ const firstTelepresenceTable = 775
 
 var ruleTable = regexp.MustCompile(`lookup (\d+)`)
 
-// telepresenceTables returns the numbers of the routing tables that policy rules
-// (IPv4 and IPv6) send lookups to and that the root daemon's router owns.
-func telepresenceTables(ctx context.Context) []int {
+// routingBaseline is the policy routing state that existed before a test
+// connected. Everything the test checks or removes is limited to what
+// appeared after it.
+type routingBaseline struct {
+	rules  map[string]bool
+	tables map[int]bool
+}
+
+// ruleLines returns the policy rule lines of the family that send lookups to a
+// table numbered firstTelepresenceTable or higher, keyed by the trimmed line.
+func ruleLines(ctx context.Context, family string) map[string]int {
+	lines := map[string]int{}
+	for _, line := range strings.Split(ipOutput(ctx, family, "rule", "show"), "\n") {
+		for _, m := range ruleTable.FindAllStringSubmatch(line, -1) {
+			if n, _ := strconv.Atoi(m[1]); n >= firstTelepresenceTable {
+				lines[family+" "+strings.TrimSpace(line)] = n
+			}
+		}
+	}
+	return lines
+}
+
+// snapshotRouting records the policy rules and tables that exist now.
+func snapshotRouting(ctx context.Context) routingBaseline {
+	b := routingBaseline{rules: map[string]bool{}, tables: map[int]bool{}}
+	for _, family := range []string{"-4", "-6"} {
+		for line, n := range ruleLines(ctx, family) {
+			b.rules[line] = true
+			b.tables[n] = true
+		}
+	}
+	return b
+}
+
+// currentTables returns the Telepresence-range tables that policy rules send
+// lookups to now.
+func currentTables(ctx context.Context) []int {
 	var tables []int
+	for n := range snapshotRouting(ctx).tables {
+		tables = append(tables, n)
+	}
+	sort.Ints(tables)
+	return tables
+}
+
+// newRules returns the rule lines that were not in the baseline, and the
+// tables they send lookups to, excluding tables that were in the baseline.
+func (b routingBaseline) newRules(ctx context.Context) (rules []string, tables []int) {
 	seen := map[int]bool{}
 	for _, family := range []string{"-4", "-6"} {
-		for _, m := range ruleTable.FindAllStringSubmatch(ipOutput(ctx, family, "rule", "show"), -1) {
-			n, _ := strconv.Atoi(m[1])
-			if n >= firstTelepresenceTable && !seen[n] {
+		for line, n := range ruleLines(ctx, family) {
+			if b.rules[line] {
+				continue
+			}
+			rules = append(rules, line)
+			if !b.tables[n] && !seen[n] {
 				seen[n] = true
 				tables = append(tables, n)
 			}
 		}
 	}
-	return tables
+	sort.Strings(rules)
+	sort.Ints(tables)
+	return rules, tables
 }
 
-// leftoverRouting describes policy rules that point at a table numbered
-// firstTelepresenceTable or higher, and routes in the given tables. It
-// returns "" when nothing is left.
-func leftoverRouting(ctx context.Context, tables ...int) string {
+// leftoverRouting describes the policy rules that appeared after the baseline
+// and the routes in the given tables. It returns "" when nothing is left.
+func (b routingBaseline) leftoverRouting(ctx context.Context, tables ...int) string {
 	var sb strings.Builder
+	rules, _ := b.newRules(ctx)
+	for _, r := range rules {
+		sb.WriteString("rule: " + r + "\n")
+	}
 	for _, family := range []string{"-4", "-6"} {
-		for _, line := range strings.Split(ipOutput(ctx, family, "rule", "show"), "\n") {
-			for _, m := range ruleTable.FindAllStringSubmatch(line, -1) {
-				if n, _ := strconv.Atoi(m[1]); n >= firstTelepresenceTable {
-					sb.WriteString("rule: " + strings.TrimSpace(line) + "\n")
-				}
-			}
-		}
 		for _, table := range tables {
 			for _, line := range strings.Split(ipOutput(ctx, family, "route", "show", "table", strconv.Itoa(table)), "\n") {
 				if strings.TrimSpace(line) != "" {
@@ -55,14 +101,17 @@ func leftoverRouting(ctx context.Context, tables ...int) string {
 	return sb.String()
 }
 
-// removeLeftoverRouting deletes policy rules and flushes the tables, using
-// sudo. It is a safety net so that a failed test does not leave the
-// workstation with routing state that later connects trip over.
-func removeLeftoverRouting(ctx context.Context, tables ...int) {
+// removeLeftoverRouting deletes policy rules and flushes routes for tables that
+// appeared after the baseline, using sudo. Tables from the baseline are never
+// touched.
+func (b routingBaseline) removeLeftoverRouting(ctx context.Context, tables ...int) {
 	for _, family := range []string{"-4", "-6"} {
 		for _, table := range tables {
+			if b.tables[table] {
+				continue
+			}
 			t := strconv.Itoa(table)
-			for ipOutput(ctx, family, "rule", "show") != "" && strings.Contains(ipOutput(ctx, family, "rule", "show"), "lookup "+t) {
+			for strings.Contains(ipOutput(ctx, family, "rule", "show"), "lookup "+t) {
 				if exec.CommandContext(ctx, "sudo", "-n", "ip", family, "rule", "del", "lookup", t).Run() != nil {
 					break
 				}
@@ -70,4 +119,23 @@ func removeLeftoverRouting(ctx context.Context, tables ...int) {
 			_ = exec.CommandContext(ctx, "sudo", "-n", "ip", family, "route", "flush", "table", t).Run()
 		}
 	}
+}
+
+// telepresenceDevices returns the names of the devices that routes in the
+// given tables use.
+func telepresenceDevices(ctx context.Context, tables ...int) map[string]bool {
+	devs := map[string]bool{}
+	for _, family := range []string{"-4", "-6"} {
+		for _, table := range tables {
+			for _, line := range strings.Split(ipOutput(ctx, family, "route", "show", "table", strconv.Itoa(table)), "\n") {
+				f := strings.Fields(line)
+				for i := 0; i+1 < len(f); i++ {
+					if f[i] == "dev" {
+						devs[f[i+1]] = true
+					}
+				}
+			}
+		}
+	}
+	return devs
 }

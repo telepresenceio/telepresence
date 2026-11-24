@@ -17,10 +17,18 @@ func ipOutput(ctx context.Context, args ...string) string {
 }
 
 // routesAround returns the lines of `ip route show table all` whose destination is
-// exactly addr and that do not use a Telepresence device, ignoring the kernel's
-// "local" and "broadcast" entries. Such a route sends traffic for addr out
+// exactly addr and that do not use the session's virtual interface, ignoring the
+// kernel's "local" and "broadcast" entries. Such a route sends traffic for addr out
 // through the workstation's own network.
+//
+// The interface name is learned from the routes that the root daemon keeps in its
+// own policy tables. When no such route exists, the name is unknown and no route
+// is reported.
 func routesAround(ctx context.Context, addr string) []string {
+	devs := telepresenceDevices(ctx, currentTables(ctx)...)
+	if len(devs) == 0 {
+		return nil
+	}
 	var lines []string
 	for _, family := range []string{"-4", "-6"} {
 		for _, line := range strings.Split(ipOutput(ctx, family, "route", "show", "table", "all"), "\n") {
@@ -28,7 +36,16 @@ func routesAround(ctx context.Context, addr string) []string {
 			if len(f) == 0 || f[0] == "local" || f[0] == "broadcast" {
 				continue
 			}
-			if dst := strings.TrimSuffix(strings.TrimSuffix(f[0], "/32"), "/128"); dst == addr && !strings.Contains(line, "dev tel") {
+			if dst := strings.TrimSuffix(strings.TrimSuffix(f[0], "/32"), "/128"); dst != addr {
+				continue
+			}
+			onVif := false
+			for i := 0; i+1 < len(f); i++ {
+				if f[i] == "dev" && devs[f[i+1]] {
+					onVif = true
+				}
+			}
+			if !onVif {
 				lines = append(lines, strings.TrimSpace(line))
 			}
 		}

@@ -185,6 +185,7 @@ func (s *SessionOwner) Test_RootInfoFileRemovalTearsDownSession() {
 	t := s.T()
 	ctx := s.Ctx()
 	s.claimConnection()
+	before := snapshotRouting(ctx)
 	s.connectHost()
 
 	stdout, stderr, err := s.CLI().Run(ctx, "status", "--format", "json")
@@ -203,14 +204,14 @@ func (s *SessionOwner) Test_RootInfoFileRemovalTearsDownSession() {
 	rootPort := s.daemonPort("rootd")
 	s.Require().NotZero(rootPort, "the info file must name the root daemon's port")
 
-	tables := telepresenceTables(ctx)
-	s.Require().NotEmpty(tables, "the connected root daemon must have policy rules for its routing tables")
+	rules, tables := before.newRules(ctx)
+	s.Require().NotEmpty(rules, "the connected root daemon must have created policy rules")
 	t.Cleanup(func() {
 		// Without this, a failure leaves rules that make every later connect see a subnet conflict.
 		cctx := context.WithoutCancel(ctx)
-		if left := leftoverRouting(cctx, tables...); left != "" {
+		if left := before.leftoverRouting(cctx, tables...); left != "" {
 			t.Logf("removing leftover routing state:\n%s", left)
-			removeLeftoverRouting(cctx, tables...)
+			before.removeLeftoverRouting(cctx, tables...)
 		}
 	})
 
@@ -218,8 +219,8 @@ func (s *SessionOwner) Test_RootInfoFileRemovalTearsDownSession() {
 	s.Require().NoError(os.Remove(infoFile), "remove the root daemon's info file")
 
 	waitFor(t, func() bool { return !portOpen(rootPort) }, "the root daemon still accepts connections after its info file was removed")
-	s.Require().Eventually(func() bool { return leftoverRouting(ctx, tables...) == "" }, networkDownTimeout, pollInterval,
-		"policy rules or routes are left after the root daemon exited:\n%s", leftoverRouting(ctx, tables...))
+	s.Require().Eventually(func() bool { return before.leftoverRouting(ctx, tables...) == "" }, networkDownTimeout, pollInterval,
+		"policy rules or routes are left after the root daemon exited:\n%s", before.leftoverRouting(ctx, tables...))
 }
 
 // Test_QuitStopsBothDaemons expects `quit -s` to leave neither daemon running.
