@@ -177,6 +177,51 @@ func (s *SessionOwner) Test_KilledUserDaemonFreesRootDaemon() {
 	rt.RoutedToCluster(t, wl.ServiceURL())
 }
 
+// Test_RootInfoFileRemovalTearsDownSession removes the root daemon's info file,
+// which makes the root daemon stop on its own, and expects it to take down the
+// policy rules and routes it created, as `quit -s` does. Skipped when the root
+// daemon is a managed service, because its info file lives in the root cache.
+func (s *SessionOwner) Test_RootInfoFileRemovalTearsDownSession() {
+	t := s.T()
+	ctx := s.Ctx()
+	s.claimConnection()
+	s.connectHost()
+
+	stdout, stderr, err := s.CLI().Run(ctx, "status", "--format", "json")
+	s.Require().NoError(err, "status: %s", stderr)
+	var st struct {
+		RootDaemon struct {
+			Running bool `json:"running"`
+			Managed bool `json:"managed"`
+		} `json:"root_daemon"`
+	}
+	s.Require().NoError(json.Unmarshal([]byte(stdout), &st))
+	s.Require().True(st.RootDaemon.Running, "root daemon must be running after connect")
+	if st.RootDaemon.Managed {
+		t.Skip("the root daemon is a managed service; its info file is in the root cache directory")
+	}
+	rootPort := s.daemonPort("rootd")
+	s.Require().NotZero(rootPort, "the info file must name the root daemon's port")
+
+	tables := telepresenceTables(ctx)
+	s.Require().NotEmpty(tables, "the connected root daemon must have policy rules for its routing tables")
+	t.Cleanup(func() {
+		// Without this, a failure leaves rules that make every later connect see a subnet conflict.
+		cctx := context.WithoutCancel(ctx)
+		if left := leftoverRouting(cctx, tables...); left != "" {
+			t.Logf("removing leftover routing state:\n%s", left)
+			removeLeftoverRouting(cctx, tables...)
+		}
+	})
+
+	infoFile := filepath.Join(s.R().UserCacheDir(), "rootd", daemon.InfoFileName)
+	s.Require().NoError(os.Remove(infoFile), "remove the root daemon's info file")
+
+	waitFor(t, func() bool { return !portOpen(rootPort) }, "the root daemon still accepts connections after its info file was removed")
+	s.Require().Eventually(func() bool { return leftoverRouting(ctx, tables...) == "" }, networkDownTimeout, pollInterval,
+		"policy rules or routes are left after the root daemon exited:\n%s", leftoverRouting(ctx, tables...))
+}
+
 // Test_QuitStopsBothDaemons expects `quit -s` to leave neither daemon running.
 func (s *SessionOwner) Test_QuitStopsBothDaemons() {
 	t := s.T()

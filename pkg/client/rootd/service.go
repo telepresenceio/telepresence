@@ -247,7 +247,25 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 	if err != nil {
 		clog.Error(c, err)
 	}
+	d.waitSessionDone(c)
 	return err
+}
+
+// sessionTeardownTimeout bounds how long the daemon waits for a session to finish
+// its teardown after the daemon's context is cancelled.
+const sessionTeardownTimeout = 15 * time.Second
+
+// waitSessionDone blocks until the current session, which runs outside the daemon's
+// group, has removed its routes, rules and DNS configuration.
+func (s *service) waitSessionDone(ctx context.Context) {
+	s.sessionLock.RLock()
+	sessionRunning := s.sessionRunning
+	s.sessionLock.RUnlock()
+	select {
+	case <-sessionRunning:
+	case <-time.After(sessionTeardownTimeout):
+		clog.Warnf(ctx, "session teardown did not finish within %s", sessionTeardownTimeout)
+	}
 }
 
 func runAliveAndCancellation(g log.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
