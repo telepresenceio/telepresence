@@ -94,7 +94,8 @@ annotation to your workload template's annotations:
 
 When the agent configuration of a workload that already carries traffic-agents changes, for example because a
 Service that selects it changed or the traffic-manager was upgraded, the traffic-manager replaces the workload's
-pods so that the webhook injects the new agent. It replaces them in batches sized by the workload's own rolling
+pods so that the webhook injects the new agent. This includes a change of the traffic-agent image, whether it comes
+from a traffic-manager upgrade or from the `agent.image` Helm value. It replaces them in batches sized by the workload's own rolling
 update settings:
 
 | Workload kind | Pods replaced at once                                                                             |
@@ -292,7 +293,7 @@ When this setting is `false`:
 
 The setting defaults to `true` to maintain backward compatibility with existing deployments.
 
-### Excluding Envrionment Variables
+### Excluding Environment Variables
 
 If your pod contains sensitive variables like a database password, or third party API Key, you may want to exclude those from being propagated through an intercept.
 Telepresence allows you to configure this through a ConfigMap that is then read and removes the sensitive variables.

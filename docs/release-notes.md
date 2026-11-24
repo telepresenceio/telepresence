@@ -140,6 +140,12 @@ The SFTP port of a traffic-agent serves no connections. A mount reaches the SFTP
 An intercept, replace or ingest of a workload whose pod address is covered by a <code>neverProxySubnets</code> entry fails with an error that names the address and the subnet. The client has no route to such a pod through Telepresence. An <code>alsoProxySubnets</code> entry inside the never-proxy subnet that contains the pod's address lifts the restriction.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Traffic-agents are upgraded with the traffic-manager again](reference/cluster-config)</div></div>
+<div style="margin-left: 15px">
+
+Since 2.22.0, a pod kept its traffic-agent image when the traffic-manager was upgraded or the <code>agent.image</code> Helm value changed. The traffic-manager now replaces such pods, paced like other agent replacements. The first upgrade to this version replaces every pod that has a traffic-agent.
+</div>
+
 ## Version 2.33.4 <span style="font-size: 16px;">(November 22)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Only a traffic-agent can register an agent session with the traffic-manager](reference/authentication)</div></div>
 <div style="margin-left: 15px">

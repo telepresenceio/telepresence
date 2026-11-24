@@ -301,6 +301,15 @@ items:
           <code>alsoProxySubnets</code> entry inside the never-proxy
           subnet that contains the pod's address lifts the restriction.
         docs: reference/config#neverproxysubnets
+      - type: bugfix
+        title: Traffic-agents are upgraded with the traffic-manager again
+        body: >-
+          Since 2.22.0, a pod kept its traffic-agent image when the
+          traffic-manager was upgraded or the <code>agent.image</code> Helm
+          value changed. The traffic-manager now replaces such pods, paced
+          like other agent replacements. The first upgrade to this version
+          replaces every pod that has a traffic-agent.
+        docs: reference/cluster-config
   - version: 2.33.4
     date: 2026-11-22
     notes:
