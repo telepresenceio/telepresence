@@ -63,6 +63,41 @@ items:
           like other agent replacements. The first upgrade to this version
           replaces every pod that has a traffic-agent.
         docs: reference/cluster-config
+      - type: bugfix
+        title: A traffic-manager restart no longer adds a host route for its old pod address
+        body: >-
+          On Linux, the root daemon could take its own cluster DNS address
+          for a local DNS server once the traffic-manager pod had been
+          replaced. It then routed the old pod address through the
+          workstation's own network, so a pod that later got that address
+          could not be reached through Telepresence. The root daemon now
+          ignores the DNS address of its own network device.
+      - type: bugfix
+        title: The root daemon removes its routes when it stops by itself
+        body: >-
+          When the root daemon stopped without a quit or disconnect request,
+          for example because its info file was removed, it exited while the
+          session was still being torn down. Routing rules and routes of the
+          session could stay behind on the workstation and disturb the next
+          connection. The root daemon now waits for the session teardown
+          before it exits.
+      - type: bugfix
+        title: A session that the traffic-manager cannot restore is ended
+        body: >-
+          After a traffic-manager restart, the client asks the new
+          traffic-manager to restore its session. When that was refused, for
+          example because the session's namespace was no longer managed, the
+          client kept reporting a connection that could not carry traffic.
+          The client now disconnects, and <code>telepresence status</code>
+          reports that it is not connected.
+      - type: bugfix
+        title: An early interrupt of a --docker-run container is no longer lost
+        body: >-
+          An interrupt that arrived while a command such as
+          <code>telepresence intercept --docker-run</code> was starting its
+          container was not acted on. The command hung, and the container and
+          the intercept remained. The command now stops the container,
+          removes the intercept and exits.
   - version: 2.33.4
     date: 2026-11-22
     notes:

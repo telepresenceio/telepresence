@@ -26,6 +26,30 @@ The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--a
 Since 2.22.0, a pod kept its traffic-agent image when the traffic-manager was upgraded or the <code>agent.image</code> Helm value changed. The traffic-manager now replaces such pods, paced like other agent replacements. The first upgrade to this version replaces every pod that has a traffic-agent.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A traffic-manager restart no longer adds a host route for its old pod address</div></div>
+<div style="margin-left: 15px">
+
+On Linux, the root daemon could take its own cluster DNS address for a local DNS server once the traffic-manager pod had been replaced. It then routed the old pod address through the workstation's own network, so a pod that later got that address could not be reached through Telepresence. The root daemon now ignores the DNS address of its own network device.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The root daemon removes its routes when it stops by itself</div></div>
+<div style="margin-left: 15px">
+
+When the root daemon stopped without a quit or disconnect request, for example because its info file was removed, it exited while the session was still being torn down. Routing rules and routes of the session could stay behind on the workstation and disturb the next connection. The root daemon now waits for the session teardown before it exits.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A session that the traffic-manager cannot restore is ended</div></div>
+<div style="margin-left: 15px">
+
+After a traffic-manager restart, the client asks the new traffic-manager to restore its session. When that was refused, for example because the session's namespace was no longer managed, the client kept reporting a connection that could not carry traffic. The client now disconnects, and <code>telepresence status</code> reports that it is not connected.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">An early interrupt of a --docker-run container is no longer lost</div></div>
+<div style="margin-left: 15px">
+
+An interrupt that arrived while a command such as <code>telepresence intercept --docker-run</code> was starting its container was not acted on. The command hung, and the container and the intercept remained. The command now stops the container, removes the intercept and exits.
+</div>
+
 ## Version 2.33.4 <span style="font-size: 16px;">(November 22)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Only a traffic-agent can register an agent session with the traffic-manager](reference/authentication)</div></div>
 <div style="margin-left: 15px">
