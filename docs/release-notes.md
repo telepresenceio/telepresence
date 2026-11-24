@@ -32,6 +32,12 @@ The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was alw
 The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--as-user-extra</code>. The user daemon ignored them too when it ran in a container (<code>telepresence connect --docker</code>) or read the kubeconfig from stdin (<code>--kubeconfig -</code>). Both daemons now apply the two flags the same way <code>kubectl</code> does.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercepts survive a traffic-manager restart in enforcing mode</div></div>
+<div style="margin-left: 15px">
+
+After a traffic-manager restart, a client that was connected to an enforcing traffic-manager kept the session credential that the previous traffic-manager had issued. The traffic-agents refused it, so intercepted traffic did not reach the workstation until the client reconnected. The client now fetches a new credential when it reconnects to the traffic-manager.
+</div>
+
 ## Version 2.33.4 <span style="font-size: 16px;">(November 22)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Only a traffic-agent can register an agent session with the traffic-manager](reference/authentication)</div></div>
 <div style="margin-left: 15px">

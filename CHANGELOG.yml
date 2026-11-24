@@ -82,6 +82,15 @@ items:
           --docker</code>) or read the kubeconfig from stdin
           (<code>--kubeconfig -</code>). Both daemons now apply the two flags
           the same way <code>kubectl</code> does.
+      - type: bugfix
+        title: Intercepts survive a traffic-manager restart in enforcing mode
+        body: >-
+          After a traffic-manager restart, a client that was connected to an
+          enforcing traffic-manager kept the session credential that the
+          previous traffic-manager had issued. The traffic-agents refused it,
+          so intercepted traffic did not reach the workstation until the
+          client reconnected. The client now fetches a new credential when it
+          reconnects to the traffic-manager.
   - version: 2.33.4
     date: 2026-11-22
     notes:
