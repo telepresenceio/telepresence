@@ -164,9 +164,17 @@ items:
           and the machine-wide <code>config.yml</code> are used only when
           root owns the file and every directory from it up to the managed
           directory, none of them is writable by group or others, and none
-          is a symbolic link. Otherwise the file is ignored and a warning
-          is logged. The token for the kubeauth helper is no longer passed
-          on a command line.
+          is a symbolic link. On Windows, they are used only when SYSTEM or
+          the Administrators group owns the file and those directories, and
+          no other user is allowed to change them. Otherwise the file is
+          ignored and a warning is logged. The Windows installer closes
+          <code>C:\ProgramData\Telepresence</code> to changes by other
+          users. The macOS installer moves entries of
+          <code>/Library/Application Support/telepresence</code> that root
+          does not own, or that have an access control list, to a directory
+          named <code>telepresence.untrusted.&lt;number&gt;</code> next to
+          it. The token for the kubeauth helper is no longer passed on a
+          command line.
       - type: feature
         title: Prometheus metrics for the traffic-manager's gRPC requests
         body: >-
