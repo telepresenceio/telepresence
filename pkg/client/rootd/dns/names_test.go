@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestSetTopLevelDomainsAndSearchPath_dropsBadNames(t *testing.T) {
 func TestResolverFilePath(t *testing.T) {
 	p, err := resolverFilePath("/etc/resolver", "cluster.local")
 	require.NoError(t, err)
-	assert.Equal(t, "/etc/resolver/telepresence.cluster.local", p)
+	assert.Equal(t, filepath.FromSlash("/etc/resolver/telepresence.cluster.local"), p)
 	for _, d := range []string{"x/../../y", "a/b", "../../etc/passwd", "/abs"} {
 		_, err = resolverFilePath("/etc/resolver", d)
 		assert.Error(t, err, d)
