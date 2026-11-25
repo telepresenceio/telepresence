@@ -33,6 +33,10 @@ type Values struct {
 	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
 	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
 	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// MaxNamespaceSpecificWatchers is the number of managed namespaces up to
+	// which the manager runs one informer set per namespace. 0 selects
+	// cluster-wide informers.
+	MaxNamespaceSpecificWatchers *int `json:"maxNamespaceSpecificWatchers,omitempty"`
 	// Resources is the chart's top-level resources shape: the
 	// traffic-manager container's requests/limits.
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -269,6 +273,9 @@ type Compatibility struct {
 	// Version makes the manager behave like this older version, returning
 	// Unimplemented for RPCs introduced after it.
 	Version string `json:"version,omitempty"`
+
+	// AgentVersion does the same for the RPCs that traffic-agents call.
+	AgentVersion string `json:"agentVersion,omitempty"`
 }
 
 // TelepresenceAPI is the chart's telepresenceAPI.* shape, restricted to the
@@ -419,12 +426,18 @@ func Merge(base, over Values) Values {
 	if over.NodeAgent.Enabled {
 		m.NodeAgent.Enabled = true
 	}
+	if over.MaxNamespaceSpecificWatchers != nil {
+		m.MaxNamespaceSpecificWatchers = over.MaxNamespaceSpecificWatchers
+	}
 	m.Client = mergeClient(m.Client, over.Client)
 	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
 	m.Security = mergeSecurity(m.Security, over.Security)
 	m.ExternalEndpoint = mergeExternalEndpoint(m.ExternalEndpoint, over.ExternalEndpoint)
 	if over.Compatibility.Version != "" {
 		m.Compatibility.Version = over.Compatibility.Version
+	}
+	if over.Compatibility.AgentVersion != "" {
+		m.Compatibility.AgentVersion = over.Compatibility.AgentVersion
 	}
 	if over.TelepresenceAPI.Port != 0 {
 		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port

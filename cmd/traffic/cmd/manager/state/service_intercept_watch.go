@@ -233,19 +233,20 @@ func (s *State) reconcileServiceInterceptWorkloads(ctx context.Context, intercep
 			(intercept.Spec.WorkloadKind == "" || string(workload.GetKind()) == intercept.Spec.WorkloadKind) {
 			continue
 		}
+		// A stored config can claim the Service without the pods of the workload carrying it yet, so
+		// the pods are checked against it either way.
 		config := mm.Get(workload.GetName(), workload.GetNamespace())
-		if config != nil && sidecarClaimsService(config, intercept.Spec) {
-			continue
-		}
-		config, err = s.getOrCreateAgentConfig(ctx, workload, s.isExtended(intercept.Spec), false,
-			secondaryWorkloadSpec(intercept.Spec), agentconfig.ReplacePolicyIntercept)
-		if err != nil {
-			clog.Errorf(ctx, "Unable to provision workload %s for intercept %q: %v", workload, interceptID, err)
-			continue
-		}
-		if !sidecarClaimsService(config, intercept.Spec) {
-			clog.Errorf(ctx, "Agent config for workload %s does not claim the selected Service target", workload)
-			continue
+		if config == nil || !sidecarClaimsService(config, intercept.Spec) {
+			config, err = s.getOrCreateAgentConfig(ctx, workload, s.isExtended(intercept.Spec), false,
+				secondaryWorkloadSpec(intercept.Spec), agentconfig.ReplacePolicyIntercept)
+			if err != nil {
+				clog.Errorf(ctx, "Unable to provision workload %s for intercept %q: %v", workload, interceptID, err)
+				continue
+			}
+			if !sidecarClaimsService(config, intercept.Spec) {
+				clog.Errorf(ctx, "Agent config for workload %s does not claim the selected Service target", workload)
+				continue
+			}
 		}
 		if err = mm.EvictPodsWithAgentConfigMismatch(ctx, workload, config); err != nil {
 			clog.Errorf(ctx, "Unable to refresh workload %s for intercept %q: %v", workload, interceptID, err)

@@ -380,6 +380,9 @@ func zipFiles(files []string, zipFileName string) error {
 // The file names have the form <pod name>.<namespace>.<extension>.
 func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir string) error {
 	for n, v := range lr.PodInfo {
+		if n == "" || n != filepath.Base(n) || n == ".." || n == "." {
+			return fmt.Errorf("invalid file name %q in log response", n)
+		}
 		qn := filepath.Join(exportDir, n)
 		if v != "ok" {
 			// Write the error to retrieve the log as the log content. It's better than nothing

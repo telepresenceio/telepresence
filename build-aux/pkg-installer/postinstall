@@ -2,19 +2,28 @@
 set -e
 
 # Rootd-only setup. The CLI postinstall owns the machine-wide config
-# directory; this script just ensures the cache directory exists and
+# directory; this script just ensures the cache directories exist and
 # loads the launchd job.
 
-mkdir -p "/Library/Caches/telepresence"
-chown -R root:wheel "/Library/Caches/telepresence"
-chmod 755 "/Library/Caches/telepresence"
+CACHE_DIR="/Library/Caches/telepresence"
 
 # On upgrade an instance of the daemon is still loaded with the previous
 # binary; `launchctl load` is a no-op in that case, so the new binary
-# would never start. Unload first (best-effort — fails harmlessly on a
+# would never start. Unload first (best-effort - fails harmlessly on a
 # fresh install where nothing is loaded yet), then load.
 echo "Restarting Telepresence Root Daemon..."
 /bin/launchctl unload /Library/LaunchDaemons/io.telepresence.rootd.plist 2>/dev/null || true
+
+# The client trusts the managed daemon info only when every directory above
+# it belongs to root and is closed to other users. The tree is removed and
+# created again, so nothing that another user placed there survives. The
+# daemon recreates what it needs. mkdir fails, and with it the install, if
+# someone puts the directory back in between.
+rm -rf "$CACHE_DIR"
+mkdir -m 755 "$CACHE_DIR"
+mkdir -m 755 "$CACHE_DIR/rootd"
+chown root:wheel "$CACHE_DIR" "$CACHE_DIR/rootd"
+
 /bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist
 
 echo "Telepresence Root Daemon is running."

@@ -28,6 +28,9 @@ const (
 	// TTL".
 	handshakeTTL = 3 * time.Second
 
+	// defaultMaxHandshakes bounds the number of handshake-cache entries.
+	defaultMaxHandshakes = 4096
+
 	// dropLogRate limits how often a non-dropNotReady drop reason is logged;
 	// the counters in metrics.go still count every drop regardless.
 	dropLogEventsPerSecond = 5
@@ -62,8 +65,9 @@ type flowSink interface {
 	// reports whether one existed.
 	Forward(ctx context.Context, src netip.AddrPort, datagram []byte) bool
 	// CreateAndForward creates a new flow from src to backend:port and writes
-	// each of datagrams to it, in order.
-	CreateAndForward(ctx context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte)
+	// each of datagrams to it, in order. It returns how many datagrams were
+	// forwarded; none are when the flow could not be created.
+	CreateAndForward(ctx context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte) int
 }
 
 // handshakeKey identifies one in-progress connection attempt: a client's source address
@@ -95,8 +99,11 @@ type Router struct {
 	clock     func() time.Time
 	dropLimit *rate.Limiter
 
+	maxHandshakes int
+
 	mu              sync.Mutex
 	handshakes      map[handshakeKey]*handshakeEntry
+	capLogged       bool // first drop at the handshake cap logged; cleared by Sweep
 	notReadyLogOnce sync.Once
 }
 
@@ -110,6 +117,8 @@ func NewRouter(allowlist backendPicker, sink flowSink, m *metrics) *Router {
 		clock:      time.Now,
 		dropLimit:  rate.NewLimiter(rate.Limit(dropLogEventsPerSecond), dropLogBurst),
 		handshakes: make(map[handshakeKey]*handshakeEntry),
+
+		maxHandshakes: defaultMaxHandshakes,
 	}
 }
 
@@ -205,8 +214,7 @@ func (r *Router) routeByCID(ctx context.Context, src netip.AddrPort, dcid []byte
 		r.dropf(ctx, dropAllowlistMiss, "CID does not resolve to an allowlisted backend (src %s)", src)
 		return
 	}
-	r.sink.CreateAndForward(ctx, src, ip, port, [][]byte{datagram})
-	r.metrics.addForwarded(1)
+	r.metrics.addForwarded(int64(r.sink.CreateAndForward(ctx, src, ip, port, [][]byte{datagram})))
 }
 
 // routeInitial implements case (c): buffer datagram in the handshake cache entry for
@@ -219,6 +227,16 @@ func (r *Router) routeInitial(ctx context.Context, src netip.AddrPort, dcid []by
 	r.mu.Lock()
 	entry, ok := r.handshakes[key]
 	if !ok {
+		if r.maxHandshakes > 0 && len(r.handshakes) >= r.maxHandshakes {
+			logIt := !r.capLogged
+			r.capLogged = true
+			r.mu.Unlock()
+			if logIt {
+				clog.Warnf(ctx, "quic-forwarder: handshake cache limit %d reached; dropping new handshakes", r.maxHandshakes)
+			}
+			r.metrics.addDrop(dropCapExceeded)
+			return
+		}
 		entry = &handshakeEntry{acc: quicfwd.NewCryptoAccumulator(), created: r.clock()}
 		r.handshakes[key] = entry
 	}
@@ -273,8 +291,7 @@ func (r *Router) routeInitial(ctx context.Context, src netip.AddrPort, dcid []by
 		return
 	}
 
-	r.sink.CreateAndForward(ctx, src, backendIP, backendPort, buffered)
-	r.metrics.addForwarded(int64(len(buffered)))
+	r.metrics.addForwarded(int64(r.sink.CreateAndForward(ctx, src, backendIP, backendPort, buffered)))
 }
 
 // Sweep evicts handshake-cache entries older than handshakeTTL that never resolved.
@@ -290,6 +307,9 @@ func (r *Router) Sweep(ctx context.Context) {
 	}
 	for _, k := range expired {
 		delete(r.handshakes, k)
+	}
+	if r.maxHandshakes > 0 && len(r.handshakes) < r.maxHandshakes {
+		r.capLogged = false
 	}
 	r.mu.Unlock()
 

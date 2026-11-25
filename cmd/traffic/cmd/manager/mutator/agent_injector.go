@@ -23,6 +23,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
@@ -98,13 +99,23 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, nil
 	}
 
+	if !namespaces.Manages(ctx, req.Namespace) {
+		clog.Debugf(ctx, "Skipping webhook for %s.%s because the namespace is not managed", req.Name, req.Namespace)
+		return nil, nil
+	}
+
 	pod, err := getPod(req, isDelete)
 	if err != nil {
 		return nil, err
 	}
 
+	if pod.Namespace != req.Namespace {
+		clog.Debugf(ctx, "Skipping webhook for %s: pod namespace %q differs from request namespace %q", pod.Name, pod.Namespace, req.Namespace)
+		return nil, nil
+	}
+
 	if isDelete {
-		a.agentConfigs.Inactivate(pod.UID)
+		// A delete review doesn't show that the deletion happens; the pod informer reports it.
 		return nil, nil
 	}
 
@@ -148,7 +159,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		if ia == "enabled" {
-			sc, err = a.agentConfigs.GetOrGenerate(ctx, wl)
+			sc, err = a.configFor(ctx, wl)
 			if err != nil {
 				return nil, fmt.Errorf("unable to get or generate agent config for workload %s.%s: %w", wl.GetNamespace(), wl.GetName(), err)
 			}
@@ -177,6 +188,21 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		podTpl.Spec = wl.GetPodTemplate().Spec
 	}
 	return createPatch(ctx, sc, pod, podTpl)
+}
+
+// podIsKnown returns true if the pod informer holds a pod with the same namespace, name, and UID.
+// configFor returns the agent config for a pod that claims to be injected. A config is stored only
+// when the workload's own pod template asks for the agent; otherwise it is generated for this
+// request and discarded.
+func (a *agentInjector) configFor(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	tplAnns := wl.GetPodTemplate().Annotations
+	if annotation.GetAnnotation(ctx, tplAnns, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent) == "enabled" {
+		return a.agentConfigs.GetOrGenerate(ctx, wl)
+	}
+	if sc := a.agentConfigs.Get(wl.GetName(), wl.GetNamespace()); sc != nil {
+		return sc, nil
+	}
+	return generateWithRetry(ctx, wl)
 }
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod, wlTpl *core.PodTemplateSpec) (patches PatchOps, err error) {
@@ -268,6 +294,12 @@ func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplat
 			}
 		}
 		return patches, nil
+	}
+
+	if pod.Spec.HostNetwork {
+		return nil, errcat.User.Newf(
+			"pod %s.%s uses host networking, and its agent configuration needs packet redirection in the node's network namespace, "+
+				"which Telepresence does not do", pod.Name, pod.Namespace)
 	}
 
 	pis := pod.Spec.InitContainers

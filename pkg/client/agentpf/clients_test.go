@@ -19,6 +19,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func TestWaitForIPUnavailableForUnwatchedNamespace(t *testing.T) {
@@ -472,4 +474,25 @@ func TestWaitForIP_PlainDialError_RetriesUntilDeadline(t *testing.T) {
 		"a plain dial error must not be treated as a permission refusal")
 	assert.Greater(t, calls.Load(), int32(1), "a plain error must keep retrying (and redialing), not stop after one attempt")
 	assert.NotEqual(t, codes.Unavailable, status.Code(err))
+}
+
+func TestDialAllowedUsesPolicy(t *testing.T) {
+	cs := NewClients(nil, &manager.SessionInfo{SessionId: "s"}, []string{"alpha"}, nil).(*clients)
+	ac := &client{owner: cs, info: &manager.AgentPodInfo{Namespace: "alpha", WorkloadName: "echo"}}
+	id := tunnel.NewConnID(types.ProtoTCP, netip.MustParseAddrPort("10.0.0.1:1"), netip.MustParseAddrPort("127.0.0.1:8080"))
+	allowed := ac.dialAllowed()
+	assert.False(t, allowed(id), "no policy refuses everything")
+
+	var gotNS, gotWL string
+	cs.SetDialPolicy(func(ns, wl string, got tunnel.ConnID) bool {
+		gotNS, gotWL = ns, wl
+		return got == id
+	})
+	assert.True(t, allowed(id))
+	assert.Equal(t, "alpha", gotNS)
+	assert.Equal(t, "echo", gotWL)
+
+	cs.SetDialPolicy(nil)
+	assert.False(t, allowed(id))
+	assert.False(t, (&client{info: ac.info}).dialAllowed()(id), "no owner refuses everything")
 }

@@ -93,5 +93,5 @@ func TestPresence(t *testing.T) {
 	a.False(isPresent(sc))
 	a.False(isPresent("d"))
 
-	a.Panics(func() { p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, nil, now) })
+	a.NotNil(p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, nil, now))
 }

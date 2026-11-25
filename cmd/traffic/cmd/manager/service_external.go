@@ -347,6 +347,10 @@ func (s *externalService) GetSessionCredential(ctx context.Context, session *rpc
 	return s.inner.GetSessionCredential(ctx, session)
 }
 
+func (s *externalService) AuthorizeSessionAccess(ctx context.Context, rq *rpc.AuthorizeSessionAccessRequest) (*rpc.AuthorizeSessionAccessResponse, error) {
+	return nil, internalOnly("AuthorizeSessionAccess")
+}
+
 func (s *externalService) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
 	return nil, internalOnly("GetQuicAgentCert")
 }

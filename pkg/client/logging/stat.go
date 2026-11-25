@@ -31,7 +31,8 @@ type SysInfo interface {
 	ModifyTime() time.Time // most recent content change
 	ChangeTime() time.Time // most recent metadata change
 
-	SetOwnerAndGroup(name string) error
+	// SetOwnerAndGroup gives the open file this owner and group.
+	SetOwnerAndGroup(f dos.File) error
 
 	HaveSameOwnerAndGroup(SysInfo) bool
 }

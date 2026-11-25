@@ -1,7 +1,8 @@
-// Package sftpserver implements an SFTP server confined to the exports tree plus the allowed
-// roots its exported symlinks may lead into. Client paths are walked one component at a time
-// under os.Root; an absolute symlink is redirected onto the allowed root that claims its target,
-// and everything past that redirect is resolved with a single os.Root call.
+// Package sftpserver implements an SFTP server confined to the exports tree plus the mount
+// directories the agent's own exported symlinks lead into. Client paths are walked one
+// component at a time under os.Root; an absolute symlink is followed only if the agent created
+// it before the server started, and everything past that redirect is resolved with a single
+// os.Root call.
 package sftpserver
 
 import (
@@ -9,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall" //nolint:depguard // "unix" don't work on windows
 	"time"
@@ -21,47 +24,139 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
-// maxRedirectHops bounds the number of allowed-root redirects a single leaf resolution will
-// chase before giving up, matching the symlink-loop limit os/root.go applies internally.
+// maxRedirectHops bounds the number of redirects a single leaf resolution will chase before
+// giving up.
 const maxRedirectHops = 8
 
-// allowedRoot pairs an open *os.Root with the cleaned form of the directory it was opened
-// on, so a symlink's literal target text can be matched against it without ever walking the
-// filesystem to do so.
-type allowedRoot struct {
-	dir  string
-	root *os.Root
+// export is the destination of an agent-created symlink: rel names the mounted directory (or
+// file) within root.
+type export struct {
+	link   string // path of the exporting symlink, relative to the exports root
+	target string
+	root   *os.Root
+	rel    string
 }
 
 // Server serves SFTP connections confined to the exports directory tree passed to New plus
-// whatever allowed roots its exported symlinks may lead into. All connections a single
-// Server hands to Serve share its os.Root values and can therefore be served concurrently.
+// the destinations of the symlinks that were in that tree when New ran. All connections a
+// single Server hands to Serve share its os.Root values and can therefore be served
+// concurrently.
 type Server struct {
-	exports *os.Root
-	allowed []allowedRoot
+	exports  *os.Root
+	links    map[string]*export // keyed by slash-separated path relative to the exports root
+	readOnly []string           // slash-separated paths relative to the exports root
 }
 
-// New opens exportsDir and every entry of linkRoots as an os.Root and returns a Server that
-// confines every request to the exports tree, redirecting through linkRoots wherever an
-// exported symlink's absolute target names one of them. On error, any roots already opened
-// are closed.
-func New(exportsDir string, linkRoots ...string) (*Server, error) {
+// matchBase returns the base that contains target and the part of target relative to it.
+func matchBase(bases []string, target string) (base, rel string, ok bool) {
+	clean := path.Clean(target)
+	for _, b := range bases {
+		b = path.Clean(b)
+		if clean == b {
+			return b, ".", true
+		}
+		if rel, ok := strings.CutPrefix(clean, b+"/"); ok {
+			return b, rel, true
+		}
+	}
+	return "", "", false
+}
+
+// agentLinks returns the absolute symlinks found under exportsDir, as slash-separated paths
+// relative to it mapped to their literal targets. Symlinks are not followed.
+func agentLinks(exportsDir string) map[string]string {
+	links := map[string]string{}
+	_ = filepath.WalkDir(exportsDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		target, err := os.Readlink(p)
+		if err != nil || !path.IsAbs(target) {
+			return nil
+		}
+		if rel, err := filepath.Rel(exportsDir, p); err == nil {
+			links[filepath.ToSlash(rel)] = target
+		}
+		return nil
+	})
+	return links
+}
+
+// ExportedLinks returns the absolute symlinks currently under exportsDir whose target lies
+// within one of bases, as slash-separated paths relative to exportsDir mapped to their targets.
+func ExportedLinks(exportsDir string, bases []string) map[string]string {
+	links := map[string]string{}
+	for link, target := range agentLinks(exportsDir) {
+		if _, _, ok := matchBase(bases, target); ok {
+			links[link] = target
+		}
+	}
+	return links
+}
+
+// New opens exportsDir as an os.Root and returns a Server that confines every request to the
+// exports tree. Each absolute symlink found under exportsDir whose target lies within one of
+// bases becomes a redirect to that target, which is opened with the base as its confinement;
+// symlinks that cannot be opened that way are left unfollowable. No symlink that appears later
+// is ever followed. Paths under any of readOnly (relative to the exports root) refuse every
+// modification.
+func New(exportsDir string, bases, readOnly []string) (*Server, error) {
 	exports, err := os.OpenRoot(exportsDir)
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{exports: exports, allowed: []allowedRoot{{dir: path.Clean(exportsDir), root: exports}}}
-	for _, dir := range linkRoots {
-		root, err := os.OpenRoot(dir)
-		if err != nil {
-			for _, a := range s.allowed {
-				_ = a.root.Close()
-			}
-			return nil, err
+	s := &Server{exports: exports, links: map[string]*export{}}
+	for _, ro := range readOnly {
+		s.readOnly = append(s.readOnly, path.Clean(ro))
+	}
+	baseRoots := map[string]*os.Root{}
+	closeAll := func() {
+		_ = exports.Close()
+		for _, r := range baseRoots {
+			_ = r.Close()
 		}
-		s.allowed = append(s.allowed, allowedRoot{dir: path.Clean(dir), root: root})
+	}
+	for link, target := range agentLinks(exportsDir) {
+		base, rel, ok := matchBase(bases, target)
+		if !ok {
+			continue
+		}
+		br, ok := baseRoots[base]
+		if !ok {
+			if br, err = os.OpenRoot(base); err != nil {
+				closeAll()
+				return nil, err
+			}
+			baseRoots[base] = br
+		}
+		if e := openExport(br, rel); e != nil {
+			e.target = target
+			e.link = link
+			s.links[link] = e
+		}
 	}
 	return s, nil
+}
+
+// openExport opens rel under base as the root of a mount. A mount that is a file is confined
+// to its parent directory but only reachable through its own name.
+func openExport(base *os.Root, rel string) *export {
+	info, err := base.Stat(rel)
+	if err != nil {
+		return nil
+	}
+	if info.IsDir() {
+		r, err := base.OpenRoot(rel)
+		if err != nil {
+			return nil
+		}
+		return &export{root: r, rel: "."}
+	}
+	r, err := base.OpenRoot(path.Dir(rel))
+	if err != nil {
+		return nil
+	}
+	return &export{root: r, rel: path.Base(rel)}
 }
 
 // Serve runs an sftp.RequestServer over conn until the client disconnects, ctx is done,
@@ -141,51 +236,60 @@ func (s *Server) readAbsoluteSymlink(root *os.Root, rel string) (target string, 
 	return target, true, nil
 }
 
-// matchAllowedRoot reports whether target -- the literal text of a symlink -- names one of
-// s.allowed's directories, or a path under one of them, and if so returns that root and the
-// part of target relative to it ("." if target names the root's directory itself).
-func (s *Server) matchAllowedRoot(target string) (*os.Root, string, bool) {
-	clean := path.Clean(target)
-	for _, a := range s.allowed {
-		if clean == a.dir {
-			return a.root, ".", true
-		}
-		if rel, ok := strings.CutPrefix(clean, a.dir+"/"); ok {
-			return a.root, rel, true
+// redirect returns the export for the absolute symlink at rel within root. Only a symlink
+// that the agent created, found at the same place with the same target when New ran, has one;
+// any other absolute symlink yields os.ErrPermission.
+func (s *Server) redirect(root *os.Root, rel, target string) (*export, error) {
+	if root == s.exports {
+		if e, ok := s.links[rel]; ok && e.target == target {
+			return e, nil
 		}
 	}
-	return nil, "", false
+	return nil, os.ErrPermission
 }
 
 // walkDirs checks each component of dirs, relative to start, for an absolute symlink.
-// The first one found is redirected through matchAllowedRoot (os.ErrPermission if
-// unclaimed) and the walk stops, returning that root and the redirect's target joined
-// with the unwalked dirs. Relative symlinks and missing components stay in the prefix.
-func (s *Server) walkDirs(start *os.Root, dirs []string) (root *os.Root, prefix string, err error) {
+// The first one found is redirected (os.ErrPermission unless the agent created it) and the
+// walk stops, returning the export it leads to and its path joined with the unwalked dirs.
+// Relative symlinks and missing components stay in the prefix.
+func (s *Server) walkDirs(start *os.Root, dirs []string) (root *os.Root, prefix string, exp *export, err error) {
 	for i, comp := range dirs {
 		p := path.Join(prefix, comp)
 		target, ok, rerr := s.readAbsoluteSymlink(start, p)
 		if rerr != nil {
-			return nil, "", rerr
+			return nil, "", nil, rerr
 		}
 		if ok {
-			newRoot, newRel, allowed := s.matchAllowedRoot(target)
-			if !allowed {
-				return nil, "", os.ErrPermission
+			e, err := s.redirect(start, p, target)
+			if err != nil {
+				return nil, "", nil, err
 			}
-			rest := append([]string{newRel}, dirs[i+1:]...)
-			return newRoot, path.Join(rest...), nil
+			rest := append([]string{e.rel}, dirs[i+1:]...)
+			return e.root, path.Join(rest...), e, nil
 		}
 		prefix = p
 	}
-	return start, prefix, nil
+	return start, prefix, nil, nil
 }
 
 // resolved is the result of resolving a client-facing path: rel names the resolved entry
-// within root, one of the Server's long-lived, shared roots.
+// within root, one of the Server's long-lived, shared roots. exp is the export the path
+// lies in, nil for the exports tree itself. readOnly is set for paths under a read-only mount.
 type resolved struct {
-	root *os.Root
-	rel  string
+	root     *os.Root
+	rel      string
+	exp      *export
+	readOnly bool
+}
+
+// isReadOnly reports whether the exports-relative path rel is at or under a read-only mount.
+func (s *Server) isReadOnly(rel string) bool {
+	for _, ro := range s.readOnly {
+		if rel == ro || strings.HasPrefix(rel, ro+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // resolve maps a client path to the root and root-relative name that serve it. Every
@@ -194,17 +298,22 @@ type resolved struct {
 // and friends must see through a symlink leaf); false leaves it alone, symlink or not, for
 // operations that act on the entry itself (Remove, Mkdir, Lstat, Readlink).
 func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
-	dirs, leaf, ok := splitRel(rootRelative(p))
+	vis := rootRelative(p)
+	ro := s.isReadOnly(vis)
+	dirs, leaf, ok := splitRel(vis)
 	if !ok {
-		return &resolved{root: s.exports, rel: "."}, nil
+		return &resolved{root: s.exports, rel: ".", readOnly: ro}, nil
 	}
-	root, prefix, err := s.walkDirs(s.exports, dirs)
+	root, prefix, exp, err := s.walkDirs(s.exports, dirs)
 	if err != nil {
 		return nil, err
 	}
 	rel := path.Join(prefix, leaf)
 	if !followLeaf {
-		return &resolved{root: root, rel: rel}, nil
+		if ro, err = s.resolvedReadOnly(ro, root, rel, exp, false); err != nil {
+			return nil, err
+		}
+		return &resolved{root: root, rel: rel, exp: exp, readOnly: ro}, nil
 	}
 	for hops := 0; hops < maxRedirectHops; hops++ {
 		target, ok, rerr := s.readAbsoluteSymlink(root, rel)
@@ -212,15 +321,86 @@ func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
 			return nil, rerr
 		}
 		if !ok {
-			return &resolved{root: root, rel: rel}, nil
+			if ro, err = s.resolvedReadOnly(ro, root, rel, exp, true); err != nil {
+				return nil, err
+			}
+			return &resolved{root: root, rel: rel, exp: exp, readOnly: ro}, nil
 		}
-		newRoot, newRel, allowed := s.matchAllowedRoot(target)
-		if !allowed {
-			return nil, os.ErrPermission
+		e, err := s.redirect(root, rel, target)
+		if err != nil {
+			return nil, err
 		}
-		root, rel = newRoot, newRel
+		root, rel, exp = e.root, e.rel, e
 	}
 	return nil, fmt.Errorf("sftpserver: too many nested symlinks resolving %q", p)
+}
+
+// resolvedReadOnly returns true if ro is set or if rel, once the relative symlinks inside
+// the export exp are followed, lies under a read-only mount. A link in a writable mount to
+// a nested read-only mount is thereby read-only too.
+func (s *Server) resolvedReadOnly(ro bool, root *os.Root, rel string, exp *export, followLeaf bool) (bool, error) {
+	if ro || exp == nil || len(s.readOnly) == 0 {
+		return ro, nil
+	}
+	if exp.rel != "." {
+		return s.isReadOnly(exp.link), nil
+	}
+	canon, err := canonicalRel(root, rel, followLeaf)
+	if err != nil {
+		return false, err
+	}
+	return s.isReadOnly(path.Join(exp.link, canon)), nil
+}
+
+// maxRelativeLinks bounds the relative symlinks canonicalRel follows.
+const maxRelativeLinks = 40
+
+// canonicalRel returns rel with every relative symlink under root replaced by its target,
+// the leaf only if followLeaf is set. Absolute symlinks and missing entries are kept as is.
+func canonicalRel(root *os.Root, rel string, followLeaf bool) (string, error) {
+	pending := strings.Split(rel, "/")
+	var done []string
+	links := 0
+	for len(pending) > 0 {
+		comp := pending[0]
+		pending = pending[1:]
+		switch comp {
+		case "", ".":
+			continue
+		case "..":
+			if len(done) == 0 {
+				return "", os.ErrPermission
+			}
+			done = done[:len(done)-1]
+			continue
+		}
+		cand := path.Join(append(done, comp)...)
+		if len(pending) == 0 && !followLeaf {
+			done = append(done, comp)
+			break
+		}
+		info, err := root.Lstat(cand)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			done = append(done, comp)
+			continue
+		}
+		target, err := root.Readlink(cand)
+		if err != nil {
+			return "", err
+		}
+		if path.IsAbs(target) {
+			done = append(done, comp)
+			continue
+		}
+		if links++; links > maxRelativeLinks {
+			return "", fmt.Errorf("sftpserver: too many symbolic links resolving %q", rel)
+		}
+		pending = append(strings.Split(target, "/"), pending...)
+	}
+	if len(done) == 0 {
+		return ".", nil
+	}
+	return path.Join(done...), nil
 }
 
 // withTwoPaths resolves from and to independently, exactly as a single-path operation
@@ -237,6 +417,10 @@ func (s *Server) withTwoPaths(from, to string, op func(root *os.Root, fromRel, t
 	toRes, err := s.resolve(to, false)
 	if err != nil {
 		return err
+	}
+
+	if fromRes.readOnly || toRes.readOnly {
+		return os.ErrPermission
 	}
 
 	same, err := sameRoot(fromRes.root, toRes.root)
@@ -278,7 +462,15 @@ func (s *Server) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 
 // Filewrite implements sftp.FileWriter.
 func (s *Server) Filewrite(r *sftp.Request) (io.WriterAt, error) {
+	if s.isReadOnly(rootRelative(r.Filepath)) {
+		return nil, os.ErrPermission
+	}
 	return s.OpenFile(r)
+}
+
+// writes reports whether f asks for anything but reading.
+func writes(f sftp.FileOpenFlags) bool {
+	return f.Write || f.Append || f.Creat || f.Trunc || f.Excl
 }
 
 // OpenFile implements sftp.OpenFileWriter, needed because some clients (e.g. sshfs) open
@@ -287,6 +479,9 @@ func (s *Server) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
 	res, err := s.resolve(r.Filepath, true)
 	if err != nil {
 		return nil, err
+	}
+	if res.readOnly && writes(r.Pflags()) {
+		return nil, os.ErrPermission
 	}
 	return res.root.OpenFile(res.rel, openFlags(r.Pflags()), 0o644)
 }
@@ -324,6 +519,9 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
+		if res.readOnly {
+			return os.ErrPermission
+		}
 		return s.setstat(res.root, res.rel, r)
 
 	case "Rename":
@@ -343,12 +541,18 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
+		if res.readOnly {
+			return os.ErrPermission
+		}
 		return res.root.Remove(res.rel)
 
 	case "Mkdir":
 		res, err := s.resolve(r.Filepath, false)
 		if err != nil {
 			return err
+		}
+		if res.readOnly {
+			return os.ErrPermission
 		}
 		return res.root.Mkdir(res.rel, 0o755)
 
@@ -359,10 +563,12 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 
 	case "Symlink":
 		// r.Filepath carries the symlink's target text and r.Target its link path
-		// (see request-example.go's Filecmd); the target text is stored verbatim,
-		// not resolved against any root.
+		// (see request-example.go's Filecmd).
 		res, err := s.resolve(r.Target, false)
 		if err != nil {
+			return err
+		}
+		if err := s.checkSymlink(res, r.Target, r.Filepath); err != nil {
 			return err
 		}
 		return res.root.Symlink(r.Filepath, res.rel)
@@ -370,6 +576,22 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 	default:
 		return fmt.Errorf("sftpserver: unsupported Filecmd method %q", r.Method)
 	}
+}
+
+// checkSymlink refuses a client-created symlink unless it lives inside a mount, has a relative
+// target that stays inside that mount, and leads neither from nor into a read-only mount.
+func (s *Server) checkSymlink(res *resolved, linkPath, text string) error {
+	if res.readOnly || res.exp == nil || path.IsAbs(text) {
+		return os.ErrPermission
+	}
+	inMount := path.Join(path.Dir(res.rel), text)
+	if inMount == ".." || strings.HasPrefix(inMount, "../") {
+		return os.ErrPermission
+	}
+	if s.isReadOnly(path.Join(path.Dir(rootRelative(linkPath)), text)) {
+		return os.ErrPermission
+	}
+	return nil
 }
 
 // setstat applies the attributes carried by a Setstat request to rel under root, in the same

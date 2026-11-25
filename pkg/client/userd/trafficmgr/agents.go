@@ -165,7 +165,9 @@ func (s *session) handleAgentPodSnapshot(ctx context.Context, pods []agentPod, c
 			// Not covered by this snapshot; cancelUnwanted below decides its fate.
 			return true
 		case ingestPodKeepAlive:
-			s.startIngestPodAccess(ctx, ig, false)
+			if err := s.startIngestPodAccess(ctx, ig, false); err != nil {
+				clog.Errorf(ctx, "ingest %s: %v", key, err)
+			}
 			return true
 		}
 
@@ -197,7 +199,9 @@ func (s *session) handleAgentPodSnapshot(ctx context.Context, pods []agentPod, c
 			return true
 		}
 		ig.AgentInfo = ai
-		s.startIngestPodAccess(ctx, ig, false)
+		if err := s.startIngestPodAccess(ctx, ig, false); err != nil {
+			clog.Errorf(ctx, "ingest %s: %v", key, err)
+		}
 		return true
 	})
 	s.ingestTracker.cancelUnwanted(ctx, covered)

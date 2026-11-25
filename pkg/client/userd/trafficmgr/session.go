@@ -36,11 +36,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/sessioncred"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -87,6 +87,8 @@ type workloadWatch struct {
 }
 
 type session struct {
+	targetsPublisher interceptTargetsPublisher
+
 	*k8s.Cluster
 	service            userd.Service
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
@@ -1680,6 +1682,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 		}
 		if err == nil {
 			clog.Info(s, "Reconnected to root daemon")
+			s.resendInterceptTargets()
 			s.updateDaemonNamespaces()
 			return
 		}
@@ -1726,14 +1729,9 @@ func (s *session) eachWorkload(namespaces []string, do func(kind manager.Workloa
 }
 
 func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
-	fw := forwarder.New(types.PortAndProto{
-		Port:  srcPort,
-		Proto: ap.Proto,
-	}, tunnel.ClientToAgent, ap.AddrPort)
-
 	go func() {
 		ctx := clog.WithGroup(s, fmt.Sprintf("%d=>%s", srcPort, ap))
-		err := fw.Serve(ctx, nil)
+		err := remotefs.ServeLocal(ctx, types.PortAndProto{Port: srcPort, Proto: ap.Proto}, ap.AddrPort)
 		if err != nil && ctx.Err() == nil {
 			clog.Errorf(ctx, "port-forwarder failed with %v", err)
 		}

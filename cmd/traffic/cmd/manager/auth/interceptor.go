@@ -76,9 +76,10 @@ func skipAuth(method string) bool {
 }
 
 // authenticate reads the bearer token from ctx's incoming metadata and returns a context carrying
-// the resulting Principal. In ModePermissive, failures are logged and never fatal to the call. In
-// ModeEnforcing, a missing or invalid token is rejected and an infrastructure failure is reported
-// as Unavailable.
+// the resulting Principal. In ModePermissive, a missing or invalid token is logged and the call is
+// served unauthenticated. In ModeEnforcing, a missing or invalid token is rejected and an
+// infrastructure failure is reported as Unavailable. In both modes, a token that could not be
+// reviewed because the review limit was reached is rejected with ResourceExhausted.
 func (i *Interceptor) authenticate(ctx context.Context, method string) (context.Context, error) {
 	enforcing := i.mode == ModeEnforcing
 	token, present := bearerTokenFrom(ctx)

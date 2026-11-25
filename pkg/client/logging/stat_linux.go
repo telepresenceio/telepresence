@@ -3,7 +3,6 @@ package logging
 import (
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -87,8 +86,8 @@ func (u fileInfo) Size() int64 {
 	return u.size
 }
 
-func (u fileInfo) SetOwnerAndGroup(name string) error {
-	return os.Chown(name, u.uid, u.gid)
+func (u fileInfo) SetOwnerAndGroup(f dos.File) error {
+	return chownFile(f, u.uid, u.gid)
 }
 
 func (u fileInfo) HaveSameOwnerAndGroup(other SysInfo) bool {

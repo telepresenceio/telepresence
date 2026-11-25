@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +31,7 @@ const (
 	tcpConnTTL       = 2 * time.Hour // Default tcp_keepalive_time on Linux
 	udpConnTTL       = 2 * time.Second
 	localDialTimeout = 2 * time.Second
+	maxDialTimeout   = time.Minute
 	slowDialResponse = 2 * time.Second
 )
 
@@ -40,6 +42,7 @@ const (
 	maxConcurrentDialRejecters  = 16
 	minDialRequestTimeout       = time.Second
 	maxDialRejectTimeout        = 5 * time.Second
+	maxDialTiming               = time.Hour
 )
 
 const (
@@ -156,7 +159,7 @@ func (h *dialer) Start(ctx context.Context) {
 			// Set up the idle timer to close and release this handler when it's been idle for a while.
 			h.connected = connecting
 
-			dto := h.stream.DialTimeout()
+			dto := min(h.stream.DialTimeout(), maxDialTimeout)
 			dst := id.Destination()
 			dstAddr := dst.Addr()
 			if dstAddr.Is6() {
@@ -449,16 +452,24 @@ type DialMetrics interface {
 	IncomingDialError()
 }
 
+// DialAllowed decides whether a dial request from a traffic-agent may be served. A request
+// is served only when it returns true; every other request is answered with a DialReject.
+type DialAllowed func(id ConnID) bool
+
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then
 // attaches a dialer Endpoint to that tunnel is spawned for each request that arrives. The method blocks until
 // the dialStream is closed. If metrics is non-nil it receives one IncomingDial call per accepted request, and
 // IncomingDialError when the request cannot be served.
+//
+// A request with a malformed ConnID is dropped. A request for which allowed is nil or returns false
+// is rejected without dialing.
 func DialWaitLoop(
 	ctx context.Context,
 	tag Tag,
 	tunnelProvider Provider,
 	dialStream agent.Agent_WatchDialClient,
 	sessionID SessionID,
+	allowed DialAllowed,
 	metrics DialMetrics,
 ) error {
 	// create ctx to clean up leftover dialRespond if waitloop dies
@@ -469,6 +480,21 @@ func DialWaitLoop(
 	for ctx.Err() == nil {
 		dr, err := dialStream.Recv()
 		if err == nil {
+			id := ConnID(dr.ConnId)
+			if !id.Valid() {
+				clog.Errorf(ctx, "!! %s dropping dial request with malformed ConnID of %d bytes", tag, len(dr.ConnId))
+				continue
+			}
+			if !validDialTiming(dr) {
+				clog.Errorf(ctx, "!! %s %s dropping dial request with invalid timing: roundtrip latency %d, dial timeout %d",
+					tag, id, dr.RoundtripLatency, dr.DialTimeout)
+				continue
+			}
+			if allowed == nil || !allowed(id) {
+				clog.Errorf(ctx, "!! %s %s, dial request refused: destination is not an intercept target", tag, id)
+				rejectAsync(ctx, tag, tunnelProvider, dr, sessionID, dialRejecters)
+				continue
+			}
 			queueStart := time.Now()
 			queueTimer := time.NewTimer(dialRequestTimeout(dr))
 			select {
@@ -486,20 +512,8 @@ func DialWaitLoop(
 				queueTimer.Stop()
 				return nil
 			case <-queueTimer.C:
-				id := ConnID(dr.ConnId)
 				clog.Errorf(ctx, "!! %s %s, dial responder queue saturated for %s; rejecting", tag, id, time.Since(queueStart))
-				select {
-				case dialRejecters <- struct{}{}:
-					dr := dr
-					go func() {
-						defer func() {
-							<-dialRejecters
-						}()
-						dialReject(ctx, tag, tunnelProvider, dr, sessionID)
-					}()
-				default:
-					clog.Errorf(ctx, "!! %s %s, dial reject queue saturated; dropping request", tag, id)
-				}
+				rejectAsync(ctx, tag, tunnelProvider, dr, sessionID, dialRejecters)
 				continue
 			}
 			if metrics != nil {
@@ -510,6 +524,7 @@ func DialWaitLoop(
 				defer func() {
 					<-dialResponders
 				}()
+				defer recoverDial(ctx, tag, id)
 				dialRespond(ctx, tag, tunnelProvider, dr, sessionID, metrics)
 			}()
 			continue
@@ -527,6 +542,37 @@ func DialWaitLoop(
 		return fmt.Errorf("dial request stream recv: %w", err)
 	}
 	return nil
+}
+
+// rejectAsync answers dr with a DialReject on a new goroutine, or drops it when the limit of
+// concurrent rejecters is reached.
+func rejectAsync(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.DialRequest, sessionID SessionID, rejecters chan struct{}) {
+	select {
+	case rejecters <- struct{}{}:
+		id := ConnID(dr.ConnId)
+		go func() {
+			defer func() {
+				<-rejecters
+			}()
+			defer recoverDial(ctx, tag, id)
+			dialReject(ctx, tag, tunnelProvider, dr, sessionID)
+		}()
+	default:
+		clog.Errorf(ctx, "!! %s %s, dial reject queue saturated; dropping request", tag, ConnID(dr.ConnId))
+	}
+}
+
+// recoverDial logs a panic in a dial goroutine, which then ends without taking the process down.
+func recoverDial(ctx context.Context, tag Tag, id ConnID) {
+	if r := recover(); r != nil {
+		clog.Errorf(ctx, "!! %s %s, panic in dial handler: %v\n%s", tag, id, r, debug.Stack())
+	}
+}
+
+// validDialTiming returns true if the roundtrip latency and the dial timeout are between zero and maxDialTiming.
+func validDialTiming(dr *rpc.DialRequest) bool {
+	return dr.RoundtripLatency >= 0 && dr.RoundtripLatency <= int64(maxDialTiming) &&
+		dr.DialTimeout >= 0 && dr.DialTimeout <= int64(maxDialTiming)
 }
 
 func dialRequestTimeout(dr *rpc.DialRequest) time.Duration {

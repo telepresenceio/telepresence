@@ -59,14 +59,19 @@ func serveExternal(ctx context.Context, svc Service) error {
 	}
 
 	ki := k8sapi.GetK8sInterface(ctx)
-	caPool := auth.NewClientCAPool(ctx, ki)
 	tracker := auth.NewExternalConnTracker()
-	// OnChange must be registered before Start (see ClientCAPool.OnChange); this pool
-	// is dedicated to the external listener, so it doesn't conflict with the
-	// mintedTokens.InvalidateAll callback the x509 auth-only listener's own pool
-	// carries.
-	caPool.OnChange(tracker.CloseStale)
-	go caPool.Start(ctx)
+	// Client-certificate authentication is active only when x509 authentication is
+	// enabled; a nil pool leaves the listener bearer-token only.
+	var caPool *auth.ClientCAPool
+	if env.AuthX509Port != 0 {
+		caPool = auth.NewClientCAPool(ctx, ki)
+		// OnChange must be registered before Start (see ClientCAPool.OnChange); this pool
+		// is dedicated to the external listener, so it doesn't conflict with the
+		// mintedTokens.InvalidateAll callback the x509 auth-only listener's own pool
+		// carries.
+		caPool.OnChange(tracker.CloseStale)
+		go caPool.Start(ctx)
+	}
 
 	metrics := auth.NewMetrics("external")
 	authenticator := auth.NewAuthenticator(ki, auth.WithMetrics(metrics), auth.WithReviewAdmission())

@@ -10,6 +10,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -70,5 +71,38 @@ func TestManagerHostKeepsLegacyHostWhenClusterDomainUnknown(t *testing.T) {
 	want := "traffic-manager.traffic"
 	if got != want {
 		t.Fatalf("ManagerHost() = %q, want %q", got, want)
+	}
+}
+
+func serviceLessPod(containers ...core.Container) *core.PodTemplateSpec {
+	return &core.PodTemplateSpec{Spec: core.PodSpec{Containers: containers}}
+}
+
+func TestUndeclaredNumericPortOnMultiContainerPodIsUserError(t *testing.T) {
+	pod := serviceLessPod(
+		core.Container{Name: "a", Ports: []core.ContainerPort{{ContainerPort: 8080, Protocol: core.ProtocolTCP}}},
+		core.Container{Name: "b"},
+	)
+	cfg := &GeneratorConfig{AgentPort: 9900}
+	_, err := cfg.appendServiceLessAgentContainerConfigs(pod, []types.PortIdentifier{"9999"},
+		func(int32) uint16 { return 9900 }, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "9999") {
+		t.Fatalf("error = %v, want one naming port 9999", err)
+	}
+	if errcat.GetCategory(err) != errcat.User {
+		t.Fatalf("error category = %v, want User", errcat.GetCategory(err))
+	}
+}
+
+func TestUndeclaredNumericPortOnSingleContainerPodIsAssigned(t *testing.T) {
+	pod := serviceLessPod(core.Container{Name: "app"})
+	cfg := &GeneratorConfig{AgentPort: 9900}
+	ccs, err := cfg.appendServiceLessAgentContainerConfigs(pod, []types.PortIdentifier{"9999"},
+		func(int32) uint16 { return 9900 }, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ccs) != 1 || ccs[0].Name != "app" || len(ccs[0].Intercepts) != 1 || ccs[0].Intercepts[0].ContainerPort != 9999 {
+		t.Fatalf("unexpected container configs: %+v", ccs)
 	}
 }

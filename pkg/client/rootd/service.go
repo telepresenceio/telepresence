@@ -102,7 +102,7 @@ func Command(ctx context.Context) *cobra.Command {
 "managed" is like "std", but without timestamps and level tags for "error" or "info" messages`)
 	flags.String(cacheDirFlag, "", `Path to the Telepresence cache directory`)
 	flags.String(configFlag, "", `Path to the Telepresence configuration file`)
-	flags.String(addressFlag, "", "TCP address to listen to")
+	flags.String(addressFlag, "", "TCP address to listen to. With port 0, the daemon chooses a port and writes it to its info file.")
 	flags.Bool(managedFlag, false, "The daemon is managed by the system and will disconnect, but not exit, when it receives RPC calls to Quit")
 	return cmd
 }
@@ -239,7 +239,7 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 
 	c, cancel := context.WithCancel(c)
 	g := log.NewGroup(c)
-	runAliveAndCancellation(g, daemonAddress.Port(), cancel, managed)
+	runAliveAndCancellation(g, daemonAddress.Port(), daemon.IsEphemeralAddress(addrStr), cancel, managed)
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
@@ -269,7 +269,9 @@ func (s *service) waitSessionDone(ctx context.Context) {
 	}
 }
 
-func runAliveAndCancellation(g log.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
+// runAliveAndCancellation keeps the info file fresh. A managed daemon creates the file; any other daemon finds it
+// created by its launcher, and completes it with its port when it was started with a port chosen by the system.
+func runAliveAndCancellation(g log.Group, daemonPort uint16, publish bool, cancel context.CancelFunc, managed bool) {
 	g.Go("info-kicker", func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
 		il := daemon.NewRootInfoLoader(ctx, managed)
@@ -277,6 +279,10 @@ func runAliveAndCancellation(g log.Group, daemonPort uint16, cancel context.Canc
 			info := &daemon.RootInfo{DaemonPort: daemonPort}
 			err := il.SaveInfo(info, daemon.InfoFileName)
 			if err != nil {
+				return err
+			}
+		} else if publish {
+			if err := il.PublishPort(daemon.InfoFileName, daemonPort); err != nil {
 				return err
 			}
 		}

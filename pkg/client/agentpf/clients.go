@@ -83,6 +83,10 @@ const (
 	dialWatcherReconnectResetTime = 30 * time.Second
 )
 
+// DialPolicy reports whether a traffic-agent of the given workload may ask this client to
+// dial the connection described by id.
+type DialPolicy func(namespace, workload string, id tunnel.ConnID) bool
+
 // connectRetryInterval is how long WaitForIP waits between attempts to reach an agent that the
 // watch reports as present but that isn't dialable yet.
 const connectRetryInterval = 200 * time.Millisecond
@@ -399,7 +403,7 @@ func (ac *client) runDialWatcher(ctx context.Context, watchID uint64) {
 					bo.Reset()
 				}
 				lastConnected = time.Now()
-				watchErr = tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(cli), dialStream, tunnel.SessionID(session.SessionId), metrics)
+				watchErr = tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(cli), dialStream, tunnel.SessionID(session.SessionId), ac.dialAllowed(), metrics)
 			}
 			err = watchErr
 		}
@@ -453,6 +457,11 @@ type Clients interface {
 	// callback for every dial request the dial watchers accept. Passing nil
 	// disables the callback. Safe to call at any time.
 	SetDialMetrics(m tunnel.DialMetrics)
+
+	// SetDialPolicy installs the policy that decides which destinations the
+	// traffic-agents of a workload may ask this client to dial. Until a policy
+	// is installed, every dial request is refused. Safe to call at any time.
+	SetDialPolicy(p DialPolicy)
 
 	// SetChangeListener installs a callback that is invoked whenever an agent
 	// pod is added to or removed from the watched set. Passing nil disables the
@@ -523,6 +532,9 @@ type clients struct {
 	// creation.
 	dialMetricsMu sync.RWMutex
 	dialMetrics   tunnel.DialMetrics
+
+	// dialPolicy decides which dial requests the dial watchers serve. Nil means none.
+	dialPolicy atomic.Pointer[DialPolicy]
 
 	// changeListener, when non-nil, is invoked whenever an agent pod is added
 	// to or removed from the watched set. Guarded by changeListenerMu.
@@ -739,6 +751,31 @@ func (s *clients) SetDialMetrics(m tunnel.DialMetrics) {
 	s.dialMetricsMu.Lock()
 	s.dialMetrics = m
 	s.dialMetricsMu.Unlock()
+}
+
+func (s *clients) SetDialPolicy(p DialPolicy) {
+	if p == nil {
+		s.dialPolicy.Store(nil)
+		return
+	}
+	s.dialPolicy.Store(&p)
+}
+
+// dialAllowed returns the DialAllowed that the dial watcher of ac passes to the dial wait loop.
+func (ac *client) dialAllowed() tunnel.DialAllowed {
+	return func(id tunnel.ConnID) bool {
+		if ac.owner == nil {
+			return false
+		}
+		p := ac.owner.dialPolicy.Load()
+		if p == nil {
+			return false
+		}
+		ac.RLock()
+		ns, wl := ac.info.Namespace, ac.info.WorkloadName
+		ac.RUnlock()
+		return (*p)(ns, wl, id)
+	}
 }
 
 func (s *clients) loadDialMetrics() tunnel.DialMetrics {

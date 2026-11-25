@@ -60,6 +60,7 @@ func (s *Apply) Test_ApplyCreatesReusesUnchanged() {
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
 	s.Workload(workloads.Echo(stateIngestWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	mf := writeManifest(t, s.R(), ctx, connectionManifest(ns, stateLocalPort, false))
@@ -98,6 +99,7 @@ func (s *Apply) Test_ApplyAttachmentDrift() {
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
 	s.Workload(workloads.Echo(stateIngestWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	mf := writeManifest(t, s.R(), ctx, connectionManifest(ns, stateLocalPort, false))
@@ -134,6 +136,7 @@ func (s *Apply) Test_ApplyConnectionDrift() {
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
 	s.Workload(workloads.Echo(stateIngestWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	mf := writeManifest(t, s.R(), ctx, connectionManifest(ns, stateLocalPort, false))

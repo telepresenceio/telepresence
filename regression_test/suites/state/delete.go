@@ -33,6 +33,7 @@ func (s *Delete) Test_Delete() {
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
 	s.Workload(workloads.Echo(stateIngestWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	mf := writeManifest(t, s.R(), ctx, connectionManifest(ns, stateLocalPort, false))
@@ -71,6 +72,7 @@ func (s *Delete) Test_DeleteAbsentAttachment() {
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
 	s.Workload(workloads.Echo(stateIngestWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	mf := writeManifest(t, s.R(), ctx, connectionManifest(ns, stateLocalPort, false))

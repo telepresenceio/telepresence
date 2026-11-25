@@ -270,7 +270,7 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 {{- end }}
 {{- end }}
 {{- if and
-  (dig "argoRollouts" "enabled" false $.Values.workloads)
+  (or (dig "deployments" "enabled" true $.Values.workloads) (dig "argoRollouts" "enabled" false $.Values.workloads))
   (not (dig "replicaSets" "enabled" true $.Values.workloads))
 }}
 - apiGroups:

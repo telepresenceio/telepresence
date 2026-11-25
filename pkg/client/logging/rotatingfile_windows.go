@@ -6,6 +6,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// noFollow has no equivalent on Windows.
+const noFollow = 0
+
 // IsTerminal returns whether the given file descriptor is a terminal.
 var IsTerminal = func(fd int) bool { //nolint:gochecknoglobals // os specific func replacement
 	return false

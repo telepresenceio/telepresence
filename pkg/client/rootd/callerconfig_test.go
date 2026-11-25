@@ -119,7 +119,7 @@ func TestSessionConfig_takesAllowedSectionsFromTheCaller(t *testing.T) {
 		cfg.Timeouts().PrivateHelm = 3 * time.Minute
 		cfg.Grpc().WatchRetryInterval = 3 * time.Second
 	})
-	cfg, err := sessionConfig(client.GetDefaultConfig(), data, false)
+	cfg, err := sessionConfig(t.Context(), client.GetDefaultConfig(), data, false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"example.com"}, cfg.DNS().Excludes)
 	assert.Equal(t, 7*time.Second, cfg.DNS().LookupTimeout)
@@ -151,7 +151,7 @@ func TestSessionConfig_keepsTheOwnSections(t *testing.T) {
 		cfg.Usage().Enabled = true
 		cfg.Cluster().ForceSPDY = true
 	})
-	cfg, err := sessionConfig(own, data, false)
+	cfg, err := sessionConfig(t.Context(), own, data, false)
 	require.NoError(t, err)
 	assert.Equal(t, "own.example.com", cfg.Images().PrivateRegistry)
 	assert.Empty(t, cfg.Images().PrivateAgentImage)
@@ -169,7 +169,7 @@ func TestSessionConfig_doesNotChangeTheOwnConfiguration(t *testing.T) {
 	data := callerConfigJSON(t, func(cfg client.Config) {
 		cfg.DNS().Excludes = []string{"example.com"}
 	})
-	_, err := sessionConfig(own, data, false)
+	_, err := sessionConfig(t.Context(), own, data, false)
 	require.NoError(t, err)
 	assert.Empty(t, own.DNS().Excludes)
 }
@@ -179,11 +179,11 @@ func TestSessionConfig_logLevels(t *testing.T) {
 	data := callerConfigJSON(t, func(cfg client.Config) {
 		cfg.LogLevels().RootDaemon = -4
 	})
-	cfg, err := sessionConfig(own, data, false)
+	cfg, err := sessionConfig(t.Context(), own, data, false)
 	require.NoError(t, err)
 	assert.EqualValues(t, -4, cfg.LogLevels().RootDaemon)
 
-	cfg, err = sessionConfig(own, data, true)
+	cfg, err = sessionConfig(t.Context(), own, data, true)
 	require.NoError(t, err)
 	assert.Equal(t, own.LogLevels().RootDaemon, cfg.LogLevels().RootDaemon)
 }
@@ -191,7 +191,7 @@ func TestSessionConfig_logLevels(t *testing.T) {
 func TestSessionConfig_emptyCallerConfiguration(t *testing.T) {
 	own := client.GetDefaultConfig()
 	own.Cluster().ForceSPDY = true
-	cfg, err := sessionConfig(own, nil, false)
+	cfg, err := sessionConfig(t.Context(), own, nil, false)
 	require.NoError(t, err)
 	assert.True(t, cfg.Cluster().ForceSPDY)
 }
@@ -216,7 +216,7 @@ func TestSessionConfig_managerServerCA(t *testing.T) {
 			data := callerConfigJSON(t, func(cfg client.Config) {
 				cfg.Cluster().ManagerServerCA = tt.spec
 			})
-			cfg, err := sessionConfig(client.GetDefaultConfig(), data, false)
+			cfg, err := sessionConfig(t.Context(), client.GetDefaultConfig(), data, false)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.NotContains(t, err.Error(), tt.spec)
@@ -229,4 +229,15 @@ func TestSessionConfig_managerServerCA(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSessionConfig_dropsInvalidSuffixes(t *testing.T) {
+	data := callerConfigJSON(t, func(cfg client.Config) {
+		cfg.DNS().IncludeSuffixes = []string{".good", "../../evil", "a/b"}
+		cfg.DNS().ExcludeSuffixes = []string{".ok", "x\ny"}
+	})
+	cfg, err := sessionConfig(t.Context(), client.GetDefaultConfig(), data, false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{".good"}, cfg.DNS().IncludeSuffixes)
+	assert.Equal(t, []string{".ok"}, cfg.DNS().ExcludeSuffixes)
 }

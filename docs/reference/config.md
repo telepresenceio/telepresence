@@ -283,6 +283,10 @@ When using `neverProxySubnets` you provide a list of subnets. These will never b
 even if they fall within the subnets (pod or service) for the cluster. Instead, whatever route they have before
 telepresence connects is the route they will keep.
 
+A workload whose pod address is covered by a never-proxy subnet can't be intercepted, replaced or ingested, because
+the client has no route to that pod through Telepresence. The attempt fails with an error that names the address and the
+subnet. An `alsoProxySubnets` entry inside the never-proxy subnet that contains the pod's address lifts the restriction.
+
 Telepresence also adds runtime never-proxy routes for local DNS server IPs when they fall inside a subnet that
 Telepresence is about to route. This prevents excluded DNS lookups from being sent into the cluster when the
 workstation's resolver is on a network that overlaps with a pod, service, or also-proxied subnet.

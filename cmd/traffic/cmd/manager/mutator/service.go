@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-const jsonContentType = `application/json`
+const (
+	jsonContentType = `application/json`
+
+	// maxRequestBodySize bounds the body of a webhook request.
+	maxRequestBodySize = 8 << 20
+
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 30 * time.Second
+	writeTimeout      = 90 * time.Second
+	idleTimeout       = 2 * time.Minute
+)
 
 var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer() //nolint:gochecknoglobals // constant
 
@@ -125,6 +136,19 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 // only when node-agent mode is enabled; a nil value skips the reap.
 type NodeAgentReaper func(ctx context.Context) error
 
+// UninstallAuthenticator validates the bearer token of an /uninstall request. It returns
+// nil only when the token belongs to the pre-delete hook's ServiceAccount.
+type UninstallAuthenticator func(ctx context.Context, token string) error
+
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+		return "", false
+	}
+	return strings.TrimSpace(h[len(prefix):]), true
+}
+
 // uninstallHandler returns the /uninstall handler shared by ServeMutator's
 // TLS server and ServeNodeAgentUninstall's plain-HTTP server. It runs both
 // the injector's sidecar rollback (ai.Uninstall, skipped when ai is nil, as
@@ -135,31 +159,45 @@ type NodeAgentReaper func(ctx context.Context) error
 // logged rather than surfaced to the caller -- the hook already treats the
 // request as best-effort (`|| exit 0`).
 //
+// The caller must present the bearer token of the pre-delete hook's
+// ServiceAccount; authn decides.
+//
 // The actions run under managerCtx, not the request's context. The Helm
 // hook can disconnect before sidecars finish rolling back, and request
 // cancellation must not abandon that reconciliation.
-func uninstallHandler(managerCtx context.Context, ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
+func uninstallHandler(managerCtx context.Context, authn UninstallAuthenticator, ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestCtx := r.Context()
 		clog.Debug(requestCtx, "Received uninstall request...")
-		statusCode, err := serveRequest(managerCtx, r, http.MethodDelete, func(ctx context.Context) {
-			if ai != nil {
-				ai.Uninstall(ctx)
-			}
-			if reap != nil {
-				if rErr := reap(ctx); rErr != nil {
-					clog.Errorf(ctx, "unable to reap node-agent jobs: %v", rErr)
-				}
-			}
-		})
-		if err != nil {
-			clog.Errorf(requestCtx, "error handling uninstall request: %v", err)
-			w.WriteHeader(statusCode)
-			_, _ = w.Write([]byte(err.Error()))
-		} else {
-			clog.Debug(requestCtx, "uninstall request handled successfully")
-			w.WriteHeader(http.StatusOK)
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+		token, ok := bearerToken(r)
+		if !ok {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if authn == nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if err := authn(requestCtx, token); err != nil {
+			clog.Errorf(requestCtx, "uninstall request refused: %v", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if ai != nil {
+			ai.Uninstall(managerCtx)
+		}
+		if reap != nil {
+			if rErr := reap(managerCtx); rErr != nil {
+				clog.Errorf(managerCtx, "unable to reap node-agent jobs: %v", rErr)
+			}
+		}
+		clog.Debug(requestCtx, "uninstall request handled successfully")
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -167,14 +205,14 @@ func healthzHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorCertGetter, reapNodeAgentJobs NodeAgentReaper) error {
+func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorCertGetter, reapNodeAgentJobs NodeAgentReaper, authn UninstallAuthenticator) error {
 	cw := GetMap(ctx)
 	ai := NewAgentInjectorFunc(ctx, cw)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		rsp, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		rsp, statusCode, err := serveMutatingFunc(ctx, w, r, ai.Inject)
 		h := w.Header()
 		if err != nil {
 			clog.Errorf(ctx, "error handling webhook request: %v", err)
@@ -188,7 +226,7 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 			clog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
-	mux.HandleFunc("/uninstall", uninstallHandler(ctx, ai, reapNodeAgentJobs))
+	mux.HandleFunc("/uninstall", uninstallHandler(ctx, authn, ai, reapNodeAgentJobs))
 	mux.HandleFunc("/healthz", healthzHandler)
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
@@ -202,8 +240,12 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 		wr: lg.Writer(),
 	})
 	server := http.Server{
-		Handler:  mux,
-		ErrorLog: lg,
+		Handler:           mux,
+		ErrorLog:          lg,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 		BaseContext: func(n net.Listener) context.Context {
 			return ctx
 		},
@@ -230,17 +272,21 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 // same port the webhook server would bind (managerutil.Env.MutatorWebhookPort,
 // which the chart's agent-injector Service always targets by name
 // regardless of which mode created the listening process).
-func ServeNodeAgentUninstall(ctx context.Context, reapNodeAgentJobs NodeAgentReaper) error {
+func ServeNodeAgentUninstall(ctx context.Context, reapNodeAgentJobs NodeAgentReaper, authn UninstallAuthenticator) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/uninstall", uninstallHandler(ctx, nil, reapNodeAgentJobs))
+	mux.HandleFunc("/uninstall", uninstallHandler(ctx, authn, nil, reapNodeAgentJobs))
 	mux.HandleFunc("/healthz", healthzHandler)
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
 	lg := clog.StdLogger(ctx, slog.LevelInfo)
 	lg.SetPrefix(fmt.Sprintf("%d/", port))
 	server := &http.Server{
-		Handler:  mux,
-		ErrorLog: lg,
+		Handler:           mux,
+		ErrorLog:          lg,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 		BaseContext: func(n net.Listener) context.Context {
 			return ctx
 		},
@@ -339,25 +385,21 @@ func isNamespaceOfInterest(ns string) bool {
 	return true
 }
 
-func serveRequest(ctx context.Context, r *http.Request, method string, f func(ctx context.Context)) (int, error) {
-	if r.Method != method {
-		return http.StatusMethodNotAllowed, fmt.Errorf("invalid method %s, only %s requests are allowed", r.Method, method)
-	}
-	f(ctx)
-	return 0, nil
-}
-
 // serveMutatingFunc is a helper function to call a mutatorFunc.
-func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]byte, int, error) {
+func serveMutatingFunc(ctx context.Context, w http.ResponseWriter, r *http.Request, mf mutatorFunc) ([]byte, int, error) {
 	// Request validations.
 	// Only handle POST requests with a body and json content type.
 	if r.Method != http.MethodPost {
 		return nil, http.StatusMethodNotAllowed, fmt.Errorf("invalid method %s, only POST requests are allowed", r.Method)
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodySize))
 	_ = r.Body.Close()
 	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("request body exceeds %d bytes", maxRequestBodySize)
+		}
 		return nil, http.StatusBadRequest, fmt.Errorf("could not read request body: %w", err)
 	}
 

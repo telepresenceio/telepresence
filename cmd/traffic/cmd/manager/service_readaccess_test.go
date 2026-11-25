@@ -16,6 +16,7 @@ import (
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientfeatures "k8s.io/client-go/features"
 	clientfeaturestesting "k8s.io/client-go/features/testing"
 	"k8s.io/client-go/kubernetes/fake"
@@ -73,7 +74,7 @@ func readFixtures() []runtime.Object {
 	objs := grantFixtures()
 	for _, name := range []string{"hello", "demo"} {
 		objs = append(objs, &apps.Deployment{
-			ObjectMeta: meta.ObjectMeta{Name: name, Namespace: "default"},
+			ObjectMeta: meta.ObjectMeta{Name: name, Namespace: "default", UID: types.UID(name + "-deployment-uid")},
 			Spec: apps.DeploymentSpec{
 				Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": name}},
 				Template: core.PodTemplateSpec{

@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -245,24 +247,27 @@ func addRequestTaps(ctx context.Context, request *http.Request, count, cacheSize
 	// Write only the request header to the tap pipes. The body will be propagated by the
 	// teeReader below.
 	//
-	// request.Write requires that the number of body bytes it writes matches a declared,
-	// known Content-Length, so an empty stand-in body only works when Content-Length is
-	// zero or unknown (chunked). When a positive length is declared, feed it that many
-	// zero bytes instead so the write succeeds; headerCaptureWriter stops retaining data
-	// once the header/body boundary is seen, so a large declared length is never buffered.
+	// request.Write requires the body length to match a declared Content-Length. A positive
+	// length is therefore written from a copy of the request that declares a one-byte body, and
+	// the declared value is substituted into the captured header, so the cost never depends on
+	// the declared length.
 	hw := &headerCaptureWriter{}
-	if cl := request.ContentLength; cl > 0 {
-		request.Body = io.NopCloser(io.LimitReader(zeroReader{}, cl))
+	declared := request.ContentLength
+	cp := *request
+	if declared > 0 {
+		cp.ContentLength = 1
+		cp.Body = io.NopCloser(strings.NewReader("x"))
 	} else {
-		request.Body = emptyReader{}
+		cp.Body = emptyReader{}
 	}
-	err := request.Write(hw)
-	// Restore the original body; it is only swapped for the teeReader below on success.
-	request.Body = body
-	if err != nil {
+	if err := cp.Write(hw); err != nil {
 		return nil, nil, err
 	}
 	headerData := hw.buf.Bytes()
+	if declared > 0 {
+		headerData = bytes.Replace(headerData, []byte("\r\nContent-Length: 1\r\n"),
+			[]byte("\r\nContent-Length: "+strconv.FormatInt(declared, 10)+"\r\n"), 1)
+	}
 
 	// Replace the body with the teeReader.
 	request.Body = tc
@@ -293,20 +298,9 @@ func (emptyReader) Close() error {
 	return nil
 }
 
-// zeroReader is an endless source of zero bytes, used to synthesize a stand-in request body
-// of a declared length without allocating it.
-type zeroReader struct{}
-
-func (zeroReader) Read(p []byte) (int, error) {
-	clear(p)
-	return len(p), nil
-}
-
 // headerCaptureWriter retains everything written to it up to and including the first blank
 // line (the request-line/header block of an HTTP/1.x message), then silently discards
-// everything after it. This lets request.Write be fed a synthetic body of an arbitrary
-// declared length, for Content-Length validation purposes, without that body ending up
-// buffered in memory.
+// everything after it, so the stand-in body that request.Write needs is never retained.
 type headerCaptureWriter struct {
 	buf       bytes.Buffer
 	sawHeader bool

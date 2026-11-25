@@ -410,10 +410,22 @@ func LoopbackFor(ip netip.Addr) netip.Addr {
 // Clone returns a deep copy of the Sidecar.
 func (s *Sidecar) Clone() *Sidecar {
 	cs := *s
-	for ci, cn := range cs.Containers {
+	if s.Containers != nil {
+		cs.Containers = make([]*Container, len(s.Containers))
+	}
+	for ci, cn := range s.Containers {
+		if cn == nil {
+			continue
+		}
 		ccn := *cn
 		cs.Containers[ci] = &ccn
-		for ii, ic := range ccn.Intercepts {
+		if cn.Intercepts != nil {
+			ccn.Intercepts = make([]*Intercept, len(cn.Intercepts))
+		}
+		for ii, ic := range cn.Intercepts {
+			if ic == nil {
+				continue
+			}
 			cic := *ic
 			ccn.Intercepts[ii] = &cic
 		}

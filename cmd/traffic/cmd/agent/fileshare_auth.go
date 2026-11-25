@@ -3,8 +3,7 @@ package agent
 import (
 	"context"
 	"crypto/ecdsa"
-	"net"
-	"net/netip"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -20,24 +19,42 @@ import (
 // fileShareAuth is a late-populated holder that the agent's file-sharing listeners (FTP
 // and SFTP) and its gRPC surface (WatchDial, Tunnel) consult per connection or call. It
 // starts out empty -- no manager has yet supplied credential material -- in which case
-// every connection or call is accepted, exactly as before this credential existed.
+// every FTP login, SFTP connection and gRPC call is refused.
 // RefreshQuicAgentListener populates it once the manager reports a session credential.
 // The holder backs the FTP password validator, the mode consulted by the SFTP source
 // gate, and verifySession, which binds WatchDial/Tunnel calls to their session; see
 // "Traffic-agent ports" in docs/reference/authentication.md.
 type fileShareAuth struct {
 	v atomic.Pointer[fileShareAuthSnapshot]
+
+	// authorizer answers what a client session may do through this agent. It is
+	// replaced whenever a manager session is established.
+	authorizer atomic.Pointer[sessionAuthorizer]
 }
+
+var errNoCredentials = errors.New("fileshareauth: this agent has no session credential material yet")
 
 // fileShareAuthSnapshot is the credential material fileShareAuth holds once populated.
 type fileShareAuthSnapshot struct {
-	pub  *ecdsa.PublicKey // verifies session tokens (sessiontoken.Verify)
+	pub  *ecdsa.PublicKey // verifies session tokens (sessiontoken.Verify); nil when the manager issues none
 	mode string           // the manager's authentication mode; "" or non-"enforcing" never rejects
 }
 
 // set installs a freshly fetched snapshot, replacing whatever was there before.
 func (a *fileShareAuth) set(pub *ecdsa.PublicKey, mode string) {
 	a.v.Store(&fileShareAuthSnapshot{pub: pub, mode: mode})
+}
+
+// setNoCredentials records that the manager issues no session credentials. There is then
+// nothing to verify against, and every connection and call is accepted unauthenticated.
+func (a *fileShareAuth) setNoCredentials() {
+	a.v.Store(&fileShareAuthSnapshot{})
+}
+
+// ready reports whether a snapshot has been populated. Until then every connection
+// and call is refused.
+func (a *fileShareAuth) ready() bool {
+	return a.v.Load() != nil
 }
 
 // enforcing reports whether an unauthenticated or invalid connection must be refused:
@@ -48,20 +65,25 @@ func (a *fileShareAuth) enforcing() bool {
 }
 
 // validatePassword implements go-ftpserver's PasswordValidator. password carries a
-// session token minted by the manager (see pkg/sessiontoken). A nil snapshot means this
-// agent has never heard from a manager new enough to issue credentials, so there is
-// nothing to verify against and every login is accepted. A failed verification is only
+// session token minted by the manager (see pkg/sessiontoken). Without a snapshot there
+// is nothing to verify against, so every login is refused. A failed verification is only
 // fatal in enforcing mode; otherwise it is logged and the login still succeeds, at
 // debug level for "anonymous" (a legacy go-fuseftp client that predates the session
 // token) and at warn level for anything else (a malformed, expired, or foreign token).
 func (a *fileShareAuth) validatePassword(ctx context.Context, user, password string) error {
 	s := a.v.Load()
 	if s == nil {
-		clog.Debugf(ctx, "fileshareauth: no session credential material yet; accepting FTP login for %q", user)
+		clog.Debugf(ctx, "fileshareauth: no session credential material yet; refusing FTP login for %q", user)
+		return errNoCredentials
+	}
+	if s.pub == nil {
 		return nil
 	}
-	_, err := sessiontoken.Verify(s.pub, password, time.Now())
+	sessionID, err := sessiontoken.Verify(s.pub, password, time.Now())
 	if err == nil {
+		if s.mode == "enforcing" {
+			return a.requireAccess(ctx, tunnel.SessionID(sessionID), password, accessFiles)
+		}
 		return nil
 	}
 	if s.mode == "enforcing" {
@@ -83,9 +105,8 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 // the session it names matches declared -- the session ID the caller's request itself
 // claims.
 //
-// A nil snapshot means this agent has never heard from a manager new enough to issue
-// credentials: there is nothing to verify against, so the call is treated exactly as
-// before this check existed. A token that verifies but names a session other than
+// Without a snapshot there is nothing to verify against, so the call is refused with
+// codes.Unavailable, which a client can retry. A token that verifies but names a session other than
 // declared is rejected in every mode -- WatchDial/Tunnel each bind one channel to one
 // session, so a foreign token is never ambiguous, only wrong -- and the returned error
 // names neither the token nor the session it actually verified for. An absent or invalid
@@ -95,15 +116,12 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.SessionID) (verified bool, err error) {
 	s := a.v.Load()
 	if s == nil {
+		return false, status.Error(codes.Unavailable, errNoCredentials.Error())
+	}
+	if s.pub == nil {
 		return false, nil
 	}
-	var token string
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if vs := md.Get(sessiontoken.MetadataKey); len(vs) > 0 {
-			token = vs[0]
-		}
-	}
-	if token != "" {
+	if token := sessionTokenFrom(ctx); token != "" {
 		sessionID, vErr := sessiontoken.Verify(s.pub, token, time.Now())
 		if vErr == nil {
 			if sessionID != string(declared) {
@@ -127,20 +145,13 @@ func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.Sessi
 	return false, nil
 }
 
-// fromOwnPod reports whether remote is a connection delivered through the tunnel:
-// every legitimate consumer reaches the file-sharing ports through the telepresence
-// tunnel, whose connections the agent itself dials, so their source address is the
-// agent pod's own IP (or loopback); a foreign source is a direct cross-network
-// connection that bypassed the tunnel.
-func fromOwnPod(remote net.Addr, podIP netip.Addr) bool {
-	tcpAddr, ok := remote.(*net.TCPAddr)
-	if !ok {
-		return false
+// sessionTokenFrom returns the session token carried in ctx's incoming gRPC
+// metadata, or "" when there is none.
+func sessionTokenFrom(ctx context.Context) string {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vs := md.Get(sessiontoken.MetadataKey); len(vs) > 0 {
+			return vs[0]
+		}
 	}
-	ip, ok := netip.AddrFromSlice(tcpAddr.IP)
-	if !ok {
-		return false
-	}
-	ip = ip.Unmap()
-	return ip == podIP.Unmap() || ip.IsLoopback()
+	return ""
 }

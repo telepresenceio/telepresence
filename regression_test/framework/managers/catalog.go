@@ -259,14 +259,24 @@ func UsageTo(addr string) Spec {
 }
 
 // Compat returns a manager spec with compatibility.version set to version:
-// for testing only, it makes the manager return Unimplemented for every RPC
-// introduced after that version (see checkCompat in
-// cmd/traffic/cmd/manager/service.go), exercising the client's fallback
-// paths against a manager that never shipped the newer RPC surface.
+// for testing only, it emulates an older manager toward clients by returning
+// Unimplemented for every client RPC introduced after that version (see
+// checkCompat in cmd/traffic/cmd/manager/service.go), exercising the client's
+// fallback paths against a manager that never shipped the newer RPC surface.
 func Compat(version string) Spec {
 	return Spec{
 		Key:    "compat/" + version,
 		Values: Values{Compatibility: Compatibility{Version: version}},
+	}
+}
+
+// CompatAgents returns a manager spec with compatibility.agentVersion set to
+// version. It makes the manager return Unimplemented for the RPCs that
+// traffic-agents call and that are newer than version (see checkAgentCompat).
+func CompatAgents(version string) Spec {
+	return Spec{
+		Key:    "compat-agents/" + version,
+		Values: Values{Compatibility: Compatibility{AgentVersion: version}},
 	}
 }
 

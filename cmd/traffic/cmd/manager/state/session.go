@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +14,16 @@ import (
 )
 
 const AgentSessionIDPrefix = "agent:"
+
+// AgentSessionID returns the session ID of the agent in the pod with the given UID.
+func AgentSessionID(podUID string) tunnel.SessionID {
+	return tunnel.SessionID(AgentSessionIDPrefix + podUID)
+}
+
+// IsAgentSessionID returns true if id has the form of an agent session ID.
+func IsAgentSessionID(id tunnel.SessionID) bool {
+	return strings.HasPrefix(string(id), AgentSessionIDPrefix)
+}
 
 type sessionState struct {
 	id        tunnel.SessionID

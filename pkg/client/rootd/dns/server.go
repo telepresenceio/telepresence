@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -400,25 +401,34 @@ func (s *Server) Stop() {
 	s.readyClose.Do(func() { close(s.ready) })
 }
 
-func (s *Server) SetClusterDNS(dns *manager.DNS, vifDNS netip.AddrPort) {
+func (s *Server) SetClusterDNS(c context.Context, dns *manager.DNS, vifDNS netip.AddrPort) error {
+	if dns != nil && !ValidName(dns.ClusterDomain, false) {
+		return fmt.Errorf("invalid cluster domain %q", dns.ClusterDomain)
+	}
 	s.Lock()
+	defer s.Unlock()
 	if !s.VIFAddress.IsValid() {
 		s.VIFAddress = vifDNS
 	}
 	if dns != nil {
 		if slices.Equal(s.ExcludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
-			s.ExcludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
+			s.ExcludeSuffixes = sliceToLower(ValidNames(c, "exclude suffix", dns.ExcludeSuffixes, true))
 		}
 		if len(s.IncludeSuffixes) == 0 {
-			s.IncludeSuffixes = sliceToLower(dns.IncludeSuffixes)
+			s.IncludeSuffixes = sliceToLower(ValidNames(c, "include suffix", dns.IncludeSuffixes, true))
 		}
 		s.clusterDomain = strings.ToLower(dns.ClusterDomain)
 	}
-	s.Unlock()
+	return nil
 }
 
 // SetTopLevelDomainsAndSearchPath updates the DNS top level domains and the search path used by the resolver.
 func (s *Server) SetTopLevelDomainsAndSearchPath(ctx context.Context, domains []string, namespace string) {
+	domains = ValidNames(ctx, "top level domain", domains, false)
+	if namespace != "" && !ValidName(namespace, false) {
+		clog.Warnf(ctx, "Ignoring invalid namespace %q", namespace)
+		namespace = ""
+	}
 	das := nsAndDomains{
 		domains:   domains,
 		namespace: namespace,
@@ -523,7 +533,10 @@ func (s *Server) processSearchPaths(g log.Group, processor func(context.Context,
 				// The connected namespace must be included as a search path for the cases
 				// where it's up to the traffic-manager to resolve. It cannot resolve a single
 				// label name intended for other namespaces.
-				s.search = []string{client.Tel2SubDomain, das.namespace}
+				s.search = []string{client.Tel2SubDomain}
+				if das.namespace != "" {
+					s.search = append(s.search, das.namespace)
+				}
 				s.Unlock()
 
 				if err := processor(c, dev); err != nil {
@@ -707,6 +720,19 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 		return dv.answer, dv.rCode, nil
 	}
 	defer close(dv.wait)
+	defer func() {
+		if p := recover(); p != nil {
+			// Waiting callers must not see the initial result.
+			dv.answer, dv.rCode = nil, dns.RcodeServerFailure
+			s.cache.Compute(key, func(old *cacheEntry, loaded bool) (*cacheEntry, xsync.ComputeOp) {
+				if loaded && old == dv {
+					return nil, xsync.DeleteOp
+				}
+				return old, xsync.CancelOp
+			})
+			panic(p)
+		}
+	}()
 
 	answer, rCode, err = s.resolveInCluster(s.ctx, q)
 	if err != nil {
@@ -843,6 +869,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
 	atomic.AddInt64(&s.requestCount, 1)
 
+	if len(r.Question) == 0 {
+		clog.Debugf(c, "ServeDNS %5d dropping message without a question", r.Id)
+		reply := new(dns.Msg)
+		reply.SetRcode(r, dns.RcodeFormatError)
+		_ = w.WriteMsg(reply)
+		return
+	}
 	q := &r.Question[0]
 	qts := dns.TypeToString[q.Qtype]
 	clog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
@@ -859,6 +892,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// Closing the response tells the DNS service to terminate
 		if c.Err() != nil {
 			_ = w.Close()
+		}
+	}()
+
+	defer func() {
+		if p := recover(); p != nil {
+			clog.Errorf(c, "panic in ServeDNS for %s %s: %v\n%s", qts, q.Name, p, debug.Stack())
+			msg.SetRcode(r, dns.RcodeServerFailure)
 		}
 	}()
 

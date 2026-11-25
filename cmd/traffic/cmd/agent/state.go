@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/sftpserver"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/tls"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -34,7 +35,11 @@ type State interface {
 	ManagerVersion() semver.Version
 	SessionInfo() *rpc.SessionInfo
 	SetFileSharingPorts(ftp uint16, sftp uint16)
+	SetSftpServer(srv *sftpserver.Server)
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
+
+	// ResetSessionAuthorizer replaces the session authorizer with an empty one for the current manager session.
+	ResetSessionAuthorizer()
 
 	// SetGRPCServer records the agent's gRPC server so that RefreshQuicAgentListener
 	// can serve it over the QUIC listener as well as the plain TCP one.
@@ -96,6 +101,7 @@ type state struct {
 	Config
 	ftpPort          uint16
 	sftpPort         uint16
+	sftpSrv          *sftpserver.Server
 	dialWatchers     *xsync.Map[tunnel.SessionID, chan *rpc.DialRequest]
 	awaitingForwards *xsync.Map[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]]
 	tlsManager       tls.Manager
@@ -136,6 +142,10 @@ func (s *state) ManagerVersion() semver.Version {
 func (s *state) SetFileSharingPorts(ftp uint16, sftp uint16) {
 	s.ftpPort = ftp
 	s.sftpPort = sftp
+}
+
+func (s *state) SetSftpServer(srv *sftpserver.Server) {
+	s.sftpSrv = srv
 }
 
 func (s *state) SessionInfo() *rpc.SessionInfo {
@@ -235,6 +245,11 @@ func (s *state) SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClie
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version
+	s.fileShareAuth.authorizer.Store(newSessionAuthorizer(manager, sessionInfo))
+}
+
+func (s *state) ResetSessionAuthorizer() {
+	s.fileShareAuth.authorizer.Store(newSessionAuthorizer(s.manager, s.sessionInfo))
 }
 
 func (s *state) SetGRPCServer(svc *grpc.Server) {

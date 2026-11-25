@@ -2,11 +2,13 @@ package forwarder
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/netip"
 	"sync/atomic"
+	"time"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -125,18 +127,49 @@ func (f *tcp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 	return nil
 }
 
+const (
+	minAcceptDelay = 5 * time.Millisecond
+	maxAcceptDelay = time.Second
+)
+
+// NextAcceptDelay returns the pause to use after a failed Accept, given the previous
+// pause (zero after a successful accept). The pause doubles up to one second.
+func NextAcceptDelay(prev time.Duration) time.Duration {
+	if prev < minAcceptDelay {
+		return minAcceptDelay
+	}
+	return min(prev*2, maxAcceptDelay)
+}
+
+// IsTemporaryAcceptError reports whether err from a listener's Accept is expected to clear
+// up on its own, such as running out of file descriptors.
+func IsTemporaryAcceptError(err error) bool {
+	var te interface{ Temporary() bool }
+	return errors.As(err, &te) && te.Temporary()
+}
+
 // AcceptLoop accepts connections on the listener and calls f in a separate go routine for each connection.
+// It returns when the listener is closed or the context is done.
 func AcceptLoop(ctx context.Context, listener net.Listener, fw func(context.Context, net.Conn) error) {
+	var delay time.Duration
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+				return
+			}
+			if delay == 0 {
+				clog.Warnf(ctx, "listener.Accept failed, retrying until it succeeds: %v", err)
+			}
+			delay = NextAcceptDelay(delay)
 			select {
 			case <-ctx.Done():
 				return
-			default:
-				clog.Infof(ctx, "listener.Accept ended with error: %v", err)
+			case <-time.After(delay):
 			}
+			continue
 		}
+		delay = 0
 		go func() {
 			if err := fw(ctx, conn); err != nil {
 				clog.Error(ctx, err)

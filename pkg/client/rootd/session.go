@@ -243,6 +243,10 @@ type session struct {
 	// handlers instead of being tunneled to the cluster. Nil when there are none.
 	interceptShortcuts atomic.Pointer[shortcutTable]
 
+	// Local destinations that traffic-agents may ask this daemon to dial. Nil until
+	// the user daemon has declared them, which refuses every dial request.
+	interceptTargets atomic.Pointer[interceptTargets]
+
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 
 	// quicConn is the client's current QUIC connection to the traffic-manager, set
@@ -463,7 +467,10 @@ func newSession(
 	}
 	clog.Infof(s, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 
-	s.dnsServer = dns.NewServer(cfg.DNS(), s.Namespace, s.clusterLookup)
+	dnsCfg := cfg.DNS()
+	dnsCfg.IncludeSuffixes = dns.ValidNames(s, "include suffix", dnsCfg.IncludeSuffixes, true)
+	dnsCfg.ExcludeSuffixes = dns.ValidNames(s, "exclude suffix", dnsCfg.ExcludeSuffixes, true)
+	s.dnsServer = dns.NewServer(dnsCfg, s.Namespace, s.clusterLookup)
 	s.SetTopLevelDomains(nil)
 
 	// Set ourselves as the default dialer for the session.
@@ -698,7 +705,14 @@ func (s *session) complexClusterLookup(ctx context.Context, q *dns2.Question) (d
 		return nil, dns2.RcodeServerFailure, err
 	}
 	if len(s.localTranslationSubnets) > 0 {
+		if err = checkAddressRecords(answer); err != nil {
+			s.dnsFailures++
+			return nil, dns2.RcodeServerFailure, err
+		}
 		for _, rr := range answer {
+			if dnsproxy.IsEmptyName(rr) {
+				continue
+			}
 			switch rr := rr.(type) {
 			case *dns2.A:
 				var addr netip.Addr
@@ -1103,10 +1117,30 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 		d := mgrInfo.Dns
 		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
 		clog.Infof(s, "Setting client DNS to %s", vifDNS)
-		clog.Infof(s, "Setting cluster domain to %q", d.ClusterDomain)
-		s.dnsServer.SetClusterDNS(d, dnsAddress)
+		clog.Infof(s, "Setting cluster domain to %q", d.GetClusterDomain())
+		if err := s.dnsServer.SetClusterDNS(s, d, dnsAddress); err != nil {
+			return err
+		}
 	}
 	return s.reconcileSubnets(mgrInfo, subnets)
+}
+
+// checkAddressRecords returns an error if an A or AAAA record has an address of the wrong length.
+// Records without an address are the manager's missing-family markers and are accepted.
+func checkAddressRecords(rrs dnsproxy.RRs) error {
+	for _, rr := range rrs {
+		switch rr := rr.(type) {
+		case *dns2.A:
+			if len(rr.A) != 0 && len(rr.A) != net.IPv4len {
+				return fmt.Errorf("malformed A record for %q: %d address bytes", rr.Hdr.Name, len(rr.A))
+			}
+		case *dns2.AAAA:
+			if len(rr.AAAA) != 0 && len(rr.AAAA) != net.IPv6len {
+				return fmt.Errorf("malformed AAAA record for %q: %d address bytes", rr.Hdr.Name, len(rr.AAAA))
+			}
+		}
+	}
+	return nil
 }
 
 func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
@@ -1494,6 +1528,7 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			// so we can report incoming-dial counters to the user daemon
 			// at session end (see daemon.Activity).
 			s.agentClients.SetDialMetrics(s)
+			s.agentClients.SetDialPolicy(s.dialAllowed)
 			// Flush the DNS cache whenever the agent set changes. A workload may have been recreated
 			// with a new Service ClusterIP, which would otherwise be masked by a stale cache entry.
 			s.agentClients.SetChangeListener(s.dnsServer.Flush)
@@ -1827,12 +1862,18 @@ func (s *session) MapsIPv6() bool {
 }
 
 func (s *session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (*rpc.WaitForAgentIPResponse, error) {
-	if s.agentClients == nil {
-		return nil, status.Error(codes.Unavailable, "")
-	}
 	ip, ok := netip.AddrFromSlice(request.Ip)
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "")
+	}
+	if nvp, found := neverProxyCovering(ip, s.effectiveNeverProxy, s.alsoProxySubnets); found {
+		if lip, err := s.GetLocalIP(ip); err != nil || lip == ip {
+			return nil, status.Errorf(codes.FailedPrecondition,
+				"pod address %s is excluded by never-proxy subnet %s and is not reachable through Telepresence", ip, nvp)
+		}
+	}
+	if s.agentClients == nil {
+		return nil, status.Error(codes.Unavailable, "")
 	}
 	namespace := request.Namespace
 	if namespace == "" {
