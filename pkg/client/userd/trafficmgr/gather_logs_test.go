@@ -341,7 +341,7 @@ func TestGatherLogChunks_craftedNamesStayInsideExportDir(t *testing.T) {
 func TestInDir(t *testing.T) {
 	p, err := inDir("/x/dir", "a.b.log")
 	require.NoError(t, err)
-	require.Equal(t, "/x/dir/a.b.log", p)
+	require.Equal(t, filepath.FromSlash("/x/dir/a.b.log"), p)
 	for _, n := range []string{"../a", "a/b", "..", ""} {
 		_, err = inDir("/x/dir", n)
 		require.Error(t, err, n)
