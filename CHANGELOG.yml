@@ -24,6 +24,17 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.34.1
+    date: (TBD)
+    notes:
+      - type: change
+        title: The container images include the latest Alpine package updates
+        body: >-
+          The <code>tel2</code>, <code>telepresence</code> and
+          <code>route-controller</code> images now upgrade the packages of
+          the Alpine base image when they are built. A release ships the
+          package fixes that Alpine has published by then, also when the
+          base image itself has not been rebuilt yet.
   - version: 2.34.0
     date: 2026-11-25
     notes:
