@@ -381,7 +381,7 @@ CLI/user-daemon and the traffic-manager.
      dial errors).
 
 The `manager.boot` report includes `nodeagent.enabled`, `injector.enabled`,
-and `authentication.mode` (`disabled`, `permissive`, or `enforcing`). The mode
+and `authentication.mode` (`disabled`, `permissive`, or `enforcing`; the default is `enforcing`). The mode
 is the configured policy; no credentials or authenticated identities are sent.
 
 Reports **never** contain cluster, namespace, workload, hostname, IP address,

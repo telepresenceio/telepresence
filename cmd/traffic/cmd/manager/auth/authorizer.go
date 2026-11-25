@@ -114,7 +114,7 @@ func ConnectReview(namespace string) *Review {
 			Resource:  "connections",
 		}},
 		Migration: "authorized to connect only via the legacy pods/portforward grant; its Role should migrate to " +
-			"create connections.telepresence.io before the enforcing-mode default flips",
+			"create connections.telepresence.io, which enforcing mode requires",
 	}
 }
 
@@ -132,8 +132,8 @@ func AttachmentReview(namespace, workloadName, verb string) *Review {
 			Name:      workloadName,
 		}},
 		Migration: fmt.Sprintf("authorized attachment to %s in namespace %s only via the legacy pods/portforward "+
-			"grant; its Role should migrate to create attachments.telepresence.io before the enforcing-mode "+
-			"default flips", workloadName, namespace),
+			"grant; its Role should migrate to create attachments.telepresence.io which enforcing "+
+			"mode requires", workloadName, namespace),
 	}
 }
 
@@ -163,7 +163,7 @@ func NamespaceReview(namespace string) *Review {
 			Resource:  "attachments",
 		}},
 		Migration: fmt.Sprintf("authorized for namespace %s only via the legacy pods/portforward grant; its Role "+
-			"should migrate to create attachments.telepresence.io before the enforcing-mode default flips", namespace),
+			"should migrate to create attachments.telepresence.io which enforcing mode requires", namespace),
 	}
 }
 

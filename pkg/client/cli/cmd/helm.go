@@ -81,9 +81,11 @@ func helmUpgrade() *cobra.Command {
 	flags := cmd.Flags()
 	ha.addValueSettingFlags(flags)
 	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "disable pre/post upgrade hooks")
-	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false, "when upgrading, reset the values to the ones built into the chart")
+	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false,
+		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
-		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
+		"when upgrading, reuse the last release's values and chart defaults and merge in any overrides from the command line via --set and -f. "+
+			"Without this flag and without values, an upgrade uses the new chart's defaults with the values supplied earlier on top")
 	flags.BoolVarP(&ha.CreateNamespace, "create-namespace", "", true, "create the release namespace if not present")
 	flags.StringVar(&ha.Version, "version", "", "the telepresence version if different from the client's version. May be a range (e.g. ^2.21.0)")
 	ha.rq = daemon.InitRequest(cmd)

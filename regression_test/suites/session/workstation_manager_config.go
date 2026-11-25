@@ -26,6 +26,7 @@ var wshardInvalidSuffixes = []string{
 //
 //nolint:gochecknoglobals // catalog spec, referenced by both Register and the tests
 var wshardSpec = managers.ClientConfig("wshard-dns", managers.Values{
+	Security: managers.Security{Authentication: managers.Authentication{Mode: "permissive"}},
 	Client: managers.Client{
 		DNS: managers.ClientDNS{IncludeSuffixes: wshardInvalidSuffixes},
 	},

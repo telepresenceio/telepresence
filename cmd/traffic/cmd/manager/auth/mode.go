@@ -29,11 +29,11 @@ func (m Mode) String() string {
 }
 
 // UnmarshalText parses a Mode, case-insensitively. An empty value defaults to
-// ModePermissive.
+// ModeEnforcing.
 func (m *Mode) UnmarshalText(text []byte) error {
 	s := string(text)
 	if s == "" {
-		*m = ModePermissive
+		*m = ModeEnforcing
 		return nil
 	}
 	switch Mode(strings.ToLower(s)) {

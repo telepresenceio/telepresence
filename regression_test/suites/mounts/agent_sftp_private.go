@@ -27,7 +27,7 @@ type AgenthardSftpPrivatePermissive struct {
 func init() {
 	rt.Register(&AgenthardSftpPrivate{}, rt.InArea("mounts"), rt.NeedsManager(managers.AuthEnforcing()),
 		rt.Requires(rt.FUSE), rt.NotOn("windows"))
-	rt.Register(&AgenthardSftpPrivatePermissive{}, rt.InArea("mounts"), rt.NeedsManager(managers.Default),
+	rt.Register(&AgenthardSftpPrivatePermissive{}, rt.InArea("mounts"), rt.NeedsManager(managers.AuthPermissive()),
 		rt.Requires(rt.FUSE), rt.NotOn("windows"))
 }
 

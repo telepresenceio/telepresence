@@ -69,7 +69,7 @@ func TestEnvconfig(t *testing.T) {
 		UsageReportingEnabled:        true,
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
-		AuthenticationMode:           auth.ModePermissive,
+		AuthenticationMode:           auth.ModeEnforcing,
 		AuthorizationRequiredGrant:   auth.GrantAny,
 		LogStreamChunkSize:           resource.MustParse("64Ki"),
 		LogStreamPodConcurrency:      4,

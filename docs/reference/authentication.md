@@ -204,18 +204,18 @@ The traffic-manager's authentication posture is controlled by the Helm value
 | Mode | Behavior |
 |------|----------|
 | `disabled` | No token validation at all. |
-| `permissive` (default) | Tokens are validated and used for authorization checks and session binding, but a call with a missing or invalid token is served as unauthenticated. Decisions are logged for audit. |
-| `enforcing` | Calls without a valid bearer token are rejected (`Unauthenticated`), and an unauthorized intercept is rejected (`PermissionDenied`). |
+| `permissive` | Tokens are validated and used for authorization checks and session binding, but a call with a missing or invalid token is served as unauthenticated. Decisions are logged for audit. |
+| `enforcing` (default) | Calls without a valid bearer token are rejected (`Unauthenticated`), and an unauthorized intercept is rejected (`PermissionDenied`). |
 
 In every mode, a call whose token could not be checked because the
 traffic-manager's limit on token reviews was reached is refused with
 `ResourceExhausted`. A token the manager accepted earlier is checked under a
 separate allowance, so a flood of unknown tokens does not lock it out.
 
-Set it at install or upgrade time:
+The default is `enforcing`. Set another mode at install or upgrade time:
 
 ```console
-$ telepresence helm install --set security.authentication.mode=enforcing
+$ telepresence helm install --set security.authentication.mode=permissive
 ```
 
 or in a values file:
@@ -223,7 +223,7 @@ or in a values file:
 ```yaml
 security:
   authentication:
-    mode: enforcing
+    mode: permissive
 ```
 
 > [!NOTE]
@@ -231,28 +231,67 @@ security:
 > regardless of mode, so a client can always learn a manager's version and
 > capabilities before authenticating.
 
-Session ownership — once a session has an authenticated owner, only that
-owner may drive it — is enforced in every mode, including `permissive`.
+Once a session has an authenticated owner, only that owner may drive it.
+This session ownership is enforced in every mode, including `permissive`.
 Sessions created without a token (calls from an older client or agent) have
 no owner and remain governed by the mode.
 
 If the `TokenReview` or `SubjectAccessReview` infrastructure itself is
-unreachable — for example, the API server is down — the traffic-manager
-reports `Unavailable` rather than rejecting the call as unauthenticated or
-unauthorized, so an infrastructure outage is distinguishable from an actual
+unreachable, for example because the API server is down, the traffic-manager
+reports `Unavailable` instead of rejecting the call as unauthenticated or
+unauthorized. An infrastructure outage can then be told apart from an actual
 denial.
 
-### Staged rollout
+### Moving an existing installation to `enforcing`
 
-`permissive` is the default specifically so that upgrading the traffic-manager
-never breaks an existing installation: administrators can watch the audit log
-to see which callers would be rejected before opting in to `enforcing`.
+An installation that never set `security.authentication.mode` becomes
+`enforcing` on its next `telepresence helm upgrade` to 2.34.0 or later. An
+installation that set the mode explicitly, for example to `permissive`, keeps
+it. See [Upgrading](../install/manager.md#upgradingdowngrading-the-traffic-manager)
+for how the command treats values.
 
-Turn on `enforcing` only once your client and agent fleet is running this
-release or later — an agent or client older than this release never sends a
-token and is always rejected once the manager enforces authentication.
-Clients and agents at this release or later always send a token when their
-credentials can produce one, so they are unaffected by the switch.
+An `enforcing` traffic-manager refuses:
+
+- Clients older than 2.31.0. They send no token.
+- Traffic-agents older than 2.31. They send no token. When the
+  traffic-manager is upgraded, it replaces the pods that carry a
+  traffic-agent, and the new pods get the agent image that the
+  traffic-manager injects. See
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing). That image
+  is the one of the traffic-manager's own version, unless the `agent.image`
+  Helm values pin another one. If they pin an agent older than 2.31, change
+  or remove the pin. An agent that the traffic-manager's agent-injector did
+  not inject stays as it is.
+- A user who lacks the grant a call needs. To connect, the user needs
+  `create` on `connections.telepresence.io` in the traffic-manager's
+  namespace, or `pods/portforward` there. To intercept, replace, or
+  wiretap, the user needs `create` on `attachments.telepresence.io` for the
+  workload, or `pods/portforward` in its namespace. To ingest, the user
+  needs `get` on the attachment, or the same `pods/portforward`. With the
+  default `security.authorization.requiredGrant: any`, either kind of grant
+  is accepted. See [Client RBAC](../howtos/client-rbac.md).
+- A kubeconfig that authenticates with a client certificate, when the x509
+  listener is disabled or the API server is behind an authenticating proxy
+  that uses another CA. See
+  [Client-certificate-only kubeconfigs](#client-certificate-only-kubeconfigs).
+
+To prepare, upgrade the clients to 2.31.0 or later, check that each user holds
+one of the grants above, and check that each kubeconfig can produce a bearer
+token or a verifiable client certificate. Clients and agents at 2.31 or later
+send a token whenever their credentials can produce one.
+
+To stay on `permissive` for a while, set the mode when upgrading. An upgrade
+with value flags uses only the values given on that command line, so repeat
+the values that you set earlier, for example from your values file:
+
+```console
+$ telepresence helm upgrade -f my-values.yaml --set security.authentication.mode=permissive
+```
+
+Later upgrades without value flags keep the mode.
+
+In `permissive` mode, the traffic-manager logs its authentication and
+authorization decisions for audit.
 
 ## Traffic-agent ports
 
@@ -380,36 +419,39 @@ bulkiest data path telepresence carries for no real confidentiality gain.
 
 ### Version skew
 
-An old client presents no credential at all and is served normally by
-disabled/permissive agents; only enforcing mode requires it to be upgraded
-first. A new client talking to an old agent gets no benefit from its
-credential — the old agent has no verification code path, so its ports stay
-exactly as open as before — but nothing breaks. Talking through a manager
-that predates session credentials (older than 2.31.0), a new agent never
-receives credential material. The manager answers `Unimplemented`, and the
-agent logs an error that it requires traffic-manager 2.34.0 or later. It
-refuses every FTP login, SFTP connection, `WatchDial` and `Tunnel` call until
-the traffic-manager has been upgraded. A manager that implements the call but
-reports no QUIC CA issues no credentials: the agent then accepts every
-connection and call unauthenticated. An agent that has not yet heard from its
-manager also refuses every FTP login, SFTP connection, `WatchDial` and
-`Tunnel` call until it has: the gRPC calls report `Unavailable`, which a
-client can retry.
+An old client presents no credential at all and is served normally
+by disabled/permissive agents; only enforcing mode requires it to be
+upgraded first. A new client talking to an old agent gets no benefit from
+its credential, but nothing breaks. The old agent has no verification
+code path, so its ports stay exactly as open as before. Talking through
+a manager that predates session credentials (older than 2.31.0), a new
+agent never receives credential material. The manager answers
+`Unimplemented`, and the agent logs an error that it requires
+traffic-manager 2.34.0 or later. It refuses every FTP login, SFTP
+connection, `WatchDial` and `Tunnel` call until the traffic-manager has
+been upgraded. A manager that implements the call but reports no QUIC CA
+issues no credentials. The agent then accepts every connection and call
+unauthenticated. An agent that has not yet heard from its manager also
+refuses every FTP login, SFTP connection, `WatchDial` and `Tunnel` call
+until it has. The gRPC calls report `Unavailable`, which a client can
+retry.
 
 The [access levels](#access-levels) add two more cases:
 
-- **An agent of version 2.34 or later with an older traffic-manager.** The
-  agent requires a traffic-manager of version 2.34 or later when
-  authentication is enforced. The traffic-manager answers the access call
-  with `Unimplemented`, and the agent refuses every session, logging an
-  error, until the traffic-manager has been upgraded. Upgrade the
-  traffic-manager before the agents are restarted.
+- **An agent of version 2.34 or later with an older traffic-manager.**
+  The agent requires a traffic-manager of version 2.34 or later when
+  authentication is enforced. The traffic-manager answers the access call with
+  `Unimplemented`, and the agent refuses every session, logging an error,
+  until the traffic-manager has been upgraded. This case arises when the
+  traffic-manager is downgraded, or when the `agent.image` Helm value names
+  a newer agent than the traffic-manager.
 - **An agent older than 2.34 with a current traffic-manager.** The agent
-  never asks for access levels and checks the session credential only. The
-  traffic-manager does not replace a pod when only the agent image changes,
-  so such an agent keeps this behaviour until its pod is restarted (for
-  example with `kubectl rollout restart`), which injects the current agent
-  image.
+  never asks for access levels and checks the session credential only. After
+  an upgrade, the traffic-manager replaces the pods that carry a
+  traffic-agent (see
+  [Agent Rollout Pacing](cluster-config.md#agent-rollout-pacing)). The case
+  therefore remains only when the `agent.image` Helm values pin an agent
+  older than 2.34, or for an agent that the agent-injector did not inject.
 
 The checks on the agent's identity depend only on the traffic-manager, so
 they apply to agents of every version that sends the `traffic-manager`
@@ -499,8 +541,8 @@ one for the clients that cannot produce a token at all. It also does not
 help every cert-only cluster: if the cluster is fronted by an authenticating
 proxy that signs user certificates with a CA other than the one published in
 `client-ca-file`, the manager cannot verify those certificates, and such
-clients still need a context with token or exec-plugin credentials, or must
-run with `security.authentication.mode` set to `permissive`.
+clients still need a context with token or exec-plugin credentials, or the
+manager must run with `security.authentication.mode` set to `permissive`.
 
 ### Environment access implied by portforward
 

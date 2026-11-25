@@ -21,7 +21,7 @@ type ManagerInfo struct {
 func init() {
 	rt.Register(&ManagerInfo{},
 		rt.InArea("session"),
-		rt.NeedsManager(managers.Default),
+		rt.NeedsManager(managers.AuthPermissive()),
 		rt.WithLabels(rt.CompatCore),
 	)
 }

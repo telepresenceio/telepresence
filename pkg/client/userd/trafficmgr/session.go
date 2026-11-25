@@ -589,6 +589,7 @@ func (s *session) reconnectManagerWith(
 	s.managerVersion = managerVersion
 	s.managerGeneration++
 	s.managerLock.Unlock()
+	s.sessionCredential.Reset()
 	if old != nil {
 		_ = old.Close()
 	}

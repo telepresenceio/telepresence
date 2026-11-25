@@ -18,15 +18,20 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 )
 
+func permissiveAuth() helm.Security {
+	return helm.Security{Authentication: helm.Authentication{Mode: new("permissive")}}
+}
+
 func quicValuesEnabled() *helm.Values {
 	return &helm.Values{
+		Security:      permissiveAuth(),
 		QuicTunnel:    helm.QuicTunnel{Enabled: new(true)},
 		AgentInjector: helm.AgentInjector{Enabled: new(false)},
 	}
 }
 
 func injectorValuesEnabled() *helm.Values {
-	return &helm.Values{AgentInjector: helm.AgentInjector{Enabled: new(true)}}
+	return &helm.Values{Security: permissiveAuth(), AgentInjector: helm.AgentInjector{Enabled: new(true)}}
 }
 
 func quicService(svcType core.ServiceType, mod ...func(*core.Service)) *core.Service {
@@ -194,7 +199,7 @@ func TestVerifyInstall_InjectorService(t *testing.T) {
 	})
 	t.Run("injector absent from the values runs the check", func(t *testing.T) {
 		client := fake.NewClientset(injectorSlice(true))
-		notes := VerifyInstall(context.Background(), client, "ambassador", &helm.Values{}, ClientAuthFacts{})
+		notes := VerifyInstall(context.Background(), client, "ambassador", &helm.Values{Security: permissiveAuth()}, ClientAuthFacts{})
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteInfo, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "ready endpoints")
@@ -203,7 +208,7 @@ func TestVerifyInstall_InjectorService(t *testing.T) {
 		slice := injectorSlice(true)
 		slice.Labels[discoveryv1.LabelServiceName] = "my-injector"
 		client := fake.NewClientset(slice)
-		values := &helm.Values{AgentInjector: helm.AgentInjector{Name: new("my-injector")}}
+		values := &helm.Values{Security: permissiveAuth(), AgentInjector: helm.AgentInjector{Name: new("my-injector")}}
 		notes := VerifyInstall(context.Background(), client, "ambassador", values, ClientAuthFacts{})
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteInfo, notes[0].Level)
@@ -214,6 +219,7 @@ func TestVerifyInstall_InjectorService(t *testing.T) {
 func TestVerifyInstall_NothingEnabled(t *testing.T) {
 	client := fake.NewClientset()
 	notes := VerifyInstall(context.Background(), client, "ambassador", &helm.Values{
+		Security:      permissiveAuth(),
 		QuicTunnel:    helm.QuicTunnel{Enabled: new(false)},
 		AgentInjector: helm.AgentInjector{Enabled: new(false)},
 	}, ClientAuthFacts{})
@@ -271,8 +277,8 @@ func TestVerifyInstall_X509ClientAuth(t *testing.T) {
 		assert.Equal(t, NoteInfo, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "bearer token")
 	})
-	t.Run("authentication not enforced by the values", func(t *testing.T) {
-		values := &helm.Values{AgentInjector: helm.AgentInjector{Enabled: new(false)}}
+	t.Run("permissive authentication in the values", func(t *testing.T) {
+		values := &helm.Values{Security: permissiveAuth(), AgentInjector: helm.AgentInjector{Enabled: new(false)}}
 		notes := VerifyInstall(context.Background(), client, "ambassador", values, ClientAuthFacts{})
 		assert.Empty(t, notes)
 	})

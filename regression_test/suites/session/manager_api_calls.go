@@ -31,6 +31,7 @@ const (
 var mgrapiSpec = managers.Spec{
 	Key: "env-excluded",
 	Values: managers.Values{
+		Security: managers.Security{Authentication: managers.Authentication{Mode: "permissive"}},
 		Intercept: managers.Intercept{
 			Environment: managers.InterceptEnvironment{
 				Excluded: []string{mgrapiExcludedHost, mgrapiExcludedPassword},

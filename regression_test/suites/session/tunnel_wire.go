@@ -35,7 +35,7 @@ type TunnelwireTunnel struct {
 }
 
 func init() {
-	rt.Register(&TunnelwireTunnel{}, rt.InArea("session"), rt.NeedsManager(managers.Default))
+	rt.Register(&TunnelwireTunnel{}, rt.InArea("session"), rt.NeedsManager(managers.AuthPermissive()))
 }
 
 // tunnelwireTunneler is the client side of either Tunnel call.

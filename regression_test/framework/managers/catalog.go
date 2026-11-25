@@ -3,7 +3,9 @@ package managers
 import "strings"
 
 // Default is the manager configuration used by suites with no special
-// requirements: Baseline, with no overlay values.
+// requirements: Baseline, with no overlay values. It sets no
+// security.authentication.mode, so the release runs in the chart's default
+// mode.
 //
 //nolint:gochecknoglobals // catalog entry
 var Default = Spec{Key: "default"}
@@ -202,14 +204,36 @@ func QuicNodePortAuthEnforcing() Spec {
 }
 
 // AuthPermissive returns a manager spec that explicitly sets
-// security.authentication.mode to "permissive" -- the chart's own default,
-// set here so the auth area's permissive scenario has a spec named for what
-// it tests, even though the resulting release is behaviorally identical to
-// Default's.
+// security.authentication.mode to "permissive": a caller without a
+// verifiable token is still served. A suite that sends raw gRPC calls
+// without a token (or that drives an agent port directly) declares it so
+// the manager runs in the mode the suite needs, whatever the chart default
+// is.
 func AuthPermissive() Spec {
 	return Spec{
 		Key:    "auth-permissive",
 		Values: Values{Security: Security{Authentication: Authentication{Mode: "permissive"}}},
+	}
+}
+
+// NodeAgentAuthPermissive returns a manager spec combining NodeAgent's
+// node-hosted traffic-agent mode with security.authentication.mode=
+// permissive, for suites that talk to a node-agent's ports without a
+// session credential.
+func NodeAgentAuthPermissive() Spec {
+	return Spec{
+		Key:    "node-agent-auth-permissive",
+		Values: Merge(NodeAgent().Values, AuthPermissive().Values),
+	}
+}
+
+// QuicNodePortAuthPermissive returns a manager spec combining QuicNodePort's
+// QUIC tunnel with security.authentication.mode=permissive, for suites that
+// open a raw manager session without a token.
+func QuicNodePortAuthPermissive() Spec {
+	return Spec{
+		Key:    "quic-nodeport-auth-permissive",
+		Values: Merge(QuicNodePort().Values, AuthPermissive().Values),
 	}
 }
 

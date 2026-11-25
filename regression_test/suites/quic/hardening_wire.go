@@ -18,7 +18,7 @@ type TunnelwireQuicHardening struct {
 }
 
 func init() {
-	rt.Register(&TunnelwireQuicHardening{}, rt.InArea("quic"), rt.NeedsManager(managers.QuicNodePort()))
+	rt.Register(&TunnelwireQuicHardening{}, rt.InArea("quic"), rt.NeedsManager(managers.QuicNodePortAuthPermissive()))
 }
 
 // tunnelwireFlood is the number of concurrent QUIC connections from one host in the flood

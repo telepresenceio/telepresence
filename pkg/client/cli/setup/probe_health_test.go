@@ -377,7 +377,8 @@ func TestProbeHealth_X509ClientAuth(t *testing.T) {
 	})
 	t.Run("not in enforcing mode skips the check", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
-		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{X509: true})
+		h := probeHealthAt(p, installedRelease(&helm.Values{Security: helm.Security{Authentication: helm.Authentication{Mode: new("permissive")}}}),
+			ClientAuthFacts{X509: true})
 		assert.Nil(t, h.X509ClientAuth)
 	})
 }
