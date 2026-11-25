@@ -179,17 +179,13 @@ func (s *AuthEnforcing) Test_SharedServiceInterceptDoesNotJoinUngrantedWorkload(
 		return len(after) > 0 && !slices.ContainsFunc(after, func(uid string) bool { return slices.Contains(before, uid) })
 	}, namespaceReadTimeout, namespaceReadPoll, "%s should get a new pod with a traffic-agent", nameB)
 
-	var reads int
-	s.Never(func() bool {
+	// Each read completes before the test goes on, so none is in flight
+	// when the cleanup removes the intercept.
+	for deadline := time.Now().Add(sharedPartQuiet); time.Now().Before(deadline); time.Sleep(sharedPartPoll) {
 		listed, err := interceptListsWorkload(mctx, mc, si, spec.Name, nameB)
-		if err != nil {
-			t.Errorf("reading intercept %s: %v", spec.Name, err)
-			return true
-		}
-		reads++
-		return listed
-	}, sharedPartQuiet, sharedPartPoll, "the intercept must not list %s", nameB)
-	s.Positive(reads, "the intercept must have been read successfully")
+		s.Require().NoError(err, "reading intercept %s", spec.Name)
+		s.Require().False(listed, "the intercept must not list %s", nameB)
+	}
 }
 
 // interceptListsWorkload reports whether the manager's answer for the
