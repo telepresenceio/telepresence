@@ -10,8 +10,32 @@ set -e
 CONFIG_DIR="/Library/Application Support/telepresence"
 MARKER_FILE="$CONFIG_DIR/usage-opt-out"
 
+# The client trusts the machine-wide config only when the directory and
+# everything in it belongs to root and is closed to other users. A
+# directory that root does not own is set aside. So is every entry in the
+# directory that holds a symbolic link, something that root does not own,
+# or something with an access control list. Nothing is deleted. What is
+# set aside ends up in a directory next to this one that only root can
+# read.
+ASIDE="$CONFIG_DIR.untrusted.$$"
+if [ -L "$CONFIG_DIR" ]; then
+    rm -f "$CONFIG_DIR"
+fi
+if [ -d "$CONFIG_DIR" ] && [ "$(stat -f %u "$CONFIG_DIR")" != 0 ]; then
+    mv "$CONFIG_DIR" "$ASIDE"
+    chown root:wheel "$ASIDE"
+    chmod 700 "$ASIDE"
+fi
 mkdir -p "$CONFIG_DIR"
 chown root:wheel "$CONFIG_DIR"
 chmod 755 "$CONFIG_DIR"
+chmod -N "$CONFIG_DIR"
+find -P "$CONFIG_DIR" -mindepth 1 -maxdepth 1 -print0 | while IFS= read -r -d '' entry; do
+    if [ -n "$(find -P "$entry" \( -type l -o ! -user root -o -acl \) -print | head -n 1)" ]; then
+        mkdir -p -m 700 "$ASIDE"
+        mv "$entry" "$ASIDE/"
+    fi
+done
+chmod -R -P go-w "$CONFIG_DIR"
 
 rm -f "$MARKER_FILE"

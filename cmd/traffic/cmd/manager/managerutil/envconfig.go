@@ -47,8 +47,11 @@ type Env struct {
 	// must match agentInjector.webhook.port's chart default (values.yaml)
 	// -- the agent-injector Service's targetPort is unconditional on that
 	// value regardless of which mode created the listening process.
-	MutatorWebhookPort           uint16 `default:"8443"`
-	ManagerNamespace             string
+	MutatorWebhookPort uint16 `default:"8443"`
+	ManagerNamespace   string
+	// UninstallHookServiceAccount is the name, in ManagerNamespace, of the ServiceAccount that the
+	// pre-delete hook runs as. Only its token may call /uninstall; when empty, no token may.
+	UninstallHookServiceAccount  string
 	AgentRestApiPort             uint16
 	AgentArrivalTimeout          time.Duration `default:"30s"`
 	MaxNamespaceSpecificWatchers int           `default:"10"`
@@ -186,9 +189,9 @@ type Env struct {
 	// LogStreamDeadline bounds the total duration of one StreamLogs request.
 	LogStreamDeadline time.Duration `default:"5m"`
 
-	// AuthenticationMode controls how strictly the traffic-manager enforces
-	// caller authentication (disabled, permissive, or enforcing).
-	AuthenticationMode auth.Mode `default:"permissive"`
+	// AuthenticationMode controls how the traffic-manager treats caller
+	// authentication (disabled, permissive, or enforcing).
+	AuthenticationMode auth.Mode `default:"enforcing"`
 
 	// AuthorizationRequiredGrant is the grant a client must hold to be
 	// authorized to connect and to attach to a workload: pods/portforward
@@ -207,6 +210,9 @@ type Env struct {
 
 	// For testing only
 	CompatibilityVersion *semver.Version
+
+	// CompatibilityAgentVersion does the same for the RPCs that traffic-agents call.
+	CompatibilityAgentVersion *semver.Version
 }
 
 // HostNetwork reports whether the traffic-manager pod runs on the host

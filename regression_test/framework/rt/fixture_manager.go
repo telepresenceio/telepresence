@@ -94,7 +94,8 @@ func ManagerFixture(spec managers.Spec) *Fixture[*ManagerHandle] {
 
 // mergedManagerValues layers spec's overlay on top of the runtime's
 // baseline (registry/tag/pullPolicy derived from the manager version under
-// test), then, in coverage mode (RTEST_COVER=1), adds the GOCOVERDIR env
+// test), pins permissive authentication for a released client that sends no
+// token when the spec sets no mode, then, in coverage mode (RTEST_COVER=1), adds the GOCOVERDIR env
 // var and hostPath volume defined in cover.go.
 func mergedManagerValues(r *Runtime, spec managers.Spec) managers.Values {
 	registry := r.Registry()
@@ -114,6 +115,9 @@ func mergedManagerValues(r *Runtime, spec managers.Spec) managers.Values {
 	}
 	base := managers.Baseline(registry, r.ManagerVersion().String(), pullPolicy, "true")
 	values := managers.Merge(base, spec.Values)
+	if r.clientVersionOverride != "" {
+		values = managers.PinPermissiveForClient(values, r.Version())
+	}
 	if r.cover {
 		values = applyCoverManagerValues(values)
 	}
@@ -154,7 +158,7 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("manager/%s: marshaling values: %w", spec.Key, err)
 	}
-	fileKey := strings.ReplaceAll(spec.Key, "/", "-")
+	fileKey := strings.NewReplacer("/", "-", ":", "-").Replace(spec.Key)
 	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-"+fileKey+".yaml")
 	if err := os.WriteFile(valuesPath, valuesYAML, 0o644); err != nil {
 		return nil, fmt.Errorf("manager/%s: writing values: %w", spec.Key, err)

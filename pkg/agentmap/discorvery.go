@@ -28,7 +28,14 @@ type WorkloadOwnerNotFoundError struct {
 	*k8sErrors.StatusError
 }
 
+// maxOwnerDepth bounds the controller owner chain that FindOwnerWorkload follows.
+const maxOwnerDepth = 8
+
 func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkloadKinds k8sapi.Kinds) (k8sapi.Workload, error) {
+	return findOwnerWorkload(ctx, obj, supportedWorkloadKinds, 0)
+}
+
+func findOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkloadKinds k8sapi.Kinds, depth int) (k8sapi.Workload, error) {
 	clog.Tracef(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
 	lbs := obj.GetLabels()
 	if wlName, ok := lbs[agentconfig.WorkloadNameLabel]; ok {
@@ -38,6 +45,11 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkload
 				kind, obj.GetName(), obj.GetNamespace())
 		}
 		return GetWorkload(ctx, wlName, obj.GetNamespace(), k8sapi.Kind(kind))
+	}
+	if depth >= maxOwnerDepth {
+		clog.Warnf(ctx, "the owner chain of %s.%s is longer than %d; ignoring it", obj.GetName(), obj.GetNamespace(), maxOwnerDepth)
+		return nil, &WorkloadOwnerNotFoundError{StatusError: k8sErrors.NewNotFound(
+			obj.GetGroupResource(), fmt.Sprintf("%s.%s", obj.GetName(), obj.GetNamespace()))}
 	}
 	refs := obj.GetOwnerReferences()
 	ns := obj.GetNamespace()
@@ -59,7 +71,7 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkload
 				if err != nil {
 					return nil, err
 				}
-				return FindOwnerWorkload(ctx, wl, supportedWorkloadKinds)
+				return findOwnerWorkload(ctx, wl, supportedWorkloadKinds, depth+1)
 			}
 			// A controller owner of unsupported workload kind is treated as "no owner".
 			break

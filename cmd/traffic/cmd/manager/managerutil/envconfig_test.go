@@ -70,7 +70,7 @@ func TestEnvconfig(t *testing.T) {
 		UsageReportingEnabled:        true,
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
-		AuthenticationMode:           auth.ModePermissive,
+		AuthenticationMode:           auth.ModeEnforcing,
 		AuthorizationRequiredGrant:   authz.GrantAny,
 		LogStreamChunkSize:           resource.MustParse("64Ki"),
 		LogStreamPodConcurrency:      4,
@@ -111,6 +111,15 @@ func TestEnvconfig(t *testing.T) {
 			Output: func(e *managerutil.Env) {
 				v := semver.MustParse("2.15.3-rc.0")
 				e.CompatibilityVersion = &v
+			},
+		},
+		"agentVersion": {
+			Input: map[string]string{
+				"COMPATIBILITY_AGENT_VERSION": `2.30.1`,
+			},
+			Output: func(e *managerutil.Env) {
+				v := semver.MustParse("2.30.1")
+				e.CompatibilityAgentVersion = &v
 			},
 		},
 		"mountPolicies": {

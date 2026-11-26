@@ -30,7 +30,7 @@ Upgrade telepresence traffic manager
       --reroute-local strings               Reroute port on local host to remote host. Format is &lt;local port&gt;:&lt;host&gt;:&lt;port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --reroute-remote strings              Reroute port on remote host. Format is &lt;host&gt;:&lt;port&gt;:&lt;new port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --reset-values                        when upgrading, reset the values to the ones built into the chart
-      --reuse-values                        when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f
+      --reuse-values                        when upgrading, reuse the last release's values and chart defaults and merge in any overrides from the command line via --set and -f. Without this flag and without values, an upgrade uses the new chart's defaults with the values supplied earlier on top
       --set stringArray                     specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)
       --set-file stringArray                set values from respective files specified via the command line (can specify multiple or separate values with commas: key1=path1,key2=path2)
       --set-json stringArray                set JSON values on the command line (can specify multiple or separate values with commas: a.b=jsonval1,a.c=jsonval2)

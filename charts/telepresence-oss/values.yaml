@@ -78,7 +78,7 @@ grpc:
 # security configures the traffic-manager's caller-authentication behavior.
 security:
   authentication:
-    # mode controls how strictly the traffic-manager enforces caller authentication:
+    # mode controls how the traffic-manager treats caller authentication:
     #
     #  disabled    no token validation at all.
     #  permissive  tokens are validated and the resulting identity is used for
@@ -86,8 +86,8 @@ security:
     #              rejected for lacking or failing authentication.
     #  enforcing   calls without a valid token are rejected.
     #
-    # Default: permissive
-    mode: permissive
+    # Default: enforcing
+    mode: enforcing
 
     # x509 configures client-certificate authentication: an additional,
     # opt-in mechanism for identifying clients whose kubeconfig credentials

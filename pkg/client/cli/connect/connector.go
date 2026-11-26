@@ -39,7 +39,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -445,16 +444,11 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		args = append(args, "--embed-network")
 	}
 	clog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
-	fp, err := ioutil.FreePortsTCP(1)
-	if err != nil {
-		return ctx, errcat.NoDaemonLogs.New(err)
-	}
 	token, err := server.NewToken()
 	if err != nil {
 		return ctx, errcat.NoDaemonLogs.New(err)
 	}
 	info := &daemon.Info{
-		DaemonPort:   fp[0].Port(),
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,
 		Namespace:    daemonID.Namespace,
@@ -463,7 +457,8 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		Token:        token,
 	}
 	fn := daemonID.InfoFileName()
-	args = append(args, "--address", fmt.Sprintf("127.0.0.1:%d", info.DaemonPort), "--info-file", fn)
+	// The daemon picks its port and adds it to the info file once it listens.
+	args = append(args, "--address", "127.0.0.1:0", "--info-file", fn)
 	il := daemon.NewUserInfoLoader(ctx)
 	err = il.SaveInfo(info, fn)
 	if err != nil {
@@ -484,6 +479,9 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 	conn, err := il.DialDaemon(ctx, true)
 	if err != nil {
 		return ctx, errcat.NoDaemonLogs.New(err)
+	}
+	if published, lerr := il.LoadInfo(fn); lerr == nil {
+		info = published
 	}
 	return newUserDaemon(ctx, conn, info)
 }

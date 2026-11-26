@@ -191,6 +191,10 @@ func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn) {
 }
 
 func (l *Listener) handleStream(ctx context.Context, conn *quic.Conn, qs *quic.Stream, certCN string) {
+	// Everything the handler starts ends with the connection.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(conn.Context(), cancel)()
 	// A QUIC stream only terminates -- and only returns its stream-limit credit to
 	// the peer -- once both directions have finished. Close finishes the send
 	// direction; CancelRead releases the receive direction even when the client's

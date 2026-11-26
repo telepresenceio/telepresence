@@ -18,7 +18,11 @@ const (
 	// minutes (sweeper)".
 	defaultIdleExpiry = 2 * time.Minute
 
-	idleSweepInterval      = 15 * time.Second
+	// defaultHalfOpenExpiry is how long a flow that has never received a datagram
+	// from its backend may see no traffic before it is closed.
+	defaultHalfOpenExpiry = 10 * time.Second
+
+	idleSweepInterval      = 5 * time.Second
 	handshakeSweepInterval = 500 * time.Millisecond
 	metricsLogInterval     = 30 * time.Second
 

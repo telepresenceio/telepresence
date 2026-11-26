@@ -345,6 +345,10 @@ func (s *State) checkAgentsForIntercept(intercept *Intercept) (errCode rpc.Inter
 
 // RemoveSession removes an AgentSession from the set of present session IDs.
 func (s *State) RemoveSession(ctx context.Context, id tunnel.SessionID) {
+	if IsAgentSessionID(id) {
+		s.removeAgentSession(id)
+		return
+	}
 	if cs, ok := s.clients.LoadAndDelete(id); ok {
 		s.removeClientSession(cs)
 	} else {
@@ -661,12 +665,16 @@ func (s *State) AddClient(client *rpc.ClientInfo, principal *auth.Principal, now
 	// (to both humans and computers) if the manager restarts and those existing session IDs
 	// suddenly refer to different sessions.
 	sessionID := tunnel.SessionID(uuid.New().String())
-	s.addClient(sessionID, client, principal, now)
+	if s.addClient(sessionID, client, principal, now) != nil {
+		panic(fmt.Errorf("duplicate id %q", sessionID))
+	}
 	return sessionID
 }
 
-func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) {
-	s.addClient(sessionID, client, principal, now)
+// RestoreClient stores a client session under sessionID. When a session with
+// that ID already exists, nothing is stored and the existing session is returned.
+func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) (existing *ClientSession) {
+	return s.addClient(sessionID, client, principal, now)
 }
 
 // RestoreIntercepts stores each entry in intercepts as manager state, keyed
@@ -684,6 +692,10 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 	for _, intercept := range intercepts {
 		spec := intercept.Spec
 		if IsChildIntercept(spec) {
+			continue
+		}
+		if intercept.GetClientSession().GetSessionId() == "" {
+			clog.Warnf(ctx, "skipping restored intercept %q: no client session", intercept.Id)
 			continue
 		}
 		if is, loaded := s.intercepts.Load(intercept.Id); loaded {
@@ -776,15 +788,18 @@ func (s *State) restoreChildIntercepts(parent *Intercept, now time.Time) {
 	}
 }
 
-// addClient is like AddClient but takes a sessionID, for testing purposes.
-func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) {
+// addClient stores a new client session under id. It returns the session
+// already stored under id, if any, and then stores nothing.
+func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) (existing *ClientSession) {
 	cs := newClientSessionState(s.backgroundCtx, id, client, now)
 	if principal != nil {
 		cs.SetPrincipal(principal)
 	}
-	if oldClient, hasConflict := s.clients.LoadOrStore(id, cs); hasConflict {
-		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", id, oldClient, client))
+	if old, hasConflict := s.clients.LoadOrStore(id, cs); hasConflict {
+		cs.cancel()
+		return old
 	}
+	return nil
 }
 
 func (s *State) GetClient(id tunnel.SessionID) *ClientSession {
@@ -874,10 +889,13 @@ func (s *State) AddAgent(ctx context.Context, agent *rpc.AgentInfo, principal *a
 	if mutator.GetMap(ctx).RefuseAgent(types.UID(agent.PodUid)) {
 		return "", status.Error(codes.Aborted, "inactivated pod")
 	}
-	return s.RestoreAgent(ctx, tunnel.SessionID(AgentSessionIDPrefix+agent.PodUid), agent, principal, now)
+	return s.RestoreAgent(ctx, AgentSessionID(agent.PodUid), agent, principal, now)
 }
 
 func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rpc.AgentInfo, principal *auth.Principal, now time.Time) (tunnel.SessionID, error) {
+	if _, isClient := s.clients.Load(id); isClient {
+		return "", status.Errorf(codes.InvalidArgument, "session id %q is a client session", id)
+	}
 	as := newAgentSessionState(s.backgroundCtx, id, agent, now)
 	if principal != nil {
 		as.SetPrincipal(principal)
@@ -908,28 +926,10 @@ func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rp
 				// All pods in one workload share a participant key. Avoid entering
 				// UpdateIntercept once the workload is already represented; otherwise a
 				// burst of pods needlessly contends on the same intercept record.
+				// Only the Service watcher adds a participant, after the
+				// participant authorization has passed.
 				if _, exists := intercept.participants[participantKey]; !exists {
-					if _, selectionKnown := s.selectedServiceParticipants(intercept); selectionKnown {
-						// The Service selector is authoritative when its
-						// informer state is available. An old agent can keep
-						// advertising a target after its workload was
-						// pruned, but must not rejoin the intercept.
-						return true
-					}
-					intercept = s.UpdateIntercept(interceptID, func(intercept *Intercept) {
-						if _, exists := intercept.participants[participantKey]; exists {
-							return
-						}
-						intercept.addParticipant(agent)
-						if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
-							intercept.Disposition = rpc.InterceptDispositionType_WAITING
-							intercept.Message = fmt.Sprintf("Waiting for Agent approval from workloads: %s",
-								strings.Join(intercept.pendingParticipants(), ", "))
-						}
-					})
-					if intercept == nil {
-						return true
-					}
+					return true
 				}
 			}
 		} else if !matches {

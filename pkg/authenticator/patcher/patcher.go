@@ -14,6 +14,9 @@ import (
 
 const (
 	kubeConfigStubSubCommands = "kubeauth"
+
+	// TokenEnvName is the name of the environment variable that gives the stub the token that the kubeauth service requires.
+	TokenEnvName = "TELEPRESENCE_KUBEAUTH_TOKEN"
 )
 
 // AddressProvider is a function that returns the path to the telepresence executable, an address to a service that
@@ -89,15 +92,17 @@ func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address
 		}
 
 		// Patch exec.
-		args := []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile}
+		// The token goes in the environment of the stub, where a process list doesn't show it.
+		var env []clientcmdapi.ExecEnvVar
 		if token != "" {
-			args = append(args, "--token", token)
+			env = []clientcmdapi.ExecEnvVar{{Name: TokenEnvName, Value: token}}
 		}
 		authInfo.Exec = &clientcmdapi.ExecConfig{
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 			APIVersion:      authInfo.Exec.APIVersion,
 			Command:         executable,
-			Args:            append(args, contextName, address),
+			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile, contextName, address},
+			Env:             env,
 		}
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pkg/sftp"
 	"github.com/stretchr/testify/require"
@@ -75,7 +76,7 @@ func newTestServer(t *testing.T) (*sftp.Client, testTree) {
 	// hostile. One level deeper, it is plain content and os.Root follows it natively.
 	require.NoError(t, os.Symlink("real", filepath.Join(appDir, "sub", "int")))
 
-	srv, err := sftpserver.New(root, t.TempDir())
+	srv, err := sftpserver.New(root, []string{t.TempDir()}, nil)
 	require.NoError(t, err)
 
 	client := startServer(t, srv)
@@ -276,7 +277,7 @@ func newMountsTestServer(t *testing.T) (*sftp.Client, mountsTree) {
 	require.NoError(t, os.Symlink(filepath.Join(mountsRoot, c, "etc"), filepath.Join(exportsRoot, c, "etc")))
 	require.NoError(t, os.Symlink("/etc", filepath.Join(exportsRoot, c, "evil")))
 
-	srv, err := sftpserver.New(exportsRoot, mountsRoot)
+	srv, err := sftpserver.New(exportsRoot, []string{mountsRoot}, nil)
 	require.NoError(t, err)
 
 	client := startServer(t, srv)
@@ -423,7 +424,7 @@ func newNodeAgentTestServer(t *testing.T, allowProcRoot bool) (*sftp.Client, nod
 	if allowProcRoot {
 		opts = append(opts, procRoot)
 	}
-	srv, err := sftpserver.New(exportsRoot, opts...)
+	srv, err := sftpserver.New(exportsRoot, opts, nil)
 	require.NoError(t, err)
 
 	client := startServer(t, srv)
@@ -498,7 +499,7 @@ func newProcRootLinkTestServer(t *testing.T, absoluteLink bool) (*sftp.Client, s
 		filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io"),
 		filepath.Join(linkParent, "kubernetes.io")))
 
-	srv, err := sftpserver.New(exportsRoot, procRoot)
+	srv, err := sftpserver.New(exportsRoot, []string{procRoot}, nil)
 	require.NoError(t, err)
 
 	client := startServer(t, srv)
@@ -615,7 +616,7 @@ func newTwoRootsTestServer(t *testing.T) (*sftp.Client, twoRootsTree) {
 	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerC"), 0o755))
 	require.NoError(t, os.Symlink(rootAAlias, filepath.Join(exportsRoot, "containerC", "mount")))
 
-	srv, err := sftpserver.New(exportsRoot, rootA, rootB, rootAAlias)
+	srv, err := sftpserver.New(exportsRoot, []string{rootA, rootB, rootAAlias}, nil)
 	require.NoError(t, err)
 
 	client := startServer(t, srv)
@@ -709,4 +710,137 @@ func TestPosixRenameAcrossExportsOfSameRootWorks(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "in-a", string(data))
+}
+
+// pivotTree is a node-agent layout: procRoot stands for /proc/<pid>/root, holding the
+// exported mount var/data and a file outside it, etc/secret.
+type pivotTree struct {
+	exportsRoot string
+	procRoot    string
+}
+
+func newPivotTestServer(t *testing.T, readOnly ...string) (*sftp.Client, pivotTree) {
+	t.Helper()
+
+	procRoot := t.TempDir()
+	exportsRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(procRoot, "etc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(procRoot, "etc", "secret"), []byte("secret"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(procRoot, "var", "data", "ro"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(procRoot, "var", "data", "f"), []byte("data"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(procRoot, "var", "data", "ro", "f"), []byte("ro"), 0o644))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(exportsRoot, "c", "var"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(procRoot, "var", "data"), filepath.Join(exportsRoot, "c", "var", "data")))
+
+	srv, err := sftpserver.New(exportsRoot, []string{procRoot}, readOnly)
+	require.NoError(t, err)
+	return startServer(t, srv), pivotTree{exportsRoot: exportsRoot, procRoot: procRoot}
+}
+
+func TestClientSymlinkToContainerRootIsRefused(t *testing.T) {
+	client, tree := newPivotTestServer(t)
+	const exp = "/tel_app_exports/c/var/"
+
+	// An absolute link to the container root, in the exports skeleton and inside the mount.
+	for _, link := range []string{exp + "pivot", exp + "data/pivot"} {
+		err := client.Symlink(tree.procRoot, link)
+		requireDenied(t, err, link)
+	}
+	require.NoFileExists(t, filepath.Join(tree.exportsRoot, "c", "var", "pivot"))
+	require.NoFileExists(t, filepath.Join(tree.procRoot, "var", "data", "pivot"))
+
+	// Relative links that leave the mount.
+	for _, target := range []string{"..", "../../etc", "../../../../../etc/secret"} {
+		err := client.Symlink(target, exp+"data/rel")
+		requireDenied(t, err, target)
+	}
+	require.Equal(t, "secret", mustRead(t, filepath.Join(tree.procRoot, "etc", "secret")))
+}
+
+func TestUnrecordedAbsoluteSymlinkIsNotFollowed(t *testing.T) {
+	client, tree := newPivotTestServer(t)
+
+	// A link that appears after the server started, whatever created it, is not a redirect
+	// even though its target lies inside the allowed base.
+	require.NoError(t, os.Symlink(tree.procRoot, filepath.Join(tree.exportsRoot, "c", "var", "pivot")))
+	require.NoError(t, os.Symlink(tree.procRoot, filepath.Join(tree.procRoot, "var", "data", "pivot")))
+
+	for _, p := range []string{"/tel_app_exports/c/var/pivot/etc/secret", "/tel_app_exports/c/var/data/pivot/etc/secret"} {
+		_, err := client.Open(p)
+		require.Error(t, err, p)
+		_, err = client.OpenFile(p, os.O_WRONLY|os.O_TRUNC)
+		require.Error(t, err, p)
+	}
+	require.Equal(t, "secret", mustRead(t, filepath.Join(tree.procRoot, "etc", "secret")))
+}
+
+func TestAgentLinkAndRelativeLinkWork(t *testing.T) {
+	client, tree := newPivotTestServer(t)
+	const data = "/tel_app_exports/c/var/data/"
+
+	require.Equal(t, "data", readAll(t, client, data+"f"))
+
+	require.NoError(t, client.Symlink("f", data+"rel"))
+	require.Equal(t, "data", readAll(t, client, data+"rel"))
+	require.NoError(t, client.Symlink("ro/f", data+"down"))
+	require.Equal(t, "ro", readAll(t, client, data+"down"))
+	require.Equal(t, "data", mustRead(t, filepath.Join(tree.procRoot, "var", "data", "f")))
+}
+
+func mustRead(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	require.NoError(t, err)
+	return string(b)
+}
+
+func TestReadOnlyMountRefusesWrites(t *testing.T) {
+	client, tree := newPivotTestServer(t, "c/var/data/ro")
+	const data = "/tel_app_exports/c/var/data/"
+	const ro = data + "ro/"
+	dataDir := filepath.Join(tree.procRoot, "var", "data")
+
+	require.Equal(t, "ro", readAll(t, client, ro+"f"))
+
+	_, err := client.Create(ro + "new")
+	requireDenied(t, err)
+	_, err = client.OpenFile(ro+"f", os.O_WRONLY)
+	requireDenied(t, err)
+	_, err = client.OpenFile(ro+"f", os.O_RDWR|os.O_APPEND)
+	requireDenied(t, err)
+	requireDenied(t, client.Mkdir(ro+"d"))
+	requireDenied(t, client.Remove(ro+"f"))
+	requireDenied(t, client.Rename(ro+"f", ro+"g"))
+	requireDenied(t, client.PosixRename(ro+"f", ro+"g"))
+	requireDenied(t, client.Rename(data+"f", ro+"g"))
+	requireDenied(t, client.PosixRename(ro+"f", data+"g"))
+	requireDenied(t, client.Chmod(ro+"f", 0o600))
+	requireDenied(t, client.Chown(ro+"f", 1, 1))
+	requireDenied(t, client.Chtimes(ro+"f", time.Now(), time.Now()))
+	requireDenied(t, client.Truncate(ro+"f", 0))
+	requireDenied(t, client.Link(ro+"f", ro+"h"))
+	requireDenied(t, client.Link(data+"f", ro+"h"))
+	requireDenied(t, client.Symlink("f", ro+"s"))
+	// A link outside the read-only mount that leads into it.
+	requireDenied(t, client.Symlink("ro/f", data+"alias"))
+
+	require.Equal(t, "ro", mustRead(t, filepath.Join(dataDir, "ro", "f")))
+	entries, err := os.ReadDir(filepath.Join(dataDir, "ro"))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	// The rest of the mount stays writable.
+	w, err := client.Create(data + "new")
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	require.NoError(t, client.Mkdir(data+"d"))
+}
+
+// requireDenied asserts that err is the permission-denied refusal; the sftp client reports it
+// as a status error that doesn't unwrap to os.ErrPermission.
+func requireDenied(t *testing.T, err error, msgAndArgs ...any) {
+	t.Helper()
+	require.Error(t, err, msgAndArgs...)
+	require.Contains(t, err.Error(), "permission denied", msgAndArgs...)
 }

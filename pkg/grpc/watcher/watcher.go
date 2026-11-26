@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -65,7 +66,10 @@ func WatchWithRetry[T any](
 				value, err := stream.Recv()
 				switch c := status.Code(err); c {
 				case codes.OK:
-					err = handler(value)
+					err = callHandler(ctx, name, handler, value)
+					if errors.Is(err, errHandlerPanic) {
+						return err
+					}
 					if err != nil {
 						return backoff.Permanent(err)
 					}
@@ -88,4 +92,18 @@ func WatchWithRetry[T any](
 		err = nil
 	}
 	return err
+}
+
+var errHandlerPanic = errors.New("handler panic")
+
+// callHandler calls the handler and returns errHandlerPanic, logging the panic, if the handler panics.
+// The watch is then restarted, so that a delta watch gets a fresh snapshot through repair.
+func callHandler[T any](ctx context.Context, name string, handler func(*T) error, value *T) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			clog.Errorf(ctx, "panic in %s handler, restarting watch: %v\n%s", name, r, debug.Stack())
+			err = fmt.Errorf("%s: %w: %v", name, errHandlerPanic, r)
+		}
+	}()
+	return handler(value)
 }

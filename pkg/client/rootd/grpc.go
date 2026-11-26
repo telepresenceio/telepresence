@@ -120,7 +120,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		return nil, status.Error(codes.Unavailable, "the root daemon is shutting down")
 	}
 
-	cfg, err := sessionConfig(client.GetConfig(s), info.ClientConfig, s.managed)
+	cfg, err := sessionConfig(s, client.GetConfig(s), info.ClientConfig, s.managed)
 	if err != nil {
 		return nil, err
 	}
@@ -278,6 +278,14 @@ func (s *service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (r
 func (s *service) SetInterceptShortcuts(ctx context.Context, request *rpc.SetInterceptShortcutsRequest) (*emptypb.Empty, error) {
 	err := s.withSession(ctx, func(ctx context.Context, session *session) error {
 		session.SetInterceptShortcuts(ctx, request.Shortcuts)
+		return nil
+	})
+	return &emptypb.Empty{}, err
+}
+
+func (s *service) SetInterceptTargets(ctx context.Context, request *rpc.SetInterceptTargetsRequest) (*emptypb.Empty, error) {
+	err := s.withSession(ctx, func(ctx context.Context, session *session) error {
+		session.SetInterceptTargets(ctx, request.Targets)
 		return nil
 	})
 	return &emptypb.Empty{}, err

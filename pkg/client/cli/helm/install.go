@@ -51,10 +51,15 @@ const (
 
 type Request struct {
 	values.Options
-	Type            RequestType
-	ValuesJson      []byte
-	ReuseValues     bool
-	ResetValues     bool
+	Type        RequestType
+	ValuesJson  []byte
+	ReuseValues bool
+	ResetValues bool
+
+	// ResetThenReuseValues is set when an upgrade has neither values nor an explicit reuse or reset
+	// flag: the new chart's defaults apply, with the values supplied to the existing release on top.
+	ResetThenReuseValues bool
+
 	CreateNamespace bool
 	NoHooks         bool
 	Version         string
@@ -80,7 +85,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 			err = errcat.NoDaemonLogs.New(err)
 		}
 	}()
-	if hr.ReuseValues && hr.ResetValues {
+	if hr.ReuseValues && hr.ResetValues { // checked before coalesceValues derives ResetThenReuseValues
 		return errors.New("--reset-values and --reuse-values are mutually exclusive")
 	}
 
@@ -269,6 +274,7 @@ func upgradeExisting(
 	upgrade.Namespace = ns
 	upgrade.ResetValues = req.ResetValues
 	upgrade.ReuseValues = req.ReuseValues
+	upgrade.ResetThenReuseValues = req.ResetThenReuseValues
 	upgrade.DisableHooks = req.NoHooks
 	upgrade.Version = chrt.Metadata.Version
 	return runManagerHelm(ctx, ki, ns, releaseName, func(c context.Context, timeout time.Duration) error {

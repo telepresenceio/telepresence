@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -66,6 +67,33 @@ func jsonError(err error) error {
 	return err
 }
 
+// recoveryInterceptors returns interceptors that turn a panic in the rest of the chain into an Internal error.
+func recoveryInterceptors() (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+	unaryRecoveryInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				resp, err = nil, recovered(ctx, info.FullMethod, r)
+			}
+		}()
+		return handler(ctx, req)
+	}
+	streamRecoveryInterceptor := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = recovered(ss.Context(), info.FullMethod, r)
+			}
+		}()
+		return handler(srv, ss)
+	}
+	return unaryRecoveryInterceptor, streamRecoveryInterceptor
+}
+
+// recovered logs a recovered panic with its stack and returns a generic Internal error.
+func recovered(ctx context.Context, method string, r any) error {
+	clog.Errorf(ctx, "panic in %s: %v\n%s", method, r, debug.Stack())
+	return status.Error(codes.Internal, "internal error")
+}
+
 // Interceptors is a unary/stream interceptor pair installed by NewWithAuth.
 type Interceptors struct {
 	Unary  grpc.UnaryServerInterceptor
@@ -110,6 +138,8 @@ func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.Ser
 		return jsonError(err)
 	}
 
+	unaryRecoveryInterceptor, streamRecoveryInterceptor := recoveryInterceptors()
+
 	if clog.Enabled(valCtx, slog.LevelDebug) {
 		opts := []logging.Option{
 			logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
@@ -119,11 +149,13 @@ func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.Ser
 			unaryContextInterceptor,
 			logging.UnaryServerInterceptor(interceptorLogger(), opts...),
 			unaryErrorInterceptor,
+			unaryRecoveryInterceptor,
 		}
 		streamInterceptors := []grpc.StreamServerInterceptor{
 			streamContextInterceptor,
 			logging.StreamServerInterceptor(interceptorLogger(), opts...),
 			streamErrorInterceptor,
+			streamRecoveryInterceptor,
 		}
 		if auth != nil {
 			unaryInterceptors = append(unaryInterceptors, auth.Unary)
@@ -138,10 +170,12 @@ func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.Ser
 		unaryInterceptors := []grpc.UnaryServerInterceptor{
 			unaryContextInterceptor,
 			unaryErrorInterceptor,
+			unaryRecoveryInterceptor,
 		}
 		streamInterceptors := []grpc.StreamServerInterceptor{
 			streamContextInterceptor,
 			streamErrorInterceptor,
+			streamRecoveryInterceptor,
 		}
 		if auth != nil {
 			unaryInterceptors = append(unaryInterceptors, auth.Unary)

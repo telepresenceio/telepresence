@@ -24,13 +24,15 @@ func TestReplaceAuthExecWithStub(t *testing.T) {
 	require.NoError(t, replaceAuthExecWithStub(cfg, "telepresence", "host:1234", "/cfg/config.yml", "s3cret"))
 	exec := cfg.AuthInfos["user"].Exec
 	assert.Equal(t, "telepresence", exec.Command)
-	assert.Equal(t, []string{"kubeauth", "--config", "/cfg/config.yml", "--token", "s3cret", "ctx", "host:1234"}, exec.Args)
+	assert.Equal(t, []string{"kubeauth", "--config", "/cfg/config.yml", "ctx", "host:1234"}, exec.Args)
+	assert.Equal(t, []clientcmdapi.ExecEnvVar{{Name: TokenEnvName, Value: "s3cret"}}, exec.Env)
 }
 
 func TestReplaceAuthExecWithStub_noToken(t *testing.T) {
 	cfg := execConfig()
 	require.NoError(t, replaceAuthExecWithStub(cfg, "telepresence", "host:1234", "/cfg/config.yml", ""))
 	assert.Equal(t, []string{"kubeauth", "--config", "/cfg/config.yml", "ctx", "host:1234"}, cfg.AuthInfos["user"].Exec.Args)
+	assert.Empty(t, cfg.AuthInfos["user"].Exec.Env)
 }
 
 const withoutExecKubeconfig = `

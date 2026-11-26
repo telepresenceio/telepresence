@@ -45,15 +45,16 @@ type callEntry struct {
 // call must be added here with the session check that its handler uses.
 var callClasses = map[string]callEntry{
 	// Internal listener only.
-	"GetTelepresenceAPI": {classInternal, "used by the agents' local API"},
-	"ReconnectAgent":     {classInternal, "agent session upkeep"},
-	"ArriveAsAgent":      {classInternal, "agent arrival"},
-	"GetIntercept":       {classInternal, "used by the traffic-agents"},
-	"ReviewIntercept":    {classInternal, "used by the traffic-agents"},
-	"WatchLogLevel":      {classInternal, "used by the traffic-agents"},
-	"GetQuicAgentCert":   {classInternal, "used by the traffic-agents"},
-	"WatchQuicBackends":  {classInternal, "used by the traffic-agents"},
-	"ReportMetrics":      {classInternal, "used by the traffic-agents"},
+	"GetTelepresenceAPI":     {classInternal, "used by the agents' local API"},
+	"ReconnectAgent":         {classInternal, "agent session upkeep"},
+	"ArriveAsAgent":          {classInternal, "agent arrival"},
+	"GetIntercept":           {classInternal, "used by the traffic-agents"},
+	"ReviewIntercept":        {classInternal, "used by the traffic-agents"},
+	"AuthorizeSessionAccess": {classInternal, "used by the traffic-agents"},
+	"WatchLogLevel":          {classInternal, "used by the traffic-agents"},
+	"GetQuicAgentCert":       {classInternal, "used by the traffic-agents"},
+	"WatchQuicBackends":      {classInternal, "used by the traffic-agents"},
+	"ReportMetrics":          {classInternal, "used by the traffic-agents"},
 	// No session.
 	"Version":                         {classNoSession, "asked before a session exists"},
 	"ArriveAsClient":                  {classNoSession, "creates the session"},

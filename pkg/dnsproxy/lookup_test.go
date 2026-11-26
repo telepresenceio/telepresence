@@ -322,3 +322,31 @@ func TestPtrAddress_v6(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, netip.MustParseAddr("2001:db8::567:89ab"), ip)
 }
+
+func TestLookup_MalformedNames(t *testing.T) {
+	ctx := testutil.NewContext(t, true)
+	types := []uint16{
+		dns.TypeA, dns.TypeAAAA, dns.TypePTR, dns.TypeCNAME, dns.TypeMX, dns.TypeNS, dns.TypeSRV, dns.TypeTXT,
+	}
+	for _, name := range []string{"", "."} {
+		for _, qType := range types {
+			require.NotPanics(t, func() {
+				_, _, err := Lookup(ctx, qType, name, "")
+				require.Error(t, err, "name %q type %d", name, qType)
+			})
+		}
+	}
+}
+
+func TestUseLookupName_Unterminated(t *testing.T) {
+	for _, name := range []string{"", ".", "a", "a.b"} {
+		require.NotPanics(t, func() { _, _ = useLookupName(name, "") }, name)
+	}
+}
+
+func TestSvcFQN_EmptyService(t *testing.T) {
+	ctx := testutil.NewContext(t, true)
+	r := &net.Resolver{}
+	require.Equal(t, "", svcFQN(ctx, "_a._b.", r))
+	require.Equal(t, "", svcFQN(ctx, "_a._b..", r))
+}

@@ -345,6 +345,8 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
+          - name: UNINSTALL_HOOK_SERVICE_ACCOUNT
+            value: traffic-manager-uninstall-hook
           - name: POD_IP
             valueFrom:
               fieldRef:
@@ -398,6 +400,10 @@ spec:
           {{- if .version }}
           - name: COMPATIBILITY_VERSION
             value: {{ .version }}
+          {{- end }}
+          {{- if .agentVersion }}
+          - name: COMPATIBILITY_AGENT_VERSION
+            value: {{ .agentVersion }}
           {{- end }}
           {{- end }}
           {{- with .extraEnv }}

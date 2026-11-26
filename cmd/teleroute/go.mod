@@ -8,7 +8,7 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.5.0
 	github.com/telepresenceio/clog v0.0.0-20260114221933-287514cf9831
 	github.com/telepresenceio/telepresence/rpc/v2 v2.31.2
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -16,10 +16,10 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/docker/go-connections v0.8.1 // indirect
-	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
+	golang.org/x/net v0.63.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261123191846-1e707ab9fbc2 // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

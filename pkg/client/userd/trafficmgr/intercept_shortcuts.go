@@ -73,6 +73,13 @@ func (s *session) interceptShortcuts(intercepts []*manager.InterceptInfo, isGlob
 		if err != nil {
 			continue
 		}
+		proto := spec.Protocol
+		if proto == "" {
+			proto = types.ProtoTCP.String()
+		}
+		if _, err := types.ParseProto(proto); err != nil || spec.TargetPort <= 0 || spec.TargetPort > 65535 {
+			continue
+		}
 		// The target host may be a synthetic IP representing a hostname.
 		if addr, err = s.Resolve(addr); err != nil {
 			clog.Debugf(s, "no intercept shortcut for %s: %v", spec.Name, err)
@@ -81,10 +88,6 @@ func (s *session) interceptShortcuts(intercepts []*manager.InterceptInfo, isGlob
 		target, err := netip.AddrPortFrom(addr, uint16(spec.TargetPort)).MarshalBinary()
 		if err != nil {
 			continue
-		}
-		proto := spec.Protocol
-		if proto == "" {
-			proto = types.ProtoTCP.String()
 		}
 		shortcuts = append(shortcuts, &daemon.InterceptShortcut{
 			Namespace:     spec.Namespace,

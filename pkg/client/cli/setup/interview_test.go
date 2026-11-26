@@ -294,6 +294,14 @@ func TestInterview_EnforceAuth(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, a.EnforceAuth)
 	})
+	t.Run("installed release without a mode defaults to enforcing", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Version: version.Structured.String(), Namespace: "ambassador", Values: &helm.Values{}}
+		})
+		a, _, err := runInterview(t, facts, "\n\n\n\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.True(t, a.EnforceAuth)
+	})
 	t.Run("installed release defaults to its own permissive setting", func(t *testing.T) {
 		facts := recFacts(func(f *ClusterFacts) {
 			f.Release = ReleaseFacts{

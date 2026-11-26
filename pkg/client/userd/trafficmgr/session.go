@@ -36,11 +36,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/sessioncred"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -87,6 +87,8 @@ type workloadWatch struct {
 }
 
 type session struct {
+	targetsPublisher interceptTargetsPublisher
+
 	*k8s.Cluster
 	service            userd.Service
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
@@ -118,6 +120,9 @@ type session struct {
 	managerReconnectLock sync.Mutex
 	managerConn          *grpc.ClientConn
 	managerGeneration    uint64
+
+	// restoreFailed ensures that a final ReconnectClient failure ends the session once.
+	restoreFailed sync.Once
 
 	consecutiveRemainFailures int
 	remainFailureGeneration   uint64
@@ -564,6 +569,9 @@ func (s *session) reconnectManagerWith(
 		Intercepts: s.getCurrentInterceptInfos(),
 	})
 	if err != nil {
+		if restoreFailureIsFinal(err) {
+			s.endUnrestorableSession(err)
+		}
 		return fmt.Errorf("unable to reconnect client: %w", err)
 	}
 
@@ -581,10 +589,37 @@ func (s *session) reconnectManagerWith(
 	s.managerVersion = managerVersion
 	s.managerGeneration++
 	s.managerLock.Unlock()
+	s.sessionCredential.Reset()
 	if old != nil {
 		_ = old.Close()
 	}
 	return nil
+}
+
+// restoreFailureIsFinal reports whether a ReconnectClient error will not go away by waiting. The
+// traffic-manager answers FailedPrecondition when it no longer manages the client's namespace.
+// NotFound is final for the same reason. PermissionDenied can mean either a session bound to
+// another identity or a grant that an administrator may add later, so it is not final.
+func restoreFailureIsFinal(err error) bool {
+	switch status.Code(err) {
+	case codes.FailedPrecondition, codes.NotFound:
+		return true
+	}
+	return false
+}
+
+// endUnrestorableSession disconnects the session, as a Disconnect request does, so that the
+// root daemon tears down its routes, rules and DNS. It acts once per session.
+func (s *session) endUnrestorableSession(cause error) {
+	if s.closing.Load() || s.Err() != nil || s.service == nil {
+		return
+	}
+	s.restoreFailed.Do(func() {
+		clog.Errorf(s, "the traffic-manager cannot restore this session; disconnecting: %v", cause)
+		go func() {
+			_, _ = s.service.ConnectorServer().Disconnect(context.WithoutCancel(s), &empty.Empty{})
+		}()
+	})
 }
 
 const remainReconnectFailureThreshold = 3
@@ -1648,6 +1683,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 		}
 		if err == nil {
 			clog.Info(s, "Reconnected to root daemon")
+			s.resendInterceptTargets()
 			s.updateDaemonNamespaces()
 			return
 		}
@@ -1694,14 +1730,9 @@ func (s *session) eachWorkload(namespaces []string, do func(kind manager.Workloa
 }
 
 func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
-	fw := forwarder.New(types.PortAndProto{
-		Port:  srcPort,
-		Proto: ap.Proto,
-	}, tunnel.ClientToAgent, ap.AddrPort)
-
 	go func() {
 		ctx := clog.WithGroup(s, fmt.Sprintf("%d=>%s", srcPort, ap))
-		err := fw.Serve(ctx, nil)
+		err := remotefs.ServeLocal(ctx, types.PortAndProto{Port: srcPort, Proto: ap.Proto}, ap.AddrPort)
 		if err != nil && ctx.Err() == nil {
 			clog.Errorf(ctx, "port-forwarder failed with %v", err)
 		}

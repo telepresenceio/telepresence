@@ -134,7 +134,12 @@ nextSearch:
 
 	for domain := range s.domains {
 		if _, ok := domains[domain]; !ok {
-			nsFile := domainResolverFile(resolverDirName, domain)
+			nsFile, err := resolverFilePath(resolverDirName, domain)
+			if err != nil {
+				clog.Error(c, err)
+				delete(s.domains, domain)
+				continue
+			}
 			clog.Infof(c, "Removing %s", nsFile)
 			if err := os.Remove(nsFile); err != nil {
 				clog.Error(c, err)
@@ -144,7 +149,11 @@ nextSearch:
 	}
 
 	for domain, rf := range domains {
-		nsFile := domainResolverFile(resolverDirName, domain)
+		nsFile, err := resolverFilePath(resolverDirName, domain)
+		if err != nil {
+			clog.Error(c, err)
+			continue
+		}
 		if _, ok := s.domains[domain]; ok {
 			if oldRf, err := dnsproxy.ReadResolveFile(nsFile); err != nil && rf.Equals(oldRf) {
 				continue
@@ -160,8 +169,4 @@ nextSearch:
 	}
 	s.flushDNS()
 	return nil
-}
-
-func domainResolverFile(resolverDirName, domain string) string {
-	return filepath.Join(resolverDirName, "telepresence."+domain)
 }

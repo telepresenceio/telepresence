@@ -194,7 +194,7 @@ func agentPod(ns, name, workload string, kind k8sapi.Kind, cfgJSON string, ready
 }
 
 // agentConfigs returns a wanted config and the JSON of a stale one for the workload. The wanted
-// config carries an agent image, which the annotation form strips.
+// config carries an agent image.
 func agentConfigs(t *testing.T, ns, name string, kind k8sapi.Kind) (wanted *agentconfig.Sidecar, wantedJSON, staleJSON string) {
 	wanted = &agentconfig.Sidecar{
 		AgentName:    name,
@@ -636,6 +636,10 @@ func TestPodHasAgentConfigFullConfig(t *testing.T) {
 	assert.True(t, podHasAgentConfig(ctx, podFor(t, full(subnets...)), wantedTight), "equal config")
 	assert.False(t, podHasAgentConfig(ctx, podFor(t, full("10.1.0.0/16", "fd00::/48")), wantedTight), "different subnet")
 	assert.False(t, podHasAgentConfig(ctx, podFor(t, full("10.1.0.0/16")), wantedTight), "fewer subnets")
+
+	oldImage := full(subnets...)
+	oldImage.AgentImage = "tel2:old"
+	assert.False(t, podHasAgentConfig(ctx, podFor(t, oldImage), wantedTight), "different agent image")
 }
 
 func TestEvictBatchStopsAtBudget(t *testing.T) {

@@ -100,6 +100,9 @@ func (cfg *GeneratorConfig) Generate(
 	wl k8sapi.Workload,
 	existingConfig *agentconfig.Sidecar,
 ) (*agentconfig.Sidecar, error) {
+	// Work on a copy, so that mount policies from one workload's annotations never reach another's.
+	local := *cfg
+	cfg = &local
 	if TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
 		return nil, errcat.User.Newf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
 	}
@@ -129,12 +132,27 @@ func (cfg *GeneratorConfig) Generate(
 	}
 
 	pns := make(map[int32]uint16)
+	preserved := preservedAgentPorts(cfg, existingConfig, pod)
+	used := make(map[uint16]struct{}, len(preserved))
+	for _, p := range preserved {
+		used[p] = struct{}{}
+	}
 	agentPortNumberFunc := func(cnPort int32) uint16 {
 		if p, ok := pns[cnPort]; ok {
 			// Port already mapped. Reuse that mapping
 			return p
 		}
-		p := cfg.AgentPort + uint16(len(pns))
+		p, ok := preserved[cnPort]
+		if !ok {
+			p = cfg.AgentPort + uint16(len(pns))
+			for {
+				if _, taken := used[p]; !taken {
+					break
+				}
+				p++
+			}
+			used[p] = struct{}{}
+		}
 		pns[cnPort] = p
 		return p
 	}
@@ -382,6 +400,12 @@ nextContainerPort:
 				// port is a configuration error that won't be fixed by retrying.
 				return nil, errcat.User.Newf("found no container port that matches port annotation %s", p)
 			}
+			if cn == nil {
+				if cn = soleApplicationContainer(cns); cn == nil {
+					return nil, errcat.User.Newf(
+						"port annotation %s matches no declared container port, and the pod has more than one container to assign it to", p)
+				}
+			}
 			appPort = &core.ContainerPort{
 				Name:          fmt.Sprintf("port-%s", Base26(anonNameIndex)),
 				ContainerPort: int32(num),
@@ -417,6 +441,71 @@ nextContainerPort:
 		ccs = append(ccs, cfg.newContainerConfig(cn, len(ccs), []*agentconfig.Intercept{ic}, containerReplacePolicy(existingConfig, cn)))
 	}
 	return ccs, nil
+}
+
+// preservedAgentPorts returns the agent port that each container port of a running pod's config is
+// mapped to, so that regenerating the config doesn't move ports a running agent is already using.
+// Ports that are ambiguous, collide with each other, or collide with a port of the pod or the agent
+// are not preserved.
+func preservedAgentPorts(cfg *GeneratorConfig, existingConfig *agentconfig.Sidecar, pod *core.PodTemplateSpec) map[int32]uint16 {
+	if existingConfig == nil {
+		return nil
+	}
+	reserved := map[uint16]struct{}{cfg.AgentPort: {}, cfg.APIPort: {}, cfg.QuicPort: {}, 0: {}}
+	for i := range pod.Spec.Containers {
+		for _, cp := range pod.Spec.Containers[i].Ports {
+			reserved[uint16(cp.ContainerPort)] = struct{}{}
+		}
+	}
+	byContainerPort := make(map[int32]uint16)
+	ambiguous := make(map[int32]struct{})
+	for _, cc := range existingConfig.Containers {
+		if cc == nil {
+			continue
+		}
+		for _, ic := range cc.Intercepts {
+			if ic == nil {
+				continue
+			}
+			cp := int32(ic.ContainerPort)
+			if prev, ok := byContainerPort[cp]; ok && prev != ic.AgentPort {
+				ambiguous[cp] = struct{}{}
+			}
+			byContainerPort[cp] = ic.AgentPort
+		}
+	}
+	owners := make(map[uint16]int32, len(byContainerPort))
+	for cp, ap := range byContainerPort {
+		if _, bad := ambiguous[cp]; bad {
+			delete(byContainerPort, cp)
+			continue
+		}
+		if _, bad := reserved[ap]; bad || ap < 1024 {
+			delete(byContainerPort, cp)
+			continue
+		}
+		if other, dup := owners[ap]; dup {
+			delete(byContainerPort, cp)
+			delete(byContainerPort, other)
+			continue
+		}
+		owners[ap] = cp
+	}
+	return byContainerPort
+}
+
+func soleApplicationContainer(cns []core.Container) *core.Container {
+	var found *core.Container
+	for i := range cns {
+		if cns[i].Name == agentconfig.ContainerName {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = &cns[i]
+	}
+	return found
 }
 
 func containerReplacePolicy(existingConfig *agentconfig.Sidecar, cn *core.Container) agentconfig.ReplacePolicy {

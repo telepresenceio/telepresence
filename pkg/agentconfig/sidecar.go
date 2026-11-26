@@ -410,10 +410,22 @@ func LoopbackFor(ip netip.Addr) netip.Addr {
 // Clone returns a deep copy of the Sidecar.
 func (s *Sidecar) Clone() *Sidecar {
 	cs := *s
-	for ci, cn := range cs.Containers {
+	if s.Containers != nil {
+		cs.Containers = make([]*Container, len(s.Containers))
+	}
+	for ci, cn := range s.Containers {
+		if cn == nil {
+			continue
+		}
 		ccn := *cn
 		cs.Containers[ci] = &ccn
-		for ii, ic := range ccn.Intercepts {
+		if cn.Intercepts != nil {
+			ccn.Intercepts = make([]*Intercept, len(cn.Intercepts))
+		}
+		for ii, ic := range cn.Intercepts {
+			if ic == nil {
+				continue
+			}
 			cic := *ic
 			ccn.Intercepts[ii] = &cic
 		}
@@ -523,13 +535,13 @@ func UnmarshalYAML(data []byte) (*Sidecar, error) {
 }
 
 // MarshalTight marshals the given instance into JSON data, with data relating to the creation of the
-// container manifest stripped off.
+// container manifest stripped off. The agent image is kept, so that the config records which image
+// a pod was injected with.
 func MarshalTight(ac *Sidecar) (string, error) {
 	// Sidecars are cached and reused by concurrent admission requests. Strip
 	// creation-only fields from a value copy so marshaling never mutates that
 	// shared config while another request is building an injected container.
 	tight := *ac
-	tight.AgentImage = ""
 	tight.PullPolicy = ""
 	tight.PullSecrets = nil
 	tight.InitResources = nil

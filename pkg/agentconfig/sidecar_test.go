@@ -224,8 +224,10 @@ func TestMarshalTightDoesNotMutateSidecar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decoded.AgentImage != "" ||
-		decoded.PullPolicy != "" ||
+	if decoded.AgentImage != sc.AgentImage {
+		t.Fatalf("tight config agent image = %q; want %q", decoded.AgentImage, sc.AgentImage)
+	}
+	if decoded.PullPolicy != "" ||
 		decoded.PullSecrets != nil ||
 		decoded.InitResources != nil ||
 		decoded.SecurityContext != nil ||

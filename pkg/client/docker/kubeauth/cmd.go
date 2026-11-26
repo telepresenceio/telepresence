@@ -44,6 +44,7 @@ type authService struct {
 type PortFile struct {
 	Port       int    `json:"port"`
 	Kubeconfig string `json:"kubeconfig"`
+	Context    string `json:"context"`
 	Token      string `json:"token"`
 }
 
@@ -100,6 +101,10 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 	clog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
+	kubeContext, err := as.contextName()
+	if err != nil {
+		return err
+	}
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
 	token, err := server.NewToken()
 	if err != nil {
@@ -109,6 +114,7 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 		Port:       addr.Port,
 		Token:      token,
 		Kubeconfig: strings.Join(as.configFiles, string(filepath.ListSeparator)),
+		Context:    kubeContext,
 	}
 	pb, err := json.Marshal(&p)
 	if err != nil {
@@ -121,12 +127,21 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 		return err
 	}
 
+	// Either watcher returning means the daemon must stop, even without an error.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	g := log.NewGroup(ctx)
-	g.Go("portfile-alive", as.keepPortFileAlive)
-	g.Go("portfile-watcher", as.watchFiles)
+	g.Go("portfile-alive", func(ctx context.Context) error {
+		defer cancel()
+		return as.keepPortFileAlive(ctx)
+	})
+	g.Go("portfile-watcher", func(ctx context.Context) error {
+		defer cancel()
+		return as.watchFiles(ctx)
+	})
 	g.Go("grpc-server", func(ctx context.Context) error {
 		svc := server.NewWithAuth(ctx, server.TokenInterceptors(token))
-		authGrpc.RegisterAuthenticatorServer(svc, as)
+		authGrpc.RegisterAuthenticatorServer(svc, as, kubeContext)
 		return server.Serve(ctx, svc, grpcListener)
 	})
 	if err = g.Wait(); err != nil {
@@ -135,6 +150,18 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 		clog.Info(ctx, "kubeauth daemon exiting")
 	}
 	return err
+}
+
+// contextName returns the name of the context that the daemon was started for.
+func (as *authService) contextName() (string, error) {
+	if c := as.kubeFlags.Context; c != nil && *c != "" {
+		return *c, nil
+	}
+	rawConfig, err := as.clientConfig.RawConfig()
+	if err != nil {
+		return "", err
+	}
+	return rawConfig.CurrentContext, nil
 }
 
 func (as *authService) ClientConfig() (clientcmd.ClientConfig, error) {

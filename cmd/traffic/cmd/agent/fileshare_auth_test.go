@@ -1,7 +1,7 @@
 package agent
 
 // This file lives in package agent (not agent_test, unlike most of this directory's
-// tests) because fileShareAuth, its snapshot, and serveSftpConn are all unexported: the
+// tests) because fileShareAuth and its snapshot are both unexported: the
 // behavior under test -- what a connection sees, and what ends up in the snapshot -- has
 // no exported surface to observe it through from outside the package.
 
@@ -10,17 +10,15 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"log/slog"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/blang/semver/v4"
-	"github.com/pkg/sftp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -28,10 +26,10 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
 	agentrpc "github.com/telepresenceio/telepresence/rpc/v2/agent"
 	mgrrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/sftpserver"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -69,6 +67,7 @@ func TestFileShareAuth_ValidatePassword_Enforcing(t *testing.T) {
 
 	a := &fileShareAuth{}
 	a.set(&key.PublicKey, "enforcing")
+	a.authorizer.Store(newSessionAuthorizer(filesAccess{}, &mgrrpc.SessionInfo{}))
 	require.True(t, a.enforcing())
 
 	require.NoError(t, a.validatePassword(ctx, "u", valid))
@@ -126,14 +125,18 @@ func TestFileShareAuth_ValidatePassword_Permissive(t *testing.T) {
 	}
 }
 
-// TestFileShareAuth_ValidatePassword_NilSnapshotAcceptsAnything covers the state before
-// any manager has ever supplied credential material: there is nothing to verify
-// against, so every login succeeds, exactly as it did before this credential existed.
-func TestFileShareAuth_ValidatePassword_NilSnapshotAcceptsAnything(t *testing.T) {
+// TestFileShareAuth_ValidatePassword_NilSnapshotRefuses covers the state before any
+// manager has supplied credential material: every login is refused.
+func TestFileShareAuth_ValidatePassword_NilSnapshotRefuses(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	a := &fileShareAuth{}
+	require.False(t, a.ready())
 	require.False(t, a.enforcing())
-	require.NoError(t, a.validatePassword(ctx, "u", "not-a-token"))
+	require.Error(t, a.validatePassword(ctx, "u", "not-a-token"))
+	require.Error(t, a.validatePassword(ctx, "u", "anonymous"))
+
+	a.set(generateTestKey(t).Public().(*ecdsa.PublicKey), "permissive")
+	require.True(t, a.ready())
 	require.NoError(t, a.validatePassword(ctx, "u", "anonymous"))
 }
 
@@ -221,205 +224,45 @@ func TestFileShareAuth_VerifySession_Invalid(t *testing.T) {
 }
 
 // TestFileShareAuth_VerifySession_NilSnapshot covers the state before any manager has
-// ever supplied credential material: there is nothing to verify against, so the call is
-// treated exactly as before this check existed.
+// supplied credential material: the call is refused with codes.Unavailable.
 func TestFileShareAuth_VerifySession_NilSnapshot(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	a := &fileShareAuth{}
 	verified, err := a.verifySession(ctx, tunnel.SessionID("session-1"))
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.False(t, verified)
+
+	a.set(generateTestKey(t).Public().(*ecdsa.PublicKey), "permissive")
+	verified, err = a.verifySession(ctx, tunnel.SessionID("session-1"))
 	require.NoError(t, err)
 	require.False(t, verified)
 }
 
-// TestFromOwnPod covers fromOwnPod's classification of a connection's remote address:
-// the pod's own address (in both its plain and 4-in-6-mapped forms) and loopback are
-// "from own pod"; anything else, including a non-TCP net.Addr, is foreign.
-func TestFromOwnPod(t *testing.T) {
-	podIPv4 := netip.MustParseAddr("10.42.0.7")
-	podIPv6 := netip.MustParseAddr("2001:db8::7")
-
+// TestIsOwnSftpDestination covers the address classification that decides whether a
+// tunnel stream is connected to the in-process SFTP server. The cluster cannot vary the
+// node-agent's pod IP and the target pod's IP independently.
+func TestIsOwnSftpDestination(t *testing.T) {
+	podIP := netip.MustParseAddr("10.42.0.7")
 	tests := []struct {
-		name   string
-		remote net.Addr
-		podIP  netip.Addr
-		want   bool
+		name string
+		dst  string
+		want bool
 	}{
-		{
-			name:   "own pod IPv4",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.0.7").To4(), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "own pod IPv4, 4-in-6 mapped form",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 1234}, // net.ParseIP returns the 16-byte mapped form
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "own pod IPv6",
-			remote: &net.TCPAddr{IP: net.ParseIP("2001:db8::7"), Port: 1234},
-			podIP:  podIPv6,
-			want:   true,
-		},
-		{
-			name:   "loopback v4",
-			remote: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "loopback v6",
-			remote: &net.TCPAddr{IP: net.ParseIP("::1"), Port: 1234},
-			podIP:  podIPv4,
-			want:   true,
-		},
-		{
-			name:   "foreign IP",
-			remote: &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 1234},
-			podIP:  podIPv4,
-			want:   false,
-		},
-		{
-			name:   "non-TCP addr",
-			remote: &net.UnixAddr{Name: "/tmp/fileshare-auth-test.sock", Net: "unix"},
-			podIP:  podIPv4,
-			want:   false,
-		},
+		{"loopback", "127.0.0.1:2222", true},
+		{"loopback v6", "[::1]:2222", true},
+		{"unspecified", "0.0.0.0:2222", true},
+		{"pod IP", "10.42.0.7:2222", true},
+		{"pod IP 4-in-6", "[::ffff:10.42.0.7]:2222", true},
+		{"other pod", "10.42.9.9:2222", false},
+		{"other port", "127.0.0.1:2223", false},
+		{"no port", "127.0.0.1:0", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, fromOwnPod(tt.remote, tt.podIP))
+			require.Equal(t, tt.want, isOwnSftpDestination(netip.MustParseAddrPort(tt.dst), 2222, podIP))
 		})
 	}
-}
-
-// sftpGateFixture is the tree and confined server shared by the serveSftpConn source-gate
-// tests below. It can be shared read-only across subtests; only the fileShareAuth
-// snapshot, pod IP, and simulated remote address differ per test.
-type sftpGateFixture struct {
-	srv *sftpserver.Server
-}
-
-func newSftpGateFixture(t *testing.T) *sftpGateFixture {
-	t.Helper()
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello"), 0o644))
-	srv, err := sftpserver.New(dir, t.TempDir())
-	require.NoError(t, err)
-	return &sftpGateFixture{srv: srv}
-}
-
-// remoteAddrConn wraps a net.Conn and reports remote from RemoteAddr instead of the
-// wrapped conn's own address, so a test dialing over real loopback TCP can simulate an
-// arbitrary source address at serveSftpConn's gate.
-type remoteAddrConn struct {
-	net.Conn
-	remote net.Addr
-}
-
-func (c *remoteAddrConn) RemoteAddr() net.Addr { return c.remote }
-
-// listen starts a real TCP listener whose accept loop wraps every connection to report
-// remote as its RemoteAddr and runs it through serveSftpConn -- exactly as agent.go's
-// sftpServer wires the production listener -- and returns its address, so a test can
-// dial it as a real client would.
-func (f *sftpGateFixture) listen(t *testing.T, ctx context.Context, auth *fileShareAuth, podIP netip.Addr, remote net.Addr) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go serveSftpConn(ctx, &remoteAddrConn{Conn: conn, remote: remote}, f.srv, auth, podIP)
-		}
-	}()
-	return ln.Addr().String()
-}
-
-// requireListsFixture dials addr as an SFTP client and asserts that it can list the
-// fixture's hello.txt.
-func requireListsFixture(t *testing.T, addr string) {
-	t.Helper()
-	conn, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	client, err := sftp.NewClientPipe(conn, conn)
-	require.NoError(t, err)
-	defer client.Close()
-
-	entries, err := client.ReadDir("/")
-	require.NoError(t, err)
-	names := make([]string, len(entries))
-	for i, e := range entries {
-		names[i] = e.Name()
-	}
-	require.Contains(t, names, "hello.txt")
-}
-
-// TestServeSftpConn_ForeignEnforcingCloses asserts that a connection whose source
-// address is neither the pod's own nor loopback is closed before it ever receives an
-// SFTP response once the snapshot's mode is enforcing.
-func TestServeSftpConn_ForeignEnforcingCloses(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	f := newSftpGateFixture(t)
-	auth := &fileShareAuth{}
-	auth.set(nil, "enforcing")
-	podIP := netip.MustParseAddr("10.42.0.7")
-	foreign := &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 4444}
-	addr := f.listen(t, ctx, auth, podIP, foreign)
-
-	conn, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	_, err = sftp.NewClientPipe(conn, conn)
-	require.Error(t, err, "expected the connection to be closed before completing the SFTP version exchange")
-}
-
-// TestServeSftpConn_ForeignPermissiveServes asserts that a foreign-source connection is
-// still served, exactly as before this gate existed, when the snapshot's mode is
-// permissive.
-func TestServeSftpConn_ForeignPermissiveServes(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	f := newSftpGateFixture(t)
-	auth := &fileShareAuth{}
-	auth.set(nil, "permissive")
-	podIP := netip.MustParseAddr("10.42.0.7")
-	foreign := &net.TCPAddr{IP: net.ParseIP("10.42.9.9"), Port: 4444}
-	addr := f.listen(t, ctx, auth, podIP, foreign)
-
-	requireListsFixture(t, addr)
-}
-
-// TestServeSftpConn_OwnSourceEnforcingServes asserts that connections whose source
-// address is the pod's own, or loopback, are served even in enforcing mode -- these are
-// exactly the connections the tunnel delivers, since the agent dials them itself.
-func TestServeSftpConn_OwnSourceEnforcingServes(t *testing.T) {
-	podIP := netip.MustParseAddr("10.42.0.7")
-	tests := []struct {
-		name   string
-		remote net.Addr
-	}{
-		{"own pod address", &net.TCPAddr{IP: net.ParseIP("10.42.0.7"), Port: 5555}},
-		{"loopback", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5555}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := testutil.NewContext(t, false)
-			f := newSftpGateFixture(t)
-			auth := &fileShareAuth{}
-			auth.set(nil, "enforcing")
-			addr := f.listen(t, ctx, auth, podIP, tt.remote)
-
-			requireListsFixture(t, addr)
-		})
-	}
+	require.False(t, isOwnSftpDestination(netip.MustParseAddrPort("127.0.0.1:0"), 0, podIP), "port 0 is never the SFTP port")
 }
 
 // fakeQuicAgentCertManager is a minimal stand-in for the traffic-manager's
@@ -589,7 +432,10 @@ func TestRefreshQuicAgentListenerWithRetry_Unimplemented(t *testing.T) {
 	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 1, fm.callCount())
-	require.Nil(t, st.fileShareAuth.v.Load())
+	require.False(t, st.fileShareAuth.ready())
+	require.Error(t, st.fileShareAuth.validatePassword(ctx, "user", "anonymous"))
+	_, err := st.fileShareAuth.verifySession(ctx, tunnel.SessionID("session-a"))
+	require.Equal(t, codes.Unavailable, status.Code(err))
 }
 
 func TestRefreshQuicAgentListenerWithRetry_CancelledSession(t *testing.T) {
@@ -768,4 +614,56 @@ func receiveWithin(t *testing.T, ch <-chan int) int {
 		t.Fatal("timed out waiting for a refresh call")
 		return 0
 	}
+}
+
+// TestWithoutDebugLogging asserts that the context handed to the FTP server reports debug
+// logging as disabled, which keeps the server from echoing received lines such as PASS.
+func TestWithoutDebugLogging(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	require.True(t, clog.Enabled(ctx, slog.LevelDebug))
+	ctx = withoutDebugLogging(ctx)
+	require.False(t, clog.Enabled(ctx, slog.LevelDebug))
+	require.True(t, clog.Enabled(ctx, slog.LevelInfo))
+	require.False(t, clog.Enabled(clog.With(ctx, "k", "v"), slog.LevelDebug))
+}
+
+func TestFileShareAuth_NoCredentialsAcceptsUnauthenticated(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	a := &fileShareAuth{}
+	a.setNoCredentials()
+
+	require.True(t, a.ready())
+	require.False(t, a.enforcing())
+	require.NoError(t, a.validatePassword(ctx, "user", "anonymous"))
+	verified, err := a.verifySession(ctx, "some-session")
+	require.NoError(t, err)
+	require.False(t, verified)
+}
+
+// filesAccess is a manager client that grants every session access to the file servers.
+type filesAccess struct {
+	mgrrpc.ManagerClient
+}
+
+func (filesAccess) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
+	return &mgrrpc.AuthorizeSessionAccessResponse{Level: mgrrpc.AuthorizeSessionAccessResponse_FILES}, nil
+}
+
+// noAccessCall is a manager client that doesn't implement AuthorizeSessionAccess.
+type noAccessCall struct {
+	mgrrpc.ManagerClient
+}
+
+func (noAccessCall) AuthorizeSessionAccess(context.Context, *mgrrpc.AuthorizeSessionAccessRequest, ...grpc.CallOption) (*mgrrpc.AuthorizeSessionAccessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
+// The regression suite AgentidPreAccessCallManager covers this against a real
+// traffic-agent; this checks that the refusal is remembered for later requests.
+func TestSessionAuthorizer_UnimplementedRefuses(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	sa := newSessionAuthorizer(noAccessCall{}, &mgrrpc.SessionInfo{})
+	require.Equal(t, accessNone, sa.level(ctx, "s1", "cred"))
+	require.True(t, sa.unimplemented.Load())
+	require.Equal(t, accessNone, sa.level(ctx, "s2", "cred"))
 }

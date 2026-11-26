@@ -19,7 +19,9 @@ import (
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/usg"
@@ -88,6 +90,15 @@ func nodeAgentWorkloadSelector(agentName, namespace string) string {
 		nodeAgentAppLabel, nodeAgentAppLabelValue,
 		nodeAgentNameLabel, agentName,
 		nodeAgentNamespaceLabel, namespace)
+}
+
+// IsNodeAgentJobFor reports whether lbs are the labels of a node-agent Job
+// that the traffic-manager created for the agent named agentName and the
+// workload in namespace.
+func IsNodeAgentJobFor(lbs map[string]string, agentName, namespace string) bool {
+	return lbs[nodeAgentAppLabel] == nodeAgentAppLabelValue &&
+		lbs[nodeAgentNameLabel] == agentName &&
+		lbs[nodeAgentNamespaceLabel] == namespace
 }
 
 // reapNodeAgentJobs deletes the node-agent Job(s) created for the agent named
@@ -369,6 +380,16 @@ func ensureNodeAgentTarget(
 		}
 	}
 
+	// The image and the manager host come from the traffic-manager's own configuration.
+	agentImage := managerutil.GetAgentImage(ctx)
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(agentImage)
+	if err != nil {
+		return err
+	}
+	cfg = cfg.Clone()
+	cfg.AgentImage = agentImage
+	cfg.ManagerHost = agentmap.ManagerHost(gc.ManagerNamespace, gc.ClusterDomain)
+
 	job, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
 		namespace:    namespace,
 		nodeName:     target.nodeName,
@@ -570,6 +591,9 @@ func nodeAgentTargets(ctx context.Context, wl k8sapi.Workload) ([]nodeAgentPodTa
 	var checkErr error
 	for i := range pods.Items {
 		pod := &pods.Items[i]
+		if !mutator.PodControlledBy(ctx, pod, wl) {
+			continue
+		}
 		if !podRunningAndReady(pod) {
 			continue
 		}

@@ -92,6 +92,7 @@ func (s *Handler) Test_ApplyHandlerCommand() {
 	ctx := s.Ctx()
 	ns := s.AppNamespace()
 	s.Workload(workloads.Echo(stateInterceptWL))
+	quitAll(t, s.CLI(), ctx)
 	defer quitAll(t, s.CLI(), ctx)
 
 	dir := t.TempDir()

@@ -75,6 +75,9 @@ type intercept struct {
 	// Mount read-only
 	readOnly bool
 
+	// localPorts are the ports that the local request asked to forward to the pod.
+	localPorts []string
+
 	// ownsMountPoint is true when this daemon created ClientMountPoint (the CLI asked
 	// for a generated mount point) and is therefore responsible for removing it.
 	ownsMountPoint atomic.Bool
@@ -95,6 +98,10 @@ type interceptResult struct {
 // awaitIntercept is what the traffic-manager is using to notify the watchInterceptsLoop
 // about an expected intercept arrival.
 type awaitIntercept struct {
+	// id is the intercept ID that the traffic-manager assigns to this request: the session ID
+	// and the intercept name.
+	id string
+
 	// mountPoint is the mount point assigned to the InterceptInfo's ClientMountPoint when
 	// it arrives from the traffic-manager.
 	mountPoint string
@@ -102,6 +109,9 @@ type awaitIntercept struct {
 	// mountPort is optional and indicates that a TCP bridge should be established, allowing
 	// the mount to take place in a host
 	mountPort int32
+
+	// localPorts are the ports that the local request asked to forward to the pod.
+	localPorts []string
 
 	// ownsMountPoint is true when this daemon created mountPoint and must remove it once
 	// the intercept ends.
@@ -111,14 +121,13 @@ type awaitIntercept struct {
 	waitCh   chan<- interceptResult
 }
 
-func (ic *intercept) localPorts() []string {
-	// Older versions use ii.extraPorts (TCP only), newer versions use ii.localPorts.
-	ps := ic.Spec.LocalPorts
+// specLocalPorts returns the local ports of the spec. Older versions use ExtraPorts (TCP only).
+func specLocalPorts(spec *manager.InterceptSpec) []string {
+	ps := slices.Clone(spec.LocalPorts)
 	if len(ps) == 0 {
-		for _, ep := range ic.Spec.ExtraPorts {
+		for _, ep := range spec.ExtraPorts {
 			ps = append(ps, strconv.Itoa(int(ep)))
 		}
-		ic.Spec.LocalPorts = ps
 	}
 	return ps
 }
@@ -126,7 +135,7 @@ func (ic *intercept) localPorts() []string {
 func (ic *intercept) podAccess() *podAccess {
 	return &podAccess{
 		ctx:              ic.ctx,
-		localPorts:       ic.localPorts(),
+		localPorts:       ic.localPorts,
 		workload:         ic.Spec.Agent,
 		namespace:        ic.Spec.Namespace,
 		podIP:            ic.PodIp,
@@ -186,6 +195,12 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 }
 
 func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*manager.InterceptInfo) {
+	intercepts = slices.DeleteFunc(slices.Clone(intercepts), func(ii *manager.InterceptInfo) bool {
+		return ii == nil || ii.Spec == nil
+	})
+	// The root daemon must know the targets before any waiter is told that an intercept is
+	// active and before a removal is reported as done.
+	s.pushInterceptTargets(intercepts)
 	s.setCurrentIntercepts(intercepts)
 	pat.initSnapshot()
 	for id := range s.agentless {
@@ -201,7 +216,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		s.currentInterceptsLock.Lock()
 		ic := s.currentIntercepts[ii.Id]
-		aw := s.interceptWaiters[ii.Spec.Name]
+		aw := s.pendingWaiter(ii)
 		if aw != nil {
 			delete(s.interceptWaiters, ii.Spec.Name)
 		}
@@ -296,6 +311,15 @@ func (s *session) getCurrentInterceptInfos() []*manager.InterceptInfo {
 	return ifs
 }
 
+// pendingWaiter returns the waiter of a pending AddIntercept that expects ii, or nil. The caller
+// must hold currentInterceptsLock.
+func (s *session) pendingWaiter(ii *manager.InterceptInfo) *awaitIntercept {
+	if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok && aw.id == ii.Id {
+		return aw
+	}
+	return nil
+}
+
 func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	s.currentInterceptsLock.Lock()
 	intercepts := make(map[string]*intercept, len(iis))
@@ -304,14 +328,17 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	for i, ii := range iis {
 		ic, ok := s.currentIntercepts[ii.Id]
 		if ok {
-			// retain ClientMountPoint, it's assigned in the client and never passed from the traffic-manager
+			// retain ClientMountPoint, it's assigned in the client and never taken from the traffic-manager
 			ii.ClientMountPoint = ic.ClientMountPoint
 			ic.InterceptInfo = ii
 		} else {
 			ic = &intercept{InterceptInfo: ii, finalRemovalDone: make(chan struct{})}
 			ic.ctx, ic.cancel = context.WithCancel(s)
 			clog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
-			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
+			ic.ClientMountPoint = ""
+			ic.localPorts = specLocalPorts(ii.Spec)
+			if aw := s.pendingWaiter(ii); aw != nil {
+				ic.localPorts = aw.localPorts
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
 				ic.readOnly = aw.readOnly
@@ -384,6 +411,20 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) erro
 	for _, iCept := range s.currentIntercepts {
 		if iCept.Spec.Name == spec.Name {
 			return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", spec.Name)
+		}
+	}
+	return nil
+}
+
+// reserveInterceptNameLocked fails when an intercept with the name exists or is being created. The
+// caller must hold currentInterceptsLock.
+func (s *session) reserveInterceptNameLocked(name string) error {
+	if _, ok := s.interceptWaiters[name]; ok {
+		return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", name)
+	}
+	for _, iCept := range s.currentIntercepts {
+		if iCept.Spec.Name == name {
+			return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", name)
 		}
 	}
 	return nil
@@ -767,18 +808,27 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
 	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel,
+	// The name is reserved for this call until it returns.
 	s.currentInterceptsLock.Lock()
-	s.interceptWaiters[spec.Name] = &awaitIntercept{
+	if err := s.reserveInterceptNameLocked(spec.Name); err != nil {
+		s.currentInterceptsLock.Unlock()
+		return nil, err
+	}
+	aw := &awaitIntercept{
+		id:             s.SessionInfo().SessionId + ":" + spec.Name,
 		mountPoint:     ir.MountPoint,
 		mountPort:      ir.LocalMountPort,
+		localPorts:     slices.Clone(spec.LocalPorts),
 		ownsMountPoint: ownsMountPoint,
 		readOnly:       ir.MountReadOnly,
 		waitCh:         waitCh,
 	}
+	s.interceptWaiters[spec.Name] = aw
 	s.currentInterceptsLock.Unlock()
 	defer func() {
 		s.currentInterceptsLock.Lock()
-		if _, ok := s.interceptWaiters[spec.Name]; ok {
+		cur, reserved := s.interceptWaiters[spec.Name]
+		if reserved && cur == aw {
 			delete(s.interceptWaiters, spec.Name)
 			close(waitCh)
 		}
@@ -1083,8 +1133,9 @@ func (s *session) reconcileAPIServers() {
 	agentAPIPort := func(ii *manager.InterceptInfo) int {
 		is := ii.Spec
 		if ps, ok := ii.Environment[agentconfig.EnvAPIPort]; ok {
+			// The port can only come from the cluster, so a privileged one is refused.
 			port, err := strconv.ParseUint(ps, 10, 16)
-			if err == nil {
+			if err == nil && port >= 1024 {
 				return int(port)
 			}
 			clog.Errorf(s, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)

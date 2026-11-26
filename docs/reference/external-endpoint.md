@@ -22,7 +22,7 @@ cluster:
 
 - **`security.authentication.mode: enforcing` is mandatory.** The chart
   refuses to render, and the manager refuses to start, with an external port
-  and any other mode. In permissive mode an unauthenticated caller would be
+  and any other mode. In `permissive` mode an unauthenticated caller is
   admitted; that is tolerable over a port-forward only because reaching the
   manager then requires `pods/portforward` and the API server has vouched for
   the caller. Direct Connect has no such precondition.

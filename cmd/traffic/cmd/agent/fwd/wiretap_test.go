@@ -1,6 +1,7 @@
 package fwd
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -56,4 +58,59 @@ func TestAddRequestTaps_ZeroCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, taps)
 	require.Nil(t, tapReader)
+}
+
+// TestAddRequestTaps_HugeContentLength verifies that a huge declared Content-Length neither
+// delays the call nor changes the captured header.
+func TestAddRequestTaps_HugeContentLength(t *testing.T) {
+	const declared = int64(1) << 60
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/path", strings.NewReader("abc"))
+	req.ContentLength = declared
+	req.Header.Set("X-Test", "value")
+
+	type result struct {
+		taps      []io.Reader
+		tapReader *teeReader
+		err       error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		taps, tapReader, err := addRequestTaps(context.Background(), req, 1, 16)
+		resCh <- result{taps, tapReader, err}
+	}()
+	var res result
+	select {
+	case res = <-resCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("addRequestTaps did not return within 2s")
+	}
+	require.NoError(t, res.err)
+	taps, tapReader := res.taps, res.tapReader
+	tapReader.closeTaps()
+
+	b, err := io.ReadAll(taps[0])
+	require.NoError(t, err)
+	require.Contains(t, string(b), "\r\nContent-Length: 1152921504606846976\r\n")
+	require.Contains(t, string(b), "X-Test: value")
+}
+
+// TestAddRequestTaps_HeaderMatchesWrite verifies that the captured header equals what
+// request.Write produces for an ordinary request.
+func TestAddRequestTaps_HeaderMatchesWrite(t *testing.T) {
+	const body = "the quick brown fox"
+	mk := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "http://example.com/path?q=1", strings.NewReader(body))
+		r.Header.Set("X-Test", "value")
+		return r
+	}
+	var want bytes.Buffer
+	require.NoError(t, mk().Write(&want))
+	wantHeader := want.String()[:strings.Index(want.String(), "\r\n\r\n")+4]
+
+	taps, tapReader, err := addRequestTaps(context.Background(), mk(), 1, 16)
+	require.NoError(t, err)
+	tapReader.closeTaps()
+	got, err := io.ReadAll(taps[0])
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(got), wantHeader), "got %q want prefix %q", got, wantHeader)
 }

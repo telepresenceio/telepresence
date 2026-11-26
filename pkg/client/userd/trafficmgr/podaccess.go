@@ -106,6 +106,15 @@ func (pa *podAccess) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
+// neverProxiedError is returned by ensureAccess when the pod address is excluded by never-proxy.
+type neverProxiedError struct {
+	error
+}
+
+func (e *neverProxiedError) Unwrap() error {
+	return e.error
+}
+
 func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) error {
 	cc := client.GetConfig(ctx)
 	if cc.Cluster().AgentPortForward {
@@ -129,6 +138,10 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 			if lip, ok := netip.AddrFromSlice(rsp.LocalIp); ok {
 				pa.podIP = lip.String()
 			}
+		case codes.FailedPrecondition:
+			return errcat.User.New(&neverProxiedError{error: fmt.Errorf(
+				"cannot attach to workload %s: %s; remove the subnet from never-proxy, or add an also-proxy for %s",
+				pa.workload, status.Convert(err).Message(), ip)})
 		case codes.DeadlineExceeded:
 			return fmt.Errorf("timeout waiting for port-forward to traffic-agent with pod-ip %s in namespace %s", pa.podIP, pa.namespace)
 		default:

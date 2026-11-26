@@ -44,3 +44,30 @@ func TestWatchWithRetry_RetriesByDefault(t *testing.T) {
 	require.NoError(t, err) // a canceled context ends the retry with a nil error
 	require.GreaterOrEqual(t, calls, 3, "without a permanent code the error is retried")
 }
+
+// A panicking handler must restart the watch, so that repair can fetch a fresh snapshot.
+func TestWatchWithRetry_HandlerPanicRestarts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repairs := 0
+	sp := func(context.Context) (grpc.ServerStreamingClient[emptypb.Empty], error) {
+		return &oneMessageStream{}, nil
+	}
+	err := WatchWithRetry(ctx, "test", time.Millisecond, sp,
+		func(*emptypb.Empty) error { panic("boom") },
+		func() error {
+			if repairs++; repairs >= 2 {
+				cancel()
+			}
+			return nil
+		})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, repairs, 2)
+}
+
+type oneMessageStream struct {
+	grpc.ClientStream
+}
+
+func (*oneMessageStream) Recv() (*emptypb.Empty, error) { return &emptypb.Empty{}, nil }
+func (*oneMessageStream) CloseSend() error              { return nil }

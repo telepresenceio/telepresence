@@ -6,7 +6,6 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -23,10 +22,9 @@ func (m bridgeMounter) Start(ctx context.Context, _, _, _, _ string, podAddrPort
 		Port:  uint16(m),
 		Proto: types.ProtoTCP,
 	}
-	clog.Debugf(ctx, "Remote mount bridge listening at :%d, will forward to %s", m, podAddrPort)
+	clog.Debugf(ctx, "Remote mount bridge listening at port %d, will forward to %s", m, podAddrPort)
 	go func() {
-		f := forwarder.New(pp, tunnel.ClientToAgent, podAddrPort)
-		err := f.Serve(ctx, nil)
+		err := ServeLocal(ctx, pp, podAddrPort)
 		if err != nil && ctx.Err() == nil {
 			clog.Errorf(ctx, "port-forwarder failed with %v", err)
 		}

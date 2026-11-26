@@ -2155,10 +2155,14 @@ func requireContains(t *testing.T, err error, expected string) {
 
 func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admission.AdmissionRequest {
 	bytes, _ := json.Marshal(object)
+	ns := "default"
+	if pod, ok := object.(*core.Pod); ok && pod.Namespace != "" {
+		ns = pod.Namespace
+	}
 	return &admission.AdmissionRequest{
 		Resource:  resource,
 		Object:    runtime.RawExtension{Raw: bytes},
-		Namespace: "default",
+		Namespace: ns,
 	}
 }
 

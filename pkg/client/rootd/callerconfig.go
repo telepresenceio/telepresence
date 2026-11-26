@@ -2,10 +2,12 @@ package rootd
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -62,7 +64,7 @@ var callerStringFields = map[string]string{ //nolint:gochecknoglobals // constan
 // sessionConfig returns the client configuration for a session. It is the root daemon's own configuration
 // with the sections that the caller may set taken from the caller's configuration (JSON). No setting that
 // names a file, a directory, a program, or an image comes from the caller.
-func sessionConfig(own client.Config, callerJSON []byte, managed bool) (client.Config, error) {
+func sessionConfig(ctx context.Context, own client.Config, callerJSON []byte, managed bool) (client.Config, error) {
 	cfg := own.Merge(client.GetDefaultConfig())
 	if len(bytes.TrimSpace(callerJSON)) == 0 {
 		return cfg, nil
@@ -76,6 +78,9 @@ func sessionConfig(own client.Config, callerJSON []byte, managed bool) (client.C
 			copySection(name, cfg, cc)
 		}
 	}
+	d := cfg.DNS()
+	d.IncludeSuffixes = dns.ValidNames(ctx, "include suffix", d.IncludeSuffixes, true)
+	d.ExcludeSuffixes = dns.ValidNames(ctx, "exclude suffix", d.ExcludeSuffixes, true)
 	ca, err := inlineManagerServerCA(cfg.Cluster().ManagerServerCA)
 	if err != nil {
 		return nil, err

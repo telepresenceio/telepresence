@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"io"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type blockingTunnelProvider struct {
@@ -65,14 +67,14 @@ func TestDialWaitLoopLimitsConcurrentDialResponders(t *testing.T) {
 
 	requests := make(chan *rpc.DialRequest, maxConcurrentDialResponders+10)
 	for i := 0; i < cap(requests); i++ {
-		requests <- &rpc.DialRequest{ConnId: []byte(NewZeroID())}
+		requests <- &rpc.DialRequest{ConnId: []byte(testConnID())}
 	}
 
 	stream := &dialRequestStream{requests: requests}
 	provider := newBlockingTunnelProvider()
 	done := make(chan error, 1)
 	go func() {
-		done <- DialWaitLoop(ctx, AgentToClient, provider, stream, "session", nil)
+		done <- DialWaitLoop(ctx, AgentToClient, provider, stream, "session", func(ConnID) bool { return true }, nil)
 	}()
 
 	select {
@@ -98,4 +100,8 @@ func TestDialWaitLoopLimitsConcurrentDialResponders(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for DialWaitLoop to exit")
 	}
+}
+
+func testConnID() ConnID {
+	return NewConnID(types.ProtoTCP, netip.MustParseAddrPort("10.0.0.1:1000"), netip.MustParseAddrPort("127.0.0.1:8080"))
 }

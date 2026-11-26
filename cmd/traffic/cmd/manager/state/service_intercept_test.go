@@ -1109,10 +1109,23 @@ func TestLateServiceParticipantReturnsActiveInterceptToWaiting(t *testing.T) {
 	stableParticipant.podName = stable.PodName
 	st.intercepts.Store(intercept.Id, intercept)
 
+	// An arriving agent never joins by itself; only the Service watcher adds it.
 	_, err := st.RestoreAgent(ctx, "canary", canary.AgentInfo, nil, time.Now())
 	require.NoError(t, err)
-
 	updated, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, updated.Disposition)
+	require.Len(t, updated.participants, 1)
+
+	selected := map[string]*interceptParticipant{
+		agentParticipantKey(stable.AgentInfo): {},
+		agentParticipantKey(canary.AgentInfo): {
+			namespace: canary.Namespace, kind: canary.Kind, name: canary.Name,
+		},
+	}
+	st.reconcileServiceParticipantsWithSelection(intercept.Id, updated, selected, true, true)
+
+	updated, ok = st.intercepts.Load(intercept.Id)
 	require.True(t, ok)
 	require.Equal(t, rpc.InterceptDispositionType_WAITING, updated.Disposition)
 	require.Contains(t, updated.Message, "example-service-canary")

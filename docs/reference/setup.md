@@ -227,7 +227,7 @@ input-pinned value, then the default below.
 | Managed scope | no limit; when the probes show cluster-wide install privileges are missing, a managed list containing just the manager namespace |
 | Managed namespaces | with a managed scope of namespaces and no input-pinned list: the manager namespace. A managed scope of selector without an input-pinned label selector is an error — the label selector needs a prompt and none is possible non-interactively. |
 | Mapped namespaces | none unless an input file's `client.cluster.mappedNamespaces` sets them; not asked interactively. |
-| Enforce authentication | yes when this client's own credentials would be accepted under enforcing mode, otherwise no; on an upgrade, the installed release's current mode |
+| Enforce authentication | yes when this client's own credentials would be accepted under enforcing mode, otherwise no; on an upgrade, the installed release's current mode, or yes when its values do not set the mode |
 | Required grant | `any`, or `telepresence` when Direct Connect ends up enabled; on an upgrade, the release's current value |
 | Direct Connect | never enabled unless an input file pins `externalEndpoint.enabled: true` or the installed release already enables it; a pinned enable with several TLS Secrets, or only an expired one, and no pinned `tls.secretName`, or a cert-manager choice with no pinned issuer and DNS names, is an error |
 | Legacy client access | no (`clientRbac.legacyAccess: false`); on an upgrade, the release's current value, which is yes when the release never set it; forced to yes when `apiPort` is overridden in the input or release values |
@@ -272,7 +272,8 @@ previous decisions"); "always" means "unless pinned by the input".
    more line says whether this caller's own kubeconfig would pass. The
    fresh-install default is yes when this kubeconfig would pass (a bearer
    token or a client certificate), otherwise no. On an upgrade the default is
-   the installed release's current mode. Answer -> `security.authentication.mode`.
+   the installed release's current mode, or yes when the release's values do
+   not set the mode. Answer -> `security.authentication.mode`.
 7. **Direct Connect** (only when enforcing, and a TLS Secret or cert-manager
    was found; asked before the required-grant question because it changes
    that question's default): "Enable Direct Connect, so clients reach the

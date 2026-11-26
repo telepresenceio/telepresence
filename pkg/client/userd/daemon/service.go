@@ -194,7 +194,7 @@ func Command(ctx context.Context) *cobra.Command {
 	flags.String(nameFlag, client.UserDaemonName, "Daemon name")
 	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log"),
 		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
-	flags.String(addressFlag, "", "TCP Address to listen to")
+	flags.String(addressFlag, "", "TCP Address to listen to. With port 0 and an info file, the daemon chooses a port and writes it to the file.")
 	flags.String(infoFileFlag, "", "Name of the daemon info file that holds the secret that callers must present. "+
 		"Without it, the secret is read from the "+daemon.TokenEnvName+" environment variable.")
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
@@ -315,6 +315,13 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 
 	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
 	clog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
+
+	// A daemon that was told to choose its own port announces it in the info file once it listens.
+	if infoFile, _ := flags.GetString(infoFileFlag); infoFile != "" && daemon.IsEphemeralAddress(addrStr) {
+		if err = daemon.NewUserInfoLoader(c).PublishPort(infoFile, daemonAddress.Port()); err != nil {
+			return err
+		}
+	}
 
 	clog.Info(c, "---")
 	clog.Infof(c, "Telepresence User Daemon %s starting...", client.DisplayVersion())

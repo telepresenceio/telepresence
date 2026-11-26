@@ -342,3 +342,47 @@ subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: User
   name: alice
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: telepresence-install-ambassador
+  namespace: kube-system
+rules:
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - traffic-manager-x509-auth-ambassador
+  resources:
+  - rolebindings
+  verbs:
+  - delete
+  - get
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - extension-apiserver-authentication-reader
+  resources:
+  - roles
+  verbs:
+  - bind
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: telepresence-install-ambassador
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: telepresence-install-ambassador
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: alice

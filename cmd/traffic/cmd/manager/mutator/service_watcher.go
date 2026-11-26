@@ -2,10 +2,16 @@ package mutator
 
 import (
 	"context"
+	"errors"
+	"net/netip"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 
@@ -19,18 +25,26 @@ import (
 
 type affectedConfig struct {
 	err error
-	wl  k8sapi.Workload // If a workload is retrieved, it will be cached here.
-	sc  *agentconfig.Sidecar
+	// claimed is true when an intercept of the config already refers to the Service.
+	claimed bool
+	wl      k8sapi.Workload // If a workload is retrieved, it will be cached here.
+	sc      *agentconfig.Sidecar
 }
 
 func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Service, includeSelectorMatches bool) []affectedConfig {
-	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
+	claims := func(ac *agentconfig.Sidecar) bool {
 		for _, cn := range ac.Containers {
 			for _, ic := range cn.Intercepts {
 				if ic.ServiceUID == svc.UID {
-					return nil, nil, true
+					return true
 				}
 			}
+		}
+		return false
+	}
+	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
+		if claims(ac) {
+			return nil, nil, true
 		}
 		if !includeSelectorMatches {
 			// A deleted service will only affect configs that matches its UID
@@ -56,7 +70,7 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 	if scMap, loaded := c.agentConfigs.Load(svc.Namespace); loaded {
 		scMap.Range(func(_ string, sc *agentconfig.Sidecar) bool {
 			if wl, err, ok := references(sc); ok {
-				affected = append(affected, affectedConfig{sc: sc, wl: wl, err: err})
+				affected = append(affected, affectedConfig{sc: sc, wl: wl, err: err, claimed: claims(sc)})
 			}
 			return true
 		})
@@ -91,11 +105,13 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "service add")
 				if svc, ok := obj.(*core.Service); ok {
 					c.updateSvc(ctx, svc, true)
 				}
 			},
 			DeleteFunc: func(obj any) {
+				defer recoverHandlerPanic(ctx, "service delete")
 				if svc, ok := obj.(*core.Service); ok {
 					c.updateSvc(ctx, svc, false)
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
@@ -105,6 +121,7 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
+				defer recoverHandlerPanic(ctx, "service update")
 				if newSvc, ok := newObj.(*core.Service); ok {
 					c.updateSvc(ctx, newSvc, true)
 				}
@@ -133,7 +150,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, includ
 				wl, err = agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 			}
 			if err != nil {
-				if errors.IsNotFound(err) {
+				if k8sErrors.IsNotFound(err) {
 					clog.Debugf(ctx, "Deleting config entry for %s", wl)
 					c.Delete(ac.AgentName, ac.Namespace)
 				} else {
@@ -152,11 +169,54 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, includ
 			}
 			continue
 		}
-		c.Store(acn)
-		clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
-		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, acn)
-		if err != nil {
-			clog.Error(ctx, err)
-		}
+		c.applyRegeneratedConfig(ctx, wl, ac, acn, ax.claimed)
+	}
+}
+
+// applyRegeneratedConfig stores the config that a Service event produced. Pods are evicted only
+// when an intercept of the old config already referred to the Service and the config changed. A
+// config that changed merely because a Service now matches the workload takes effect when a pod
+// starts or a client attaches.
+func (c *configWatcher) applyRegeneratedConfig(ctx context.Context, wl k8sapi.Workload, old, regenerated *agentconfig.Sidecar, claimed bool) {
+	c.Store(regenerated)
+	if sameAgentConfig(ctx, old, regenerated) {
+		return
+	}
+	if !claimed {
+		// Pods aren't replaced for a Service that no intercept uses, but a replacement that is already
+		// underway must target the config that new pods are now injected with.
+		c.retargetEviction(ctx, wl, regenerated)
+		return
+	}
+	clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
+	if err := c.EvictPodsWithAgentConfigMismatch(ctx, wl, regenerated); err != nil {
+		clog.Error(ctx, err)
+	}
+}
+
+// sameAgentConfig reports whether the two configs are equal as a pod's annotation carries them.
+func sameAgentConfig(ctx context.Context, a, b *agentconfig.Sidecar) bool {
+	ta, errA := tightAgentConfig(a)
+	tb, errB := tightAgentConfig(b)
+	if errA != nil || errB != nil {
+		clog.Errorf(ctx, "unable to marshal agent config: %v", errors.Join(errA, errB))
+		return false
+	}
+	return cmp.Equal(ta, tb, cmpopts.EquateEmpty(), cmpopts.EquateComparable(netip.Prefix{}), cmp.Comparer(func(x, y *durationpb.Duration) bool {
+		return x.AsDuration() == y.AsDuration()
+	}))
+}
+
+// retargetEviction changes the wanted config of an eviction that is in progress for wl.
+func (c *configWatcher) retargetEviction(ctx context.Context, wl k8sapi.Workload, wanted *agentconfig.Sidecar) {
+	state, ok := c.evictionStates.Load(workloadKeyOf(wl))
+	if !ok {
+		return
+	}
+	state.Lock()
+	requested := state.requested && state.wanted != nil
+	state.Unlock()
+	if requested {
+		c.requestEviction(ctx, wl, wanted)
 	}
 }

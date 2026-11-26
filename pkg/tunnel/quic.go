@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
@@ -30,22 +31,53 @@ const QuicMaxIncomingStreams = 4096
 // allocating before the payload has even arrived.
 const maxFrameSize = 4 * 1024 * 1024 // 4 MiB
 
+// frameBodyTimeout bounds how long the body of a frame may take to arrive once its header has
+// been read, on readers that support read deadlines.
+var frameBodyTimeout = 30 * time.Second //nolint:gochecknoglobals // test-only override point
+
+// frameInitialAlloc is the largest buffer allocated up front for a frame body. A larger body
+// grows the buffer as bytes arrive.
+const frameInitialAlloc = 32 * 1024
+
+type readDeadliner interface {
+	SetReadDeadline(t time.Time) error
+}
+
 // readFrame reads one length-prefixed frame from r. A clean end of stream at a frame boundary
 // is reported as io.EOF; a stream end in the middle of a frame is reported as
 // io.ErrUnexpectedEOF so that callers can tell a graceful close from a truncated message.
+//
+// The body buffer grows as bytes arrive, so an announced size that is never delivered commits
+// no memory. When r supports read deadlines, the body must arrive within frameBodyTimeout.
 func readFrame(r io.Reader) ([]byte, error) {
 	var lb [4]byte
 	if _, err := io.ReadFull(r, lb[:]); err != nil {
 		return nil, err
 	}
-	n := binary.BigEndian.Uint32(lb[:])
-	if n > maxFrameSize {
-		return nil, fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", n, maxFrameSize)
+	size := binary.BigEndian.Uint32(lb[:])
+	if size > maxFrameSize {
+		return nil, fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", size, maxFrameSize)
 	}
-	b := make([]byte, n)
-	if n > 0 {
-		if _, err := io.ReadFull(r, b); err != nil {
-			if err == io.EOF { //nolint:errorlint // io.ReadFull only ever returns io.EOF verbatim, never wrapped
+	n := int(size)
+	if n == 0 {
+		return []byte{}, nil
+	}
+	if dr, ok := r.(readDeadliner); ok {
+		if err := dr.SetReadDeadline(time.Now().Add(frameBodyTimeout)); err == nil {
+			defer func() { _ = dr.SetReadDeadline(time.Time{}) }()
+		}
+	}
+	b := make([]byte, 0, min(n, frameInitialAlloc))
+	for len(b) < n {
+		if len(b) == cap(b) {
+			nb := make([]byte, len(b), min(n, 2*cap(b)))
+			copy(nb, b)
+			b = nb
+		}
+		m, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+m]
+		if err != nil && len(b) < n {
+			if errors.Is(err, io.EOF) {
 				err = io.ErrUnexpectedEOF
 			}
 			return nil, err

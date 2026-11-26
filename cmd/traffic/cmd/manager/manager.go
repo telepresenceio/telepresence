@@ -219,7 +219,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 				if managerutil.GetAgentImageRetriever(ctx) == nil {
 					return nil
 				}
-				return mutator.ServeMutator(ctx, g, injectorCertGetter, reapNodeAgentJobs)
+				return mutator.ServeMutator(ctx, g, injectorCertGetter, reapNodeAgentJobs, uninstallAuthenticator(ctx))
 			})
 		} else {
 			// The agent-injector server drives the config watchers while it
@@ -248,7 +248,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 				// nothing to reach unless this plain-HTTP /uninstall-only
 				// server stands in for it.
 				g.Go("node-agent-uninstall", func(ctx context.Context) error {
-					return mutator.ServeNodeAgentUninstall(ctx, reapNodeAgentJobs)
+					return mutator.ServeNodeAgentUninstall(ctx, reapNodeAgentJobs, uninstallAuthenticator(ctx))
 				})
 			}
 		}
@@ -448,7 +448,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 			Time:    env.ClientConnectionTTL,
 			Timeout: 20 * time.Second,
 		}))...)
-	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
+	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens), auth.WithReviewAdmission()), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)
 	clog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)
@@ -488,4 +488,25 @@ func reportManagerBoot(ctx context.Context) {
 		"injector.enabled", strconv.FormatBool(managerutil.AgentInjectorEnabled(ctx)),
 		"authentication.mode", env.AuthenticationMode.String(),
 	)
+}
+
+// uninstallAuthenticator accepts only a token that the Kubernetes API server (TokenReview)
+// attributes to the pre-delete hook's ServiceAccount in the manager's namespace.
+func uninstallAuthenticator(ctx context.Context) mutator.UninstallAuthenticator {
+	env := managerutil.GetEnv(ctx)
+	authn := auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithReviewAdmission())
+	return func(ctx context.Context, token string) error {
+		if env.UninstallHookServiceAccount == "" {
+			return errors.New("no uninstall hook ServiceAccount is configured")
+		}
+		p, err := authn.Authenticate(ctx, token)
+		if err != nil {
+			return err
+		}
+		want := "system:serviceaccount:" + env.ManagerNamespace + ":" + env.UninstallHookServiceAccount
+		if p.Username != want {
+			return fmt.Errorf("token belongs to %q, not %q", p.Username, want)
+		}
+		return nil
+	}
 }

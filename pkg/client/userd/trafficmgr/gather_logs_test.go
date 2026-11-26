@@ -293,3 +293,57 @@ func TestIsStreamLogsAuthRefusal(t *testing.T) {
 	require.False(t, isStreamLogsAuthRefusal(status.Error(codes.Unavailable, "down")))
 	require.False(t, isStreamLogsAuthRefusal(errors.New("plain")))
 }
+
+func TestGatherLogChunks_craftedNamesStayInsideExportDir(t *testing.T) {
+	root := t.TempDir()
+	exportDir := filepath.Join(root, "export")
+	require.NoError(t, os.Mkdir(exportDir, 0o755))
+	outside := filepath.Join(root, "outside")
+
+	bad := []struct{ pod, ns string }{
+		{"../outside", "ns"},
+		{"pod", "../.."},
+		{"a/b", "ns"},
+		{outside, "ns"},
+		{"pod", outside},
+		{"pod", "UPPER"},
+	}
+	var chunks []*manager.LogChunk
+	for _, b := range bad {
+		chunks = append(chunks,
+			&manager.LogChunk{PodName: b.pod, PodNamespace: b.ns, Frame: manager.LogChunk_BEGIN},
+			&manager.LogChunk{PodName: b.pod, PodNamespace: b.ns, Payload: &manager.LogChunk_Data{Data: []byte("x")}},
+			&manager.LogChunk{PodName: b.pod, PodNamespace: b.ns, Payload: &manager.LogChunk_PodYaml{PodYaml: []byte("x")}},
+			&manager.LogChunk{PodName: b.pod, PodNamespace: b.ns, Frame: manager.LogChunk_END},
+		)
+	}
+	chunks = append(chunks,
+		&manager.LogChunk{PodName: "good", PodNamespace: "ns", Frame: manager.LogChunk_BEGIN},
+		&manager.LogChunk{PodName: "good", PodNamespace: "ns", Frame: manager.LogChunk_END},
+	)
+	result, err := gatherLogChunks(t.Context(), exportDir, &fakeLogChunkStream{chunks: chunks})
+	require.NoError(t, err)
+	require.Equal(t, "ok", result["good.ns.log"])
+	for k := range result {
+		require.Equal(t, filepath.Base(k), k)
+	}
+	require.Len(t, result, 1+len(bad))
+
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	entries, err = os.ReadDir(exportDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "good.ns.log", entries[0].Name())
+}
+
+func TestInDir(t *testing.T) {
+	p, err := inDir("/x/dir", "a.b.log")
+	require.NoError(t, err)
+	require.Equal(t, filepath.FromSlash("/x/dir/a.b.log"), p)
+	for _, n := range []string{"../a", "a/b", "..", ""} {
+		_, err = inDir("/x/dir", n)
+		require.Error(t, err, n)
+	}
+}

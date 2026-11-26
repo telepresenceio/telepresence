@@ -65,10 +65,11 @@ func TestUninstallHandlerUsesManagerContext(t *testing.T) {
 	requestCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	req := httptest.NewRequest(http.MethodDelete, "/uninstall", nil).WithContext(requestCtx)
+	req.Header.Set("Authorization", "Bearer "+hookToken)
 	injector := &contextRecordingInjector{}
 
 	recorder := httptest.NewRecorder()
-	uninstallHandler(managerCtx, injector, nil)(recorder, req)
+	uninstallHandler(managerCtx, acceptHookToken, injector, nil)(recorder, req)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.NotNil(t, injector.uninstallContext)
 	assert.NoError(t, injector.uninstallContext.Err())

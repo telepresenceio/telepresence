@@ -13,6 +13,8 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
@@ -137,7 +139,8 @@ func (c *configWatcher) SetConfigured() {
 }
 
 // RestoreAgentConfig recovers a missing configuration from a surviving pod without
-// overwriting a configuration that another request has already restored.
+// overwriting a configuration that another request has already restored. The annotation only
+// supplies the replace policies; the stored configuration is generated.
 func RestoreAgentConfig(ctx context.Context, wl k8sapi.Workload) error {
 	mm := GetMap(ctx)
 	if mm.Get(wl.GetName(), wl.GetNamespace()) != nil {
@@ -148,24 +151,112 @@ func RestoreAgentConfig(ctx context.Context, wl k8sapi.Workload) error {
 		return err
 	}
 	for _, pod := range pods {
-		cfgJSON := pod.Annotations[annotation.Config]
-		if pod.DeletionTimestamp != nil || cfgJSON == "" {
+		sc := ownedAgentConfig(ctx, pod, wl)
+		if sc == nil {
 			continue
 		}
-		sc, err := agentconfig.UnmarshalJSON(cfgJSON)
+		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
 		if err != nil {
-			clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
-			continue
+			return err
 		}
 		_, err = mm.Update(wl.GetName(), wl.GetNamespace(), func(existing *agentconfig.Sidecar) (*agentconfig.Sidecar, error) {
 			if existing != nil {
 				return existing, nil
 			}
-			return sc, nil
+			return gc.Generate(ctx, wl, sc)
 		})
 		return err
 	}
 	return nil
+}
+
+// ownedAgentConfig returns the agent config that the pod's annotation carries, or nil if the pod has
+// none, or if the config doesn't describe the pod's own owner workload wl.
+func ownedAgentConfig(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) *agentconfig.Sidecar {
+	if pod.DeletionTimestamp != nil {
+		return nil
+	}
+	cfgJSON, ok := pod.Annotations[annotation.Config]
+	if !ok || cfgJSON == "" {
+		return nil
+	}
+	sc, err := agentconfig.UnmarshalJSON(cfgJSON)
+	if err != nil {
+		clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
+		return nil
+	}
+	if slices.Contains(sc.Containers, nil) || slices.ContainsFunc(sc.Containers, func(cc *agentconfig.Container) bool {
+		return slices.Contains(cc.Intercepts, nil)
+	}) {
+		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: it has a null container or intercept", pod.Name, pod.Namespace)
+		return nil
+	}
+	if sc.Namespace != pod.Namespace || sc.Namespace != wl.GetNamespace() ||
+		sc.WorkloadName != wl.GetName() || sc.AgentName != wl.GetName() || sc.WorkloadKind != wl.GetKind() {
+		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: it names %s %s.%s, but the pod belongs to %s",
+			pod.Name, pod.Namespace, sc.WorkloadKind, sc.WorkloadName, sc.Namespace, wl)
+		return nil
+	}
+	if !PodControlledBy(ctx, pod, wl) {
+		clog.Warnf(ctx, "ignoring agent config annotation in pod %s.%s: its owner references don't lead to %s", pod.Name, pod.Namespace, wl)
+		return nil
+	}
+	return sc
+}
+
+// PodControlledBy reports whether the pod's controller owner references lead to wl by kind, name,
+// and UID, and whether the pod's labels match the selector of wl. A ReplicaSet or a StatefulSet
+// owns its pods directly. A Deployment or a Rollout owns them through a ReplicaSet that it
+// controls.
+func PodControlledBy(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) bool {
+	ref := controllerRef(pod.OwnerReferences)
+	if ref == nil {
+		return false
+	}
+	switch wl.GetKind() {
+	case k8sapi.ReplicaSetKind, k8sapi.StatefulSetKind:
+		if !refersTo(ref, wl) {
+			return false
+		}
+	case k8sapi.DeploymentKind, k8sapi.RolloutKind:
+		if ref.Kind != string(k8sapi.ReplicaSetKind) {
+			return false
+		}
+		rs, err := getReplicaSet(ctx, ref.Name, pod.Namespace)
+		if err != nil || rs.GetUID() != ref.UID {
+			return false
+		}
+		rsRef := controllerRef(rs.GetOwnerReferences())
+		if rsRef == nil || !refersTo(rsRef, wl) {
+			return false
+		}
+	default:
+		return false
+	}
+	selector, err := wl.Selector()
+	return err == nil && selector.Matches(labels.Set(pod.Labels))
+}
+
+// getReplicaSet reads a ReplicaSet from the informer cache when ReplicaSets are an enabled
+// workload kind, and with a direct API call otherwise, because no informer can sync then.
+func getReplicaSet(ctx context.Context, name, namespace string) (k8sapi.Workload, error) {
+	if managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(k8sapi.ReplicaSetKind) {
+		return agentmap.GetWorkload(ctx, name, namespace, k8sapi.ReplicaSetKind)
+	}
+	return k8sapi.GetWorkload(ctx, name, namespace, k8sapi.ReplicaSetKind)
+}
+
+func controllerRef(refs []meta.OwnerReference) *meta.OwnerReference {
+	for i := range refs {
+		if refs[i].Controller != nil && *refs[i].Controller {
+			return &refs[i]
+		}
+	}
+	return nil
+}
+
+func refersTo(ref *meta.OwnerReference, wl k8sapi.Workload) bool {
+	return ref.Kind == string(wl.GetKind()) && ref.Name == wl.GetName() && ref.UID != "" && ref.UID == wl.GetUID()
 }
 
 // RegenerateAgentMaps regenerates all agent configurations and requests the replacement of every pod
@@ -197,22 +288,11 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 		wl := wp.wl
 		var sc *agentconfig.Sidecar
 		for _, pod := range wp.pods {
-			cfgJSON, ok := pod.Annotations[annotation.Config]
-			if !ok {
-				continue
+			if sc = ownedAgentConfig(ctx, pod, wl); sc != nil {
+				break
 			}
-			sc, err = agentconfig.UnmarshalJSON(cfgJSON)
-			if err != nil {
-				clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
-				sc = nil
-				continue
-			}
-			if !configured {
-				c.Store(sc)
-			}
-			break
 		}
-		if sc == nil || !configured {
+		if sc == nil {
 			continue
 		}
 		var newSc *agentconfig.Sidecar
@@ -223,7 +303,9 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 			}
 			c.Store(newSc)
 		}
-		c.requestEviction(ctx, wl, newSc)
+		if configured {
+			c.requestEviction(ctx, wl, newSc)
+		}
 	}
 	return nil
 }
@@ -432,21 +514,8 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 		return ac, nil
 	}
 
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
-	if err != nil {
-		return nil, err
-	}
-
 	clog.Debugf(ctx, "GetOrGenerate generates config for workload %s.%s", wl.GetName(), wl.GetNamespace())
-	var ac *agentconfig.Sidecar
-	err = backoff.Retry(func() error {
-		var genErr error
-		ac, genErr = gc.Generate(ctx, wl, nil)
-		if genErr != nil && errcat.GetCategory(genErr) == errcat.User {
-			return backoff.Permanent(genErr)
-		}
-		return genErr
-	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 10), ctx))
+	ac, err := generateWithRetry(ctx, wl)
 	if err != nil {
 		return nil, err
 	}
@@ -460,6 +529,25 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 		return ac, xsync.UpdateOp
 	})
 	return ac, nil
+}
+
+// generateWithRetry generates a config for wl without storing it, and retries transient errors as
+// described for GetOrGenerate.
+func generateWithRetry(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		return nil, err
+	}
+	var ac *agentconfig.Sidecar
+	err = backoff.Retry(func() error {
+		var genErr error
+		ac, genErr = gc.Generate(ctx, wl, nil)
+		if genErr != nil && errcat.GetCategory(genErr) == errcat.User {
+			return backoff.Permanent(genErr)
+		}
+		return genErr
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 10), ctx))
+	return ac, err
 }
 
 func whereWeWatch(ns string) string {

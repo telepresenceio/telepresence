@@ -11,6 +11,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
@@ -23,7 +24,6 @@ func kubeauthCmd() *cobra.Command {
 		Hidden:            true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
-	cmd.Flags().String("token", "", "Token that the kubeauth daemon requires")
 	return cmd
 }
 
@@ -31,7 +31,7 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	ctx := cmd.Context()
 	contextName := args[0]
 	serverAddr := args[1]
-	token, _ := cmd.Flags().GetString("token")
+	token := os.Getenv(patcher.TokenEnvName)
 	defer func() {
 		if err != nil {
 			clog.Error(ctx, err)

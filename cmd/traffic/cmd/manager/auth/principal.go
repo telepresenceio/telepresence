@@ -14,6 +14,9 @@ type Principal struct {
 	// ServiceAccount token. Empty for user tokens.
 	PodName string
 	PodUID  string
+	// ManagerAudience is true when the token passed review with the
+	// traffic-manager audience, as opposed to the no-audience fallback review.
+	ManagerAudience bool
 }
 
 // SameAs reports whether p and o represent the same principal: the same username and

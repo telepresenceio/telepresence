@@ -123,7 +123,7 @@ func StreamInfoMessage(id ConnID, sessionID SessionID, callDelay, dialTimeout ti
 	b := bytes.Buffer{}
 	b.WriteByte(byte(streamInfo))
 
-	buf := make([]byte, 8)
+	buf := make([]byte, binary.MaxVarintLen64)
 	n := binary.PutUvarint(buf, uint64(Version))
 	b.Write(buf[:n])
 
@@ -198,19 +198,33 @@ func setConnectInfo(m Message, s *stream) error {
 	s.dialTimeout = time.Duration(v)
 	pl = pl[n:]
 
-	v, n = binary.Uvarint(pl)
-	if n <= 0 || v > uint64(len(pl)) {
+	var err error
+	var idb, sib []byte
+	if idb, pl, err = splitLengthPrefixed(pl); err != nil {
+		return err
+	}
+	if sib, _, err = splitLengthPrefixed(pl); err != nil {
+		return err
+	}
+	id := ConnID(idb)
+	if !id.Valid() {
 		return errMalformedConnect
 	}
-	pl = pl[n:]
-	s.id = ConnID(pl[:v])
-	pl = pl[v:]
-
-	v, n = binary.Uvarint(pl)
-	if n <= 0 || v > uint64(len(pl)) {
-		return errMalformedConnect
-	}
-	pl = pl[n:]
-	s.sessionID = SessionID(pl[:v])
+	s.id = id
+	s.sessionID = SessionID(sib)
 	return nil
+}
+
+// splitLengthPrefixed splits a uvarint length-prefixed field off the front of pl and returns
+// the field and the remainder.
+func splitLengthPrefixed(pl []byte) (field, rest []byte, err error) {
+	v, n := binary.Uvarint(pl)
+	if n <= 0 {
+		return nil, nil, errMalformedConnect
+	}
+	pl = pl[n:]
+	if v > uint64(len(pl)) {
+		return nil, nil, errMalformedConnect
+	}
+	return pl[:v], pl[v:], nil
 }

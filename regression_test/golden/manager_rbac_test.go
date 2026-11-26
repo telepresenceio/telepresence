@@ -103,3 +103,54 @@ func TestManagerWorkloadPatchVerb(t *testing.T) {
 		}
 	}
 }
+
+// TestManagerReplicaSetGetRule asserts that, with ReplicaSets disabled, the
+// traffic-manager keeps a get-only rule on replicasets when Deployments or
+// Argo Rollouts are enabled, and has none when neither is, in both scopes.
+func TestManagerReplicaSetGetRule(t *testing.T) {
+	scopes := []struct {
+		name  string
+		tpl   string
+		vals  map[string]any
+		roles int
+	}{
+		{"cluster", managerClusterScopeTpl, map[string]any{}, 1},
+		{"namespaced", managerNamespaceScopeTpl, map[string]any{"namespaces": []string{"ns-a", "ns-b"}}, 3},
+	}
+	enabled := func(b bool) map[string]any { return map[string]any{"enabled": b} }
+	cases := []struct {
+		name      string
+		workloads map[string]any
+		want      bool
+	}{
+		{"deployments", map[string]any{"replicaSets": enabled(false), "argoRollouts": enabled(false)}, true},
+		{"rollouts-only", map[string]any{"replicaSets": enabled(false), "deployments": enabled(false), "argoRollouts": enabled(true)}, true},
+		{"neither", map[string]any{"replicaSets": enabled(false), "deployments": enabled(false), "argoRollouts": enabled(false)}, false},
+	}
+	for _, sc := range scopes {
+		for _, tc := range cases {
+			t.Run(sc.name+"/"+tc.name, func(t *testing.T) {
+				vals := map[string]any{"workloads": tc.workloads}
+				for k, v := range sc.vals {
+					vals[k] = v
+				}
+				out := renderChart(t, vals)
+				all := workloadRuleVerbs(t, sc.tpl, out[sc.tpl])["replicasets"]
+				if !tc.want {
+					if len(all) != 0 {
+						t.Fatalf("got replicasets rules %v, want none", all)
+					}
+					return
+				}
+				if len(all) != sc.roles {
+					t.Fatalf("got %d replicasets rules, want %d", len(all), sc.roles)
+				}
+				for _, verbs := range all {
+					if !slices.Equal(verbs, []string{"get"}) {
+						t.Errorf("replicasets verbs = %v, want [get]", verbs)
+					}
+				}
+			})
+		}
+	}
+}

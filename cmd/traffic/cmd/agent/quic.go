@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -24,6 +25,9 @@ import (
 type quicAgentState struct {
 	mu       sync.Mutex
 	listener *quicserver.Listener
+
+	// unimplementedLogged is set once the missing-call error has been logged.
+	unimplementedLogged atomic.Bool
 }
 
 // RefreshQuicAgentListener implements the State method of the same name and serves two
@@ -37,25 +41,24 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) e
 	resp, err := s.manager.GetQuicAgentCert(fetchCtx, s.sessionInfo)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
-			// The traffic-manager predates agent QUIC certificates. Expected skew;
-			// the agent stays on its port-forwarded path, and fileShareAuth stays
-			// unpopulated, so file-sharing connections keep being accepted
-			// unauthenticated.
-			clog.Debugf(fetchCtx, "quicserver: traffic-manager predates QUIC agent certificates")
+			// This agent requires a traffic-manager that implements GetQuicAgentCert.
+			// The credential state stays unset, so file-sharing connections and tunnel
+			// calls are refused until a newer traffic-manager supplies credentials.
+			if s.quicAgent.unimplementedLogged.CompareAndSwap(false, true) {
+				clog.Errorf(fetchCtx, "the traffic-manager doesn't implement GetQuicAgentCert; "+
+					"this traffic-agent requires traffic-manager 2.34.0 or later, and refuses file-sharing and tunnel access until then")
+			}
 			return nil
 		}
 		clog.Errorf(fetchCtx, "quicserver: failed to fetch QUIC agent certificate: %v", err)
 		return err
 	}
 	if !resp.GetEnabled() {
-		// The manager we're now talking to has no QUIC CA configured, so it has no
-		// session credential to hand out either; fileShareAuth stays unpopulated. If a
-		// listener from an earlier, QUIC-enabled manager is still running, it keeps
-		// running on its old material: connections from a client minted by this new
-		// manager will simply fail certificate verification, which is the correct
-		// fallback (the client falls back to its port-forward path). Nothing to do
-		// here but say so.
+		// The manager has no QUIC CA, so it issues no session credentials and there is
+		// nothing to verify against; file-sharing and tunnel calls are accepted
+		// unauthenticated. A listener from an earlier manager keeps its old material.
 		clog.Debugf(fetchCtx, "quicserver: traffic-manager has no QUIC CA configured; not starting a QUIC listener")
+		s.fileShareAuth.setNoCredentials()
 		return nil
 	}
 

@@ -283,6 +283,10 @@ When using `neverProxySubnets` you provide a list of subnets. These will never b
 even if they fall within the subnets (pod or service) for the cluster. Instead, whatever route they have before
 telepresence connects is the route they will keep.
 
+A workload whose pod address is covered by a never-proxy subnet can't be intercepted, replaced or ingested, because
+the client has no route to that pod through Telepresence. The attempt fails with an error that names the address and the
+subnet. An `alsoProxySubnets` entry inside the never-proxy subnet that contains the pod's address lifts the restriction.
+
 Telepresence also adds runtime never-proxy routes for local DNS server IPs when they fall inside a subnet that
 Telepresence is about to route. This prevents excluded DNS lookups from being sent into the cluster when the
 workstation's resolver is on a network that overlaps with a pod, service, or also-proxied subnet.
@@ -377,7 +381,7 @@ CLI/user-daemon and the traffic-manager.
      dial errors).
 
 The `manager.boot` report includes `nodeagent.enabled`, `injector.enabled`,
-and `authentication.mode` (`disabled`, `permissive`, or `enforcing`). The mode
+and `authentication.mode` (`disabled`, `permissive`, or `enforcing`; the default is `enforcing`). The mode
 is the configured policy; no credentials or authenticated identities are sent.
 
 Reports **never** contain cluster, namespace, workload, hostname, IP address,
@@ -468,7 +472,7 @@ grpc:
 
 ## Workstation Per-Cluster Configuration
 
-Configuration that is specific to a cluster connection can also be overriden per-workstation by modifying your `$KUBECONFIG` file.
+Configuration that is specific to a cluster connection can also be overridden per-workstation by modifying your `$KUBECONFIG` file.
 It is recommended that you do not do this, and instead rely on upstream values provided to the Traffic Manager. This ensures
 that all users that connect to the Traffic Manager will behave the same.
 An important exception to this is the [`cluster.defaultManagerNamespace` configuration](#manager) which must be set locally.

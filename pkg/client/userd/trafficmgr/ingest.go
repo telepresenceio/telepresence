@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -46,7 +47,9 @@ type ingest struct {
 	ownsMountPoint atomic.Bool
 }
 
-func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
+// podAccess returns the podAccess of the ingest. The error is non-nil only when the pod
+// address is excluded by never-proxy, in which case the ingest must be refused.
+func (ig *ingest) podAccess(rd daemon.DaemonClient) (*podAccess, error) {
 	ni := ig.Containers[ig.container]
 	pa := &podAccess{
 		ctx:              ig.ctx,
@@ -66,9 +69,13 @@ func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
 	}
 	// An ingest needs no direct agent path: its mounts reach the pod over the tunnel.
 	if err := pa.ensureAccess(ig.ctx, rd); err != nil {
+		var npe *neverProxiedError
+		if errors.As(err, &npe) {
+			return pa, err
+		}
 		clog.Infof(ig.ctx, "ingest %s continues without direct agent access: %v", ig.container, err)
 	}
-	return pa
+	return pa, nil
 }
 
 func (ig *ingest) response() *rpc.IngestInfo {
@@ -282,24 +289,50 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		ig.ownsMountPoint.Store(ownsMountPoint)
 		return ig, false
 	})
-	if !loaded {
-		s.startIngestPodAccess(ctx, ig, true)
+	if err = s.startNewIngestPodAccess(ctx, ig, loaded); err != nil {
+		return nil, err
 	}
 	return ig.response(), nil
 }
 
-func (s *session) startIngestPodAccess(ctx context.Context, ig *ingest, initial bool) {
+// startNewIngestPodAccess starts pod access for an ingest unless it was already registered
+// (loaded), and unregisters the ingest if its pod address is excluded by never-proxy.
+func (s *session) startNewIngestPodAccess(ctx context.Context, ig *ingest, loaded bool) error {
+	if loaded {
+		return nil
+	}
+	err := s.startIngestPodAccess(ctx, ig, true)
+	if err != nil {
+		s.removeIngestMount(ig)
+		s.releaseNodeAgentIfLast(ig)
+	}
+	return err
+}
+
+// startIngestPodAccess starts mounts and port-forwards for ig. The returned error is
+// non-nil only when the pod address is excluded by never-proxy.
+func (s *session) startIngestPodAccess(ctx context.Context, ig *ingest, initial bool) error {
+	var refused error
 	err := s.WithRootClient(ctx, func(_ context.Context, rd daemon.DaemonClient) error {
+		pa, err := ig.podAccess(rd)
+		if err != nil {
+			refused = err
+			return nil
+		}
 		if initial {
-			s.ingestTracker.initialStart(ig.podAccess(rd))
+			s.ingestTracker.initialStart(pa)
 		} else {
-			s.ingestTracker.start(ig.podAccess(rd))
+			s.ingestTracker.start(pa)
 		}
 		return nil
 	})
+	if refused != nil {
+		return refused
+	}
 	if err != nil {
 		clog.Errorf(ctx, "failed to start ingest pod access: %v", err)
 	}
+	return nil
 }
 
 func (s *session) translateContainerEnv(ctx context.Context, ai *manager.AgentInfo, container string) error {

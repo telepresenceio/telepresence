@@ -81,6 +81,11 @@ func (rd *InProcSession) SetInterceptShortcuts(ctx context.Context, in *rpc.SetI
 	return &empty.Empty{}, nil
 }
 
+func (rd *InProcSession) SetInterceptTargets(ctx context.Context, in *rpc.SetInterceptTargetsRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.session.SetInterceptTargets(ctx, in.Targets)
+	return &empty.Empty{}, nil
+}
+
 func (rd *InProcSession) SetLogLevel(context.Context, *manager.LogLevelRequest, ...grpc.CallOption) (*empty.Empty, error) {
 	// No loglevel when session runs in the same process as the user daemon.
 	return &empty.Empty{}, nil

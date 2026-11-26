@@ -32,7 +32,8 @@ RUN \
 
 FROM alpine AS routecontroller
 
-RUN apk add --no-cache ca-certificates
+# Take the package updates published after the base image was built.
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 
 COPY --from=routecontroller-build /usr/local/bin/route-controller /usr/local/bin/route-controller
 

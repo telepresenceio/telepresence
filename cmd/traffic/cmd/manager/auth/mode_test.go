@@ -16,7 +16,7 @@ func TestMode_UnmarshalText(t *testing.T) {
 		want    auth.Mode
 		wantErr bool
 	}{
-		{"empty defaults to permissive", "", auth.ModePermissive, false},
+		{"empty defaults to enforcing", "", auth.ModeEnforcing, false},
 		{"disabled", "disabled", auth.ModeDisabled, false},
 		{"permissive", "permissive", auth.ModePermissive, false},
 		{"enforcing", "enforcing", auth.ModeEnforcing, false},

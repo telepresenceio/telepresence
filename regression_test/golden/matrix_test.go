@@ -25,7 +25,8 @@ const (
 
 // matrixAxes are the manager-value dimensions this tier renders, drawn from
 // the same chart keys the managers catalog (framework/managers) configures
-// live installs with.
+// live installs with. Every combo sets the authentication mode explicitly;
+// the unset mode is covered by TestAuthModeDefault.
 func matrixAxes() []rt.Axis {
 	return []rt.Axis{
 		{Name: axisInjectorEnabled, Values: []string{"true", "false"}},
@@ -145,8 +146,8 @@ func TestChartMatrix(t *testing.T) {
 			}
 
 			// The x509 auth kube-system RoleBinding renders iff auth mode
-			// is "enforcing" (x509.enabled keeps its chart default of true
-			// for every combo in this matrix).
+			// is "enforcing" (x509.enabled is never set by a combo, so it
+			// is true).
 			if got := rendered(out, x509Tpl); got != (authMode == "enforcing") {
 				t.Errorf("%s rendered=%v, want security.authentication.mode=enforcing", x509Tpl, got)
 			}

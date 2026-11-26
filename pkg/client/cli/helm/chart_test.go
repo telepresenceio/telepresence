@@ -128,16 +128,27 @@ func TestCoalesceValues(t *testing.T) {
 		assert.Equal(t, base, got)
 	})
 
-	t.Run("an upgrade with no values requests reuse-values unless reset-values is set", func(t *testing.T) {
-		req := &Request{Type: Upgrade}
-		_, err := coalesceValues(t.Context(), req)
-		require.NoError(t, err)
-		assert.True(t, req.ReuseValues)
-
-		req = &Request{Type: Upgrade, ResetValues: true}
-		_, err = coalesceValues(t.Context(), req)
-		require.NoError(t, err)
-		assert.False(t, req.ReuseValues)
+	t.Run("the helm mode that an upgrade with no values gets", func(t *testing.T) {
+		tests := []struct {
+			name                           string
+			in                             Request
+			wantReuse, wantReset, wantThen bool
+		}{
+			{"no flags", Request{Type: Upgrade}, false, false, true},
+			{"reset-values", Request{Type: Upgrade, ResetValues: true}, false, true, false},
+			{"reuse-values", Request{Type: Upgrade, ReuseValues: true}, true, false, false},
+			{"install", Request{Type: Install}, false, false, false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				req := tt.in
+				_, err := coalesceValues(t.Context(), &req)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantReuse, req.ReuseValues)
+				assert.Equal(t, tt.wantReset, req.ResetValues)
+				assert.Equal(t, tt.wantThen, req.ResetThenReuseValues)
+			})
+		}
 	})
 
 	t.Run("provided values win over the base and reuse-values is not requested", func(t *testing.T) {
@@ -152,6 +163,7 @@ func TestCoalesceValues(t *testing.T) {
 		assert.Equal(t, "override", *got.Image.Tag)
 		assert.Equal(t, "debug", *got.LogLevel)
 		assert.False(t, req.ReuseValues)
+		assert.False(t, req.ResetThenReuseValues)
 	})
 
 	t.Run("invalid JSON is an error", func(t *testing.T) {
