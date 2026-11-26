@@ -14,6 +14,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 The <code>tel2</code>, <code>telepresence</code> and <code>route-controller</code> images now upgrade the packages of the Alpine base image when they are built. A release ships the package fixes that Alpine has published by then, also when the base image itself has not been rebuilt yet.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Port-forward connections recover after the first stream fails</Title>
+	<Body>
+A failed first stream left an unused port-forward connection in the cache, so later attempts repeatedly reused a closed transport. The failed dial now closes and evicts the connection when no other users remain, so the next attempt opens a fresh transport. Connection retirement also prevents concurrent dials and repeated closes from interrupting other connections.
+  </Body>
+</Note>
 ## Version 2.34.0 <span style={{fontSize:'16px'}}>(November 25)</span>
 <Note>
 	<Title type="security">A malformed gRPC message no longer ends the traffic-manager or a traffic-agent</Title>
