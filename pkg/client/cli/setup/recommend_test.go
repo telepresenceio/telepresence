@@ -10,6 +10,7 @@ import (
 	rbac "k8s.io/api/rbac/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -481,7 +482,7 @@ func TestRecommend_X509NotEnabledSkipsPrivilegeCheck(t *testing.T) {
 func TestPrivilegeDenial(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
-		f.Privileges.MissingAttributes = []DeniedAttribute{{Verb: "create", Resource: "clusterroles"}}
+		f.Privileges.MissingAttributes = []rbacgen.DeniedAttribute{{Verb: "create", Resource: "clusterroles"}}
 		f.Privileges.Namespaced = Finding{Verdict: VerdictYes}
 		f.Privileges.MissingNamespacedAttributes = nil
 	})

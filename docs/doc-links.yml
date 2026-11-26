@@ -225,6 +225,23 @@
                   link: reference/cli/telepresence_mcp_vscode_list
         - title: telepresence quit
           link: reference/cli/telepresence_quit
+        - title: telepresence rbac
+          link: reference/cli/telepresence_rbac
+          items:
+            - title: generate
+              link: reference/cli/telepresence_rbac_generate
+              items:
+                - title: client
+                  link: reference/cli/telepresence_rbac_generate_client
+                - title: install
+                  link: reference/cli/telepresence_rbac_generate_install
+            - title: verify
+              link: reference/cli/telepresence_rbac_verify
+              items:
+                - title: client
+                  link: reference/cli/telepresence_rbac_verify_client
+                - title: install
+                  link: reference/cli/telepresence_rbac_verify_install
         - title: telepresence replace
           link: reference/cli/telepresence_replace
         - title: telepresence revoke

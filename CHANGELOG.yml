@@ -24,6 +24,23 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.35.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: The telepresence rbac command generates and checks RBAC
+        body: >-
+          <code>telepresence rbac generate install</code> prints the RBAC
+          that <code>telepresence helm install</code> needs and the current
+          identity lacks, and <code>telepresence rbac generate client</code>
+          prints the client roles for the installed configuration, both for
+          a cluster admin to review and apply.
+          <code>telepresence rbac verify install</code> and
+          <code>telepresence rbac verify client</code> check an identity,
+          also another one with <code>--as</code>, and exit with a non-zero
+          status when something is missing. The client check runs the same
+          reviews as the traffic-manager.
+        docs: reference/rbac
   - version: 2.34.1
     date: (TBD)
     notes:

@@ -177,6 +177,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		manPages(),
 		mcp(),
 		quit(),
+		rbacCmd(),
 		replaceCmd(),
 		serveCmd(),
 		setupCmd(),

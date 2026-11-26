@@ -11,6 +11,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/rbacgen"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -538,7 +539,7 @@ func (e *engine) decideAction(vals *helm.Values, p *Proposal) {
 // managed scope, together with its structured denials: the cluster-wide
 // render's for scope all (and the empty default), the namespace-scoped
 // render's otherwise.
-func (f *ClusterFacts) PrivilegeDenial(scope ManagedScope) (Finding, []DeniedAttribute) {
+func (f *ClusterFacts) PrivilegeDenial(scope ManagedScope) (Finding, []rbacgen.DeniedAttribute) {
 	if scope == ManagedScopeAll || scope == "" {
 		return f.Privileges.ClusterWide, f.Privileges.MissingAttributes
 	}

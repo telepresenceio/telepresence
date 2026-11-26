@@ -1,2 +1,3 @@
 # Always check out with LF so that golangci-lint doesn't break
 *.go text eol=lf
+*.golden text eol=lf

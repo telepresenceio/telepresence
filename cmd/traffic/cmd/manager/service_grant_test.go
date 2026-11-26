@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -203,7 +204,7 @@ func writeActions(cs *fake.Clientset, since int) []k8stesting.Action {
 	return out
 }
 
-var allGrants = []auth.Grant{auth.GrantPortForward, auth.GrantTelepresence, auth.GrantAny}
+var allGrants = []authz.Grant{authz.GrantPortForward, authz.GrantTelepresence, authz.GrantAny}
 
 // TestGrant_Connect_Denied covers that, for every grant value in
 // ModeEnforcing, an authenticated caller whose RBAC grants nothing is
@@ -282,14 +283,14 @@ func TestGrant_Selectivity(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		grant   auth.Grant
+		grant   authz.Grant
 		allowed func(*authv1.ResourceAttributes) bool
 		passes  bool
 	}{
-		{"requiredGrant portforward, portforward-only grant passes", auth.GrantPortForward, allowPortForwardOnly, true},
-		{"requiredGrant telepresence, telepresence-only grant passes", auth.GrantTelepresence, allowTelepresenceOnly, true},
-		{"requiredGrant portforward, telepresence-only grant is denied", auth.GrantPortForward, allowTelepresenceOnly, false},
-		{"requiredGrant telepresence, portforward-only grant is denied", auth.GrantTelepresence, allowPortForwardOnly, false},
+		{"requiredGrant portforward, portforward-only grant passes", authz.GrantPortForward, allowPortForwardOnly, true},
+		{"requiredGrant telepresence, telepresence-only grant passes", authz.GrantTelepresence, allowTelepresenceOnly, true},
+		{"requiredGrant portforward, telepresence-only grant is denied", authz.GrantPortForward, allowTelepresenceOnly, false},
+		{"requiredGrant telepresence, portforward-only grant is denied", authz.GrantTelepresence, allowPortForwardOnly, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -325,7 +326,7 @@ func TestGrant_Selectivity(t *testing.T) {
 			req.NoError(err)
 			req.Empty(pi.Error, "PrepareIntercept business logic must succeed once authorization passes")
 
-			if tt.grant == auth.GrantTelepresence {
+			if tt.grant == authz.GrantTelepresence {
 				// The attachment review the manager sent must name the
 				// workload as Name, with no subresource.
 				var found *authv1.ResourceAttributes
@@ -357,7 +358,7 @@ func TestGrant_Any_AcceptsEither(t *testing.T) {
 		req := require.New(t)
 		_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 			e.AuthenticationMode = auth.ModeEnforcing
-			e.AuthorizationRequiredGrant = auth.GrantAny
+			e.AuthorizationRequiredGrant = authz.GrantAny
 			e.AgentArrivalTimeout = 5 * time.Second
 			e.NodeAgentEnabled = true
 			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
@@ -400,7 +401,7 @@ func TestGrant_Any_AcceptsEither(t *testing.T) {
 		req := require.New(t)
 		_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 			e.AuthenticationMode = auth.ModeEnforcing
-			e.AuthorizationRequiredGrant = auth.GrantAny
+			e.AuthorizationRequiredGrant = authz.GrantAny
 			e.AgentArrivalTimeout = 5 * time.Second
 			e.NodeAgentEnabled = true
 			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"

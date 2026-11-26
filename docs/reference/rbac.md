@@ -41,6 +41,8 @@ typically done by a cluster administrator. `telepresence setup` probes
 whether the current identity can create everything the chart needs and
 itemizes anything missing; see
 [Guided cluster setup](setup.md).
+To give an identity exactly what an install needs, or to check that it
+has it, see [Generating RBAC](#generating-rbac).
 
 ## Traffic Manager Permissions
 
@@ -169,6 +171,8 @@ Two rule sets are involved: a connect Role in the manager's namespace, and
 a per-namespace Role (or a ClusterRole, in a cluster-wide installation)
 for the namespaces the client works in. `clientRbac.namespaces` restricts
 the latter to an explicit list.
+To print these roles for chosen subjects, or to check what a user can do,
+see [Generating RBAC](#generating-rbac).
 
 > [!IMPORTANT]
 > The roles below are what the chart renders with
@@ -293,6 +297,45 @@ connection, and clients fall back to resolving the Service. Set
 `clientRbac.legacyAccess: false` to render only the roles documented
 above; the value's comment in `values.yaml` records when the default flips
 and when the toggle is removed.
+
+## Generating RBAC
+
+The `telepresence rbac` command prints RBAC for a cluster admin to review
+and apply, and checks an identity against it. It never applies anything
+itself. All four modes check the identity of the kubeconfig context, so an
+admin checks someone else with `--as` and `--as-group`.
+
+- [`telepresence rbac generate install`](cli/telepresence_rbac_generate_install.md)
+  renders the chart for the given values and prints a ClusterRole, Roles,
+  and bindings that grant what `telepresence helm install` needs and the
+  identity lacks. Since the chart's own roles can only be created by
+  someone who holds what they grant, the output gives the installer
+  everything the traffic-manager holds. `--verbs lifecycle` also covers
+  upgrades and uninstalls, and `--all` prints the complete set without
+  looking at the cluster.
+- [`telepresence rbac verify install`](cli/telepresence_rbac_verify_install.md)
+  runs the same check and prints what's missing. It exits with a non-zero
+  status when anything is, so it works in CI.
+- [`telepresence rbac generate client`](cli/telepresence_rbac_generate_client.md)
+  renders the client roles above for the configuration the traffic-manager
+  is installed with, for the given `--subject`s and `--namespace`s.
+  `--emit values` prints the equivalent `clientRbac` values block instead.
+- [`telepresence rbac verify client`](cli/telepresence_rbac_verify_client.md)
+  runs the traffic-manager's own reviews for connecting, reading a
+  namespace, intercepting, ingesting, and getting logs, and reports an
+  operation as missing only when none of the grants it accepts passes. It
+  checks the namespace of the kubeconfig context unless `--namespace` is
+  given, and grants scoped to single workloads with `resourceNames` only
+  show with `--workload`.
+
+Both client modes read the installed configuration from the release with
+your own credentials, also when `--as` is given. Reading it needs access to
+the Helm release secrets in the manager namespace. Without that access,
+`generate client` asks for `--input` with the installed values, and
+`verify client` runs its checks under every required grant and reports
+each. It passes when at least one grant is fully satisfied, and says
+which. A required check that can't be determined, for example for a
+workload whose pods can't be listed, doesn't pass.
 
 ## Creating a kubeconfig for a ServiceAccount
 

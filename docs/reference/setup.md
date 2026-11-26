@@ -176,6 +176,16 @@ Telepresence, add a `clientRbac` block directly to `values.yaml` before
 handing it off — the tool has no opinion about it, so it passes through the
 round trip unchanged.
 
+When the admin would rather have the person who ran setup do the install,
+`telepresence rbac generate install --input values.yaml` prints a
+ClusterRole, Roles, and bindings that grant only the missing privileges, for
+the admin to review and apply. `telepresence rbac verify install --input
+values.yaml` then confirms that nothing is missing before the install. Both
+take the manager namespace from `--manager-namespace`, else `ambassador`. They
+have no `-n`, so if you install with `telepresence helm install -n foo`, pass
+`--manager-namespace foo` here. See
+[Generating RBAC](rbac.md#generating-rbac).
+
 ## Command reference
 
 Neither `--output` nor `--apply` given: the command probes, interviews, and

@@ -66,6 +66,19 @@ type Request struct {
 	KubeVersion     *chartutil.KubeVersion
 }
 
+// ManagerNamespace returns the namespace that `telepresence helm install`
+// installs the traffic-manager in for cr: --manager-namespace, then
+// --namespace, then "ambassador". Nothing is looked up in the cluster.
+func ManagerNamespace(cr *connector.ConnectRequest) string {
+	if cr.ManagerNamespace != "" {
+		return cr.ManagerNamespace
+	}
+	if ns, ok := cr.KubeFlags["namespace"]; ok {
+		return ns
+	}
+	return "ambassador"
+}
+
 func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err error) {
 	defer func() {
 		if err != nil {
@@ -76,13 +89,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 		return errors.New("--reset-values and --reuse-values are mutually exclusive")
 	}
 
-	if cr.ManagerNamespace == "" {
-		if ns, ok := cr.KubeFlags["namespace"]; ok {
-			cr.ManagerNamespace = ns
-		} else {
-			cr.ManagerNamespace = "ambassador"
-		}
-	}
+	cr.ManagerNamespace = ManagerNamespace(cr)
 	clog.Debugf(ctx, "using manager namespace %q", cr.ManagerNamespace)
 
 	allValues, err := hr.MergeValues(getter.All(cli.New()))

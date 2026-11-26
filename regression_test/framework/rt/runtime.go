@@ -283,6 +283,12 @@ func (r *Runtime) managerVersionPinned() bool {
 	return r.managerVersionOverride != "" && !r.mgrVersion.EQ(r.builtVersion)
 }
 
+// UsesBuiltVersions reports whether both the client and the manager under
+// test are the version this run built.
+func (r *Runtime) UsesBuiltVersions() bool {
+	return r.version.EQ(r.builtVersion) && !r.managerVersionPinned()
+}
+
 // helmVersionArgs returns the ["--version", v] pair to append to a helm
 // install/upgrade invocation when managerVersionPinned, or nil otherwise:
 // `telepresence helm install/upgrade --version` pulls the released chart

@@ -59,6 +59,7 @@ result in a password prompt.
 | [loglevel](telepresence_loglevel) | Temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons |
 | [mcp](telepresence_mcp) | MCP server management |
 | [quit](telepresence_quit) | Tell telepresence daemons to quit |
+| [rbac](telepresence_rbac) | Generate or check the RBAC that installing or using Telepresence needs |
 | [replace](telepresence_replace) | Replace a container |
 | [revoke](telepresence_revoke) | Revoke an intercept by intercept ID. The intercept ID must be in the format &lt;session_id&gt;:&lt;intercept_name&gt; |
 | [serve](telepresence_serve) | Start the browser on a remote service |

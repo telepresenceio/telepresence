@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -175,7 +176,7 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 
 	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
 		e.AuthenticationMode = auth.ModeEnforcing
-		e.AuthorizationRequiredGrant = auth.GrantTelepresence
+		e.AuthorizationRequiredGrant = authz.GrantTelepresence
 		e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind}
 	})
 
@@ -239,7 +240,7 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 
 	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
 		e.AuthenticationMode = auth.ModePermissive
-		e.AuthorizationRequiredGrant = auth.GrantTelepresence
+		e.AuthorizationRequiredGrant = authz.GrantTelepresence
 		e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind}
 	})
 

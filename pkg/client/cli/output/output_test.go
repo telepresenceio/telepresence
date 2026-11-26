@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -265,6 +266,39 @@ func TestWithFormat(t *testing.T) {
 		require.Equal(t, "boom", m["error"])
 		require.NotContains(t, m, "cmd")
 		require.NotContains(t, m, "err")
+	})
+
+	t.Run("--format json with a report and a silent error emits the report", func(t *testing.T) {
+		cmd, outBuf := newCmd()
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			Report(cmd.Context(), map[string]any{"ok": false})
+			return errcat.Silent.New("not ok")
+		}
+		cmd.SetArgs([]string{"--format=json"})
+		_, fmtOutput, err := Execute(cmd)
+		require.Error(t, err)
+		require.True(t, fmtOutput)
+
+		m := map[string]any{}
+		require.NoError(t, json.Unmarshal([]byte(outBuf.String()), &m))
+		require.Equal(t, false, m["ok"])
+		require.NotContains(t, m, "error")
+	})
+
+	t.Run("--format json with an object and a silent error emits the error", func(t *testing.T) {
+		cmd, outBuf := newCmd()
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			Object(cmd.Context(), map[string]any{"ok": true}, true)
+			return errcat.Silent.New("not ok")
+		}
+		cmd.SetArgs([]string{"--format=json"})
+		_, _, err := Execute(cmd)
+		require.Error(t, err)
+
+		m := map[string]any{}
+		require.NoError(t, json.Unmarshal([]byte(outBuf.String()), &m))
+		require.Equal(t, "not ok", m["error"])
+		require.NotContains(t, m, "ok")
 	})
 
 	t.Run("--format json on a text-only command falls back to a JSON string", func(t *testing.T) {

@@ -65,6 +65,19 @@ func Info(ctx context.Context) io.Writer {
 	return dos.Stdout(ctx)
 }
 
+// Report is like Object with override set to true, and also marks the object as the
+// report of a failure: when the command then returns a Silent error, formatted output
+// consists of the object alone, and the exit code tells of the error. Other commands
+// get an error object for a Silent error.
+func Report(ctx context.Context, obj any) {
+	Object(ctx, obj, true)
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		if o, ok := cmd.OutOrStdout().(*output); ok {
+			o.report = true
+		}
+	}
+}
+
 // Object sets the object to be marshalled and printed on stdout when formatted output
 // is requested using the `--format` or `--output` flag. Otherwise, this function does nothing.
 //
@@ -139,6 +152,13 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	case o.cleanEnvelope:
 		// --format: never wrap in the {cmd, stdout, stderr, err} envelope.
 		switch {
+		case err != nil && o.report && errcat.GetCategory(err) == errcat.Silent:
+			// The object is the report of the failure, so it is printed alone and
+			// only the exit code tells of the error. A stream has emitted it already.
+			if o.format == formatJSONStream {
+				return cmd, true, err
+			}
+			obj = o.obj
 		case err != nil:
 			obj = errObject{Error: err.Error()}
 		case o.obj != nil:
@@ -325,6 +345,7 @@ type (
 		obj            any
 		override       bool
 		cleanEnvelope  bool
+		report         bool
 		originalStdout io.Writer
 	}
 	object struct {

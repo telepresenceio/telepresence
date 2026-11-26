@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/authz"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
@@ -79,7 +80,7 @@ type service struct {
 	configWatcher      config.Watcher
 	authorizer         *auth.Authorizer
 	authMode           auth.Mode
-	authGrant          auth.Grant
+	authGrant          authz.Grant
 	activeHttpRequests int32
 	serviceNameNs      string
 	serviceNameFQN     string
@@ -1742,7 +1743,7 @@ func managerPodNames(ctx context.Context) ([]string, error) {
 
 func (s *service) authorizeConnect(ctx context.Context) error {
 	return s.authorized(ctx, "connect", func(p *auth.Principal) error {
-		r := auth.ConnectReview(managerutil.GetEnv(ctx).ManagerNamespace)
+		r := authz.ConnectReview(managerutil.GetEnv(ctx).ManagerNamespace)
 		r.PodNames = managerPodNames
 		return s.authorizer.Authorize(ctx, s.authGrant, p, r)
 	})
@@ -1750,7 +1751,7 @@ func (s *service) authorizeConnect(ctx context.Context) error {
 
 // groundOnWorkloadPods sets r's legacy-grant grounding to the workload's
 // pods; a failed pod lookup degrades to a namespace-wide review.
-func groundOnWorkloadPods(r *auth.Review, namespace, workloadName string) *auth.Review {
+func groundOnWorkloadPods(r *authz.Review, namespace, workloadName string) *authz.Review {
 	r.PodNames = func(ctx context.Context) ([]string, error) {
 		podNames, err := workloadPodNames(ctx, workloadName, namespace)
 		if err != nil {
@@ -1764,7 +1765,7 @@ func groundOnWorkloadPods(r *auth.Review, namespace, workloadName string) *auth.
 
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
 	return s.authorized(ctx, fmt.Sprintf("intercept %q in namespace %s", spec.Name, namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.AttachmentReview(namespace, spec.Agent, "create"), namespace, spec.Agent))
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(authz.AttachmentReview(namespace, spec.Agent, "create"), namespace, spec.Agent))
 	})
 }
 
@@ -1772,7 +1773,7 @@ func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec
 // workload on behalf of p.
 func (s *service) authorizeParticipant(ctx context.Context, p *auth.Principal, namespace, workloadName string) error {
 	return s.authorizedAs(ctx, p, fmt.Sprintf("shared intercept participant %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.AttachmentReview(namespace, workloadName, "create"), namespace, workloadName))
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(authz.AttachmentReview(namespace, workloadName, "create"), namespace, workloadName))
 	})
 }
 
@@ -1780,7 +1781,7 @@ func (s *service) authorizeParticipant(ctx context.Context, p *auth.Principal, n
 // intercepting client) or "get" (an ingest client) on the attachment.
 func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadName string) error {
 	return s.authorized(ctx, fmt.Sprintf("ensure agent for %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(authz.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
 	})
 }
 
@@ -1788,7 +1789,7 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadN
 // attachment) on behalf of p.
 func (s *service) authorizeFileAccess(ctx context.Context, p *auth.Principal, namespace, workloadName string) error {
 	return s.authorizedAs(ctx, p, fmt.Sprintf("file access to %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(authz.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
 	})
 }
 
@@ -1799,7 +1800,7 @@ func (s *service) readAccess(ctx context.Context, clientInfo *state.ClientSessio
 	return clientInfo.ReadAccess(namespace,
 		func() error {
 			return s.authorized(ctx, fmt.Sprintf("read namespace %s", namespace), func(p *auth.Principal) error {
-				return s.authorizer.Authorize(ctx, s.authGrant, p, auth.NamespaceReadReview(namespace))
+				return s.authorizer.Authorize(ctx, s.authGrant, p, authz.NamespaceReadReview(namespace))
 			})
 		},
 		func(workloadName string) error {
